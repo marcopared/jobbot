@@ -22,6 +22,11 @@ The system:
 9. Tracks full state history for every job and application attempt.
 10. Exposes a clean REST API so OpenClaw (or any agent framework) can integrate later without engine changes.
 
+Simplify adoption model:
+- Simplify is optional and disabled by default (`SIMPLIFY_ENABLED=false`).
+- Simplify is an adopted browser-extension workflow, not a required baseline dependency for the whole app.
+- The current MVP is Simplify-first for autofill/application behavior when Simplify mode is enabled.
+
 ---
 
 ## 2. Non-Goals (V1)
@@ -31,6 +36,9 @@ The system:
 - No multi-user auth. Single operator. Optional basic auth can be added later.
 - No perfect universal ATS coverage. V1 handles Greenhouse, Lever, Ashby. Workday and others route to intervention.
 - No LLM-based resume rewriting. V1 uses rule-based ATS keyword optimization for resume tailoring. LLM-powered rewriting is a V2 extension.
+- No automated Simplify resume replacement/upload in the current MVP (`resume replacement deferred`).
+- No automated Simplify profile mutation/update flows in the current MVP.
+- No promise that Google SSO bootstrap works reliably inside the Playwright-launched browser; saved session reuse is the supported path.
 - No Wellfound, BuiltInNYC, or YC scrapers wired end-to-end in V1. Modules are scaffolded with adapters but disabled behind feature flags.
 
 ---
@@ -78,14 +86,17 @@ All of the following must work in sequence on a single local machine:
 ```
 jobbot/
 ├── README.md
-├── SPEC.md                          # This file
-├── ARCHITECTURE.md                  # System architecture doc
-├── TASKS.md                         # Implementation task list
+├── docs/
+│   ├── SPEC.md                      # This file
+│   ├── ARCHITECTURE.md              # System architecture doc
+│   └── TODO.md                      # Active operator follow-ups
 ├── .cursorrules                     # Cursor agent rules
 ├── .env.example
 ├── .gitignore
 ├── requirements.txt
 ├── docker-compose.yml
+├── extensions/
+│   └── simplify/                    # Repo-owned unpacked extension folder (must contain manifest.json)
 │
 ├── alembic/                         # Optional migrations
 │   ├── alembic.ini
@@ -206,6 +217,8 @@ jobbot/
 
 ## 6. Environment Variables
 
+Simplify-related env vars only matter when using Simplify-backed flows.
+
 ```bash
 # === Core ===
 APP_ENV=dev
@@ -260,7 +273,7 @@ PLAYWRIGHT_HEADFUL=true
 PLAYWRIGHT_SLOW_MO_MS=0
 PLAYWRIGHT_PROFILE_NAME=default
 PLAYWRIGHT_TIMEOUT_MS=30000
-SIMPLIFY_ENABLED=false
+SIMPLIFY_ENABLED=false                              # optional; disabled by default
 SIMPLIFY_EXTENSION_PATH=                      # required only when SIMPLIFY_ENABLED=true
 SIMPLIFY_PROFILE_DIR=                         # required only when SIMPLIFY_ENABLED=true
 ```
@@ -878,6 +891,11 @@ the resume tailoring engine.
 
 ## 11. Resume Manager
 
+The local resume pipeline remains part of JobBot for ATS scoring, artifact
+generation, and future non-Simplify flows. In the current Simplify-first MVP,
+stored Simplify account state is the source of truth for autofill/resume
+behavior during apply runs.
+
 ### V1: Copy Base Resume + ATS Tailoring
 
 ```python
@@ -1016,9 +1034,19 @@ with sync_playwright() as p:
     page.set_default_timeout(PLAYWRIGHT_TIMEOUT_MS)
 ```
 
-The extension path and profile path are configured via env vars (`SIMPLIFY_EXTENSION_PATH`, `SIMPLIFY_PROFILE_DIR`), not hardcoded in code.
-The apply runner uses the persistent Simplify profile only when `SIMPLIFY_ENABLED=true`.
-If extension detection fails, the apply run aborts before any ATS interaction.
+Simplify launch model:
+- Playwright uses bundled Chromium with a persistent context.
+- Simplify is loaded from an unpacked extension path via launch args.
+- The repo-owned source used by Playwright should be `extensions/simplify`.
+- The unpacked extension folder must contain `manifest.json`.
+- The apply runner uses one persistent Simplify profile only when `SIMPLIFY_ENABLED=true`.
+- A profile lock enforces `one persistent Simplify profile, one apply run at a time`.
+- Runtime checks for the extension service worker and aborts early if Simplify is misconfigured.
+
+Bootstrap model:
+- `python scripts/bootstrap_simplify.py` reads env vars from `Settings()`.
+- It validates `SIMPLIFY_EXTENSION_PATH`, checks for `manifest.json`, launches headed Chromium, and pauses so the operator can log in and save the session in the persistent Simplify profile.
+- Google SSO in the Playwright-launched bootstrap browser was unreliable in practice; docs should assume normal Simplify login plus saved session reuse instead.
 
 ### 12.3 CAPTCHA / Block Detectors
 
@@ -1162,16 +1190,27 @@ async def create_intervention(
 
 ### 12.6 Simplify Runtime Guardrails
 
-- A profile lock is required before launching Chromium (`one persistent profile, one apply run at a time`).
+- A profile lock is required before launching Chromium (`one persistent Simplify profile, one apply run at a time`).
 - Runner milestones must emit screenshot/log artifacts at:
   - browser launched
   - extension detected
   - job page opened
   - apply button clicked
-  - resume uploaded
+  - resume field interaction
   - autofill completed
   - submission page reached or blocked
-- Resume upload remains JobBot-owned: generate tailored resume artifact first, then upload that file directly to ATS file inputs.
+- Current Simplify-backed MVP behavior relies on stored Simplify account state for autofill and resume behavior.
+- `resume replacement deferred`: automated Simplify resume replacement/upload is not part of the active MVP.
+- Automated Simplify profile mutation/update is deferred.
+
+### 12.7 Simplify Smoke Tests
+
+- Use `python scripts/test_simplify_dummy.py` for the safe dummy smoke test.
+- The dummy flow supports both direct `file://` mode and localhost-served mode via `python scripts/serve_dummy_apply.py`.
+- Prefer localhost mode when extension behavior differs from `file://`.
+- The dummy script waits for the extension service worker with a timeout so misconfiguration fails clearly instead of hanging.
+- After the manual pause, the dummy script captures screenshot/HTML/field-summary artifacts.
+- Any real ATS verification should be a `dry-run ATS smoke test` and must stop before final submission.
 
 ---
 
@@ -1432,9 +1471,18 @@ pip install -r requirements.txt
 # Install Playwright browsers
 playwright install chromium
 
-# Bootstrap Simplify login once (headed).
-# Reads Settings() from .env; run from repo root so relative .env loading works.
+# Bootstrap Simplify session once (headed, optional Simplify flow only).
+# Reads Settings() from .env; validates the unpacked extension path + manifest.json.
+# Use normal Simplify login and save the session in the persistent Simplify profile.
 python scripts/bootstrap_simplify.py
+
+# Safe Simplify dummy smoke test (optional).
+# Defaults to file:// fixture mode.
+python scripts/test_simplify_dummy.py
+
+# If needed, serve the dummy page over localhost instead.
+python scripts/serve_dummy_apply.py
+python scripts/test_simplify_dummy.py --url "http://127.0.0.1:8899/dummy_apply_form.html"
 
 # Start API server
 uvicorn apps.api.main:app --reload --port 8000

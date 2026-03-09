@@ -67,7 +67,7 @@
 │  (apps/browser/)          │
 │                           │
 │  Chromium (headful)       │
-│  Persistent profile       │
+│  Persistent Simplify profile
 │  ATS handlers:            │
 │   • Greenhouse            │
 │   • Lever                 │
@@ -86,6 +86,11 @@
 ---
 
 ## 2. Data Flow: Scrape → Score → Approve → Apply
+
+Simplify adoption model:
+- Simplify is optional and disabled by default.
+- When enabled, the current MVP uses a Simplify-first apply path backed by stored Simplify account state.
+- Simplify-backed apply execution is serialized: one persistent Simplify profile, one apply run at a time.
 
 ```
   ┌─────────┐    POST /api/jobs/run-scrape
@@ -150,6 +155,10 @@
                                    │                        │
                                    │ 1. Create application  │
                                    │ 2. Prepare resume      │
+                                   │    (retained for local artifacts /
+                                   │     future flows; current Simplify MVP
+                                   │     still relies on stored Simplify
+                                   │     account state)     │
                                    │ 3. Launch Playwright   │
                                    │ 4. Navigate to URL     │
                                    │ 5. Detect ATS type     │
@@ -273,7 +282,7 @@ celery -A apps.worker.celery_app worker -l info -Q default,scrape,apply -c 1
 
 The apply pipeline is serialized by design:
 - one worker process
-- one persistent browser profile
+- one persistent Simplify profile
 - one application run at a time (profile lock)
 
 ---
@@ -281,6 +290,9 @@ The apply pipeline is serialized by design:
 ## 7. File Storage Layout
 
 ```
+extensions/
+└── simplify/                       # Repo-owned unpacked extension folder (manifest.json required)
+
 storage/
 ├── artifacts/
 │   ├── {job_uuid}/
@@ -291,7 +303,7 @@ storage/
 │       └── ...
 │
 └── profiles/
-    └── simplify-profile/           # Simplify persistent Chromium profile
+    └── simplify-profile/           # Persistent Simplify profile
         ├── Default/
         │   ├── Cookies
         │   ├── Local Storage/
@@ -379,14 +391,32 @@ detectors.detect_blocks(page)
 
 ---
 
-## 9.1 Simplify Extension Bootstrap + Runtime Check
+## 9.1 Simplify Extension Source + Persistent Profile
 
-1. Set Simplify env vars in `.env`: `SIMPLIFY_ENABLED`, `SIMPLIFY_EXTENSION_PATH`, `SIMPLIFY_PROFILE_DIR`.
-2. Run `python scripts/bootstrap_simplify.py` once (from repo root). The script reads `Settings()` / `.env` values.
-3. Apply runs reuse the same persistent Simplify profile only when `SIMPLIFY_ENABLED=true` (profile lock still enforces one run at a time per profile).
-4. Before ATS flow starts, runner must detect the extension service worker; if extension detection fails, abort apply flow and mark application as failed.
+1. Simplify is an optional adopted browser-extension workflow, not a mandatory baseline dependency.
+2. The unpacked extension should be copied/exported into `extensions/simplify`.
+3. `SIMPLIFY_EXTENSION_PATH` should point to that repo-owned unpacked extension folder.
+4. The extension folder must contain `manifest.json`.
+5. `SIMPLIFY_PROFILE_DIR` points to the persistent Simplify profile reused across runs so stored Simplify account state survives.
+6. A `.profile.lock` file prevents concurrent use of that one persistent Simplify profile.
 
-The extension path and profile path are environment-configured, not code-configured.
+## 9.2 Simplify Bootstrap + Runtime Check
+
+1. Set Simplify env vars in `.env` only when you want Simplify-backed flows: `SIMPLIFY_ENABLED`, `SIMPLIFY_EXTENSION_PATH`, `SIMPLIFY_PROFILE_DIR`.
+2. Run `python scripts/bootstrap_simplify.py` once from repo root.
+3. The bootstrap script reads env vars, validates the unpacked extension path, checks for `manifest.json`, launches headed bundled Chromium, and pauses for manual login/session save.
+4. Google SSO inside the Playwright-launched bootstrap browser was unreliable/blocked in practice, so the workable path is normal Simplify login plus saved session reuse.
+5. Apply runs reuse the same persistent Simplify profile only when `SIMPLIFY_ENABLED=true`.
+6. Before ATS flow starts, runtime checks for the extension service worker; if detection fails, the apply run aborts early.
+
+## 9.3 Simplify Dummy + Dry-Run Testing
+
+1. `python scripts/test_simplify_dummy.py` is the safe dummy application-page smoke test.
+2. It supports both direct `file://` mode and localhost-served mode via `python scripts/serve_dummy_apply.py`.
+3. Use localhost mode if extension behavior differs from `file://`.
+4. The dummy script has a service-worker timeout so misconfiguration fails clearly instead of hanging.
+5. After the manual pause, it captures screenshot/HTML/field-summary artifacts.
+6. Any real ATS verification should be a `dry-run ATS smoke test` that stops before final submission.
 
 ---
 
@@ -451,6 +481,7 @@ No engine changes required. OpenClaw is a client of the API.
 - No auth on API/UI in V1. Acceptable for local-only development.
 - `.env` file must be in `.gitignore`.
 - Browser profile directory contains cookies — do not commit.
+- The repo-owned unpacked extension directory should contain extension code only; do not commit personal browser profile data into it.
 - Artifact directory may contain PII from job descriptions — do not commit.
 - Push notification tokens are secrets — use `.env` only.
 - When moving to VM: add basic auth middleware or Tailscale for network-level auth.
