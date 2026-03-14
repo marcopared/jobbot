@@ -12,7 +12,7 @@ echo "Starting API, worker, and UI dev server..."
 PYTHONPATH=. uvicorn apps.api.main:app --reload --log-level debug --port 8000 > /tmp/jobbot-api.log 2>&1 &
 API_PID=$!
 
-PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l debug -Q default,scrape,apply > /tmp/jobbot-worker.log 2>&1 &
+PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l debug -Q default,scrape > /tmp/jobbot-worker.log 2>&1 &
 WORKER_PID=$!
 
 (

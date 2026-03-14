@@ -32,9 +32,6 @@ class Settings(BaseSettings):
     playwright_slow_mo_ms: int = 0
     playwright_profile_name: str = "default"
     playwright_timeout_ms: int = 30000
-    simplify_enabled: bool = False
-    simplify_extension_path: str = ""
-    simplify_profile_dir: str = ""
     log_level: str = "DEBUG"
 
     class Config:

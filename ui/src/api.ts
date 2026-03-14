@@ -171,15 +171,6 @@ export async function rejectJob(id: string): Promise<{ id: string; status: strin
   return res.json();
 }
 
-export async function queueApply(id: string): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${BASE}/jobs/${id}/queue-apply`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Queue apply failed: ${res.status}`);
-  }
-  return res.json();
-}
-
 export async function bulkApprove(jobIds: string[]): Promise<{ updated: number }> {
   const res = await fetch(`${BASE}/jobs/bulk-approve`, {
     method: "POST",
@@ -228,17 +219,6 @@ export async function abortIntervention(id: string): Promise<{ id: string; statu
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Abort failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function retryIntervention(
-  id: string,
-): Promise<{ id: string; new_application_id: string; task_id: string }> {
-  const res = await fetch(`${BASE}/interventions/${id}/retry-apply`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Retry apply failed: ${res.status}`);
   }
   return res.json();
 }

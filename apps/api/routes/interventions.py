@@ -8,11 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db
-from apps.worker.tasks.apply import apply_job
 from core.db.models import (
-    Application,
-    ApplicationStatus,
-    ApplyMethod,
     Intervention,
     InterventionStatus,
     Job,
@@ -118,35 +114,3 @@ async def abort_intervention(intervention_id: UUID, db: AsyncSession = Depends(g
     await db.commit()
     await db.refresh(intervention)
     return {"id": str(intervention.id), "status": intervention.status}
-
-
-@router.post("/{intervention_id}/retry-apply")
-async def retry_apply(intervention_id: UUID, db: AsyncSession = Depends(get_db)):
-    intervention = (
-        await db.execute(select(Intervention).where(Intervention.id == intervention_id))
-    ).scalar_one_or_none()
-    if not intervention:
-        raise HTTPException(status_code=404, detail="Intervention not found")
-    if intervention.status == InterventionStatus.ABORTED.value:
-        raise HTTPException(status_code=409, detail="Cannot retry an ABORTED intervention")
-
-    job = (await db.execute(select(Job).where(Job.id == intervention.job_id))).scalar_one()
-    intervention.status = InterventionStatus.RESOLVED.value
-    intervention.resolved_at = datetime.now(UTC)
-    job.status = JobStatus.APPLY_QUEUED.value
-
-    new_application = Application(
-        job_id=job.id,
-        status=ApplicationStatus.STARTED.value,
-        method=ApplyMethod.PLAYWRIGHT.value,
-    )
-    db.add(new_application)
-    await db.flush()
-    await db.commit()
-
-    task = apply_job.delay(str(job.id))
-    return {
-        "id": str(intervention.id),
-        "new_application_id": str(new_application.id),
-        "task_id": str(task.id),
-    }

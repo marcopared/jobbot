@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import {
   abortIntervention,
   resolveIntervention,
-  retryIntervention,
   type Intervention,
   type JobDetail,
 } from "../api";
@@ -67,21 +66,6 @@ export default function InterventionCard({ intervention, job, onUpdated }: Props
       await onUpdated();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Abort failed";
-      setError(message);
-      notifyError(message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRetry = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await retryIntervention(intervention.id);
-      await onUpdated();
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Retry failed";
       setError(message);
       notifyError(message);
     } finally {
@@ -165,14 +149,6 @@ export default function InterventionCard({ intervention, job, onUpdated }: Props
           className="rounded bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
         >
           Abort
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={handleRetry}
-          className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-        >
-          Retry Apply
         </button>
       </div>
 
