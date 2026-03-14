@@ -21,7 +21,6 @@ celery_app.config_from_object(
         "worker_hijack_root_logger": False,
         "task_routes": {
             "apps.worker.tasks.scrape.*": {"queue": "scrape"},
-            "apps.worker.tasks.apply.*": {"queue": "apply"},
             "apps.worker.tasks.score.*": {"queue": "default"},
             "apps.worker.tasks.ats_match.*": {"queue": "default"},
             "apps.worker.tasks.notify.*": {"queue": "default"},

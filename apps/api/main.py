@@ -25,22 +25,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.debug(
-        "API startup with app_env=%s log_level=%s artifact_dir=%s profile_dir=%s simplify_profile_dir=%s",
+        "API startup with app_env=%s log_level=%s artifact_dir=%s profile_dir=%s",
         settings.app_env,
         settings.log_level,
         settings.artifact_dir,
         settings.profile_dir,
-        settings.simplify_profile_dir,
     )
     Path(settings.artifact_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.profile_dir).mkdir(parents=True, exist_ok=True)
-    if settings.simplify_enabled and not settings.simplify_profile_dir.strip():
-        logger.warning(
-            "SIMPLIFY_ENABLED=true but SIMPLIFY_PROFILE_DIR is empty. "
-            "Simplify apply/bootstrap flows will fail until configured."
-        )
-    elif settings.simplify_enabled:
-        Path(settings.simplify_profile_dir).mkdir(parents=True, exist_ok=True)
     # Create all tables on startup
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

@@ -3,7 +3,6 @@ import {
   fetchJobs,
   approveJob,
   rejectJob,
-  queueApply,
   bulkApprove,
   bulkReject,
   type Job,
@@ -17,7 +16,6 @@ const STATUSES = [
   "SCORED",
   "APPROVED",
   "REJECTED",
-  "APPLY_QUEUED",
   "APPLIED",
   "APPLY_FAILED",
   "INTERVENTION_REQUIRED",
@@ -69,11 +67,10 @@ export default function JobsPage() {
     setPage(1);
   }, [status, search, sortBy, sortDir]);
 
-  const handleAction = async (id: string, action: "approve" | "reject" | "queue-apply") => {
+  const handleAction = async (id: string, action: "approve" | "reject") => {
     try {
       if (action === "approve") await approveJob(id);
       else if (action === "reject") await rejectJob(id);
-      else if (action === "queue-apply") await queueApply(id);
       await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Action failed";

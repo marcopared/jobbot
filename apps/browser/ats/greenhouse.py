@@ -20,7 +20,7 @@ class GreenhouseHandler(BaseATSHandler):
                 reason=InterventionReason.UNEXPECTED_FIELD,
                 note=(
                     "Greenhouse apply flow started; manual review required for "
-                    "Simplify account-state autofill (local resume replacement deferred)."
+                    "form completion."
                 ),
                 apply_clicked=True,
                 resume_uploaded=bool(telemetry["resume_uploaded"]),

@@ -7,7 +7,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db
-from apps.worker.tasks.apply import apply_job
 from apps.worker.tasks.scrape import scrape_jobspy
 from core.db.models import Job, JobStatus, ScrapeRun, ScrapeRunStatus
 
@@ -15,9 +14,6 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 APPROVE_FROM = {JobStatus.NEW.value, JobStatus.SCORED.value}
 REJECT_FROM = {JobStatus.NEW.value, JobStatus.SCORED.value, JobStatus.APPROVED.value}
-QUEUE_APPLY_FROM = {JobStatus.APPROVED.value}
-
-
 def _job_to_dict(j: Job) -> dict:
     return {
         "id": str(j.id),
@@ -216,23 +212,3 @@ async def reject_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(job)
     return {"id": str(job.id), "status": job.status}
-
-
-@router.post("/{job_id}/queue-apply")
-async def queue_apply(job_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Job).where(Job.id == job_id))
-    job = result.scalar_one_or_none()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.status == JobStatus.APPLY_QUEUED.value:
-        return {"id": str(job.id), "status": job.status}
-    if job.status not in QUEUE_APPLY_FROM:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot transition from {job.status} to APPLY_QUEUED",
-        )
-    job.status = JobStatus.APPLY_QUEUED.value
-    await db.commit()
-    await db.refresh(job)
-    task = apply_job.delay(str(job.id))
-    return {"id": str(job.id), "status": job.status, "task_id": str(task.id)}

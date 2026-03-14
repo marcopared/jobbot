@@ -25,12 +25,7 @@ class BaseATSHandler(ABC):
         resume_path: str | None = None,
         settle_ms: int = 2500,
     ) -> dict:
-        """Click Apply, then snapshot autofilled fields from current account state.
-
-        Note: `resume_path` upload probing is legacy/preparatory behavior.
-        The current Simplify-first MVP relies on the user's existing Simplify
-        profile and uploaded resume, not Jobbot-driven local resume replacement.
-        """
+        """Click Apply, then snapshot currently filled fields."""
         telemetry = {
             "apply_clicked": False,
             "resume_uploaded": False,

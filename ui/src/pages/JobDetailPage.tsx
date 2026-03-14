@@ -5,7 +5,6 @@ import {
   fetchApplications,
   fetchInterventions,
   fetchJob,
-  queueApply,
   rejectJob,
   type Application,
   type Intervention,
@@ -87,12 +86,11 @@ export default function JobDetailPage() {
 
   const primaryIntervention = interventions[0];
 
-  const handleAction = async (action: "approve" | "reject" | "queue") => {
+  const handleAction = async (action: "approve" | "reject") => {
     if (!job) return;
     try {
       if (action === "approve") await approveJob(job.id);
       if (action === "reject") await rejectJob(job.id);
-      if (action === "queue") await queueApply(job.id);
       await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Action failed";
@@ -114,7 +112,6 @@ export default function JobDetailPage() {
 
   const canApprove = job.status === "NEW" || job.status === "SCORED";
   const canReject = job.status === "NEW" || job.status === "SCORED" || job.status === "APPROVED";
-  const canQueue = job.status === "APPROVED";
 
   return (
     <div className="space-y-4">
@@ -141,14 +138,6 @@ export default function JobDetailPage() {
               className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
             >
               Reject
-            </button>
-          )}
-          {canQueue && (
-            <button
-              onClick={() => void handleAction("queue")}
-              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
-            >
-              Queue Apply
             </button>
           )}
         </div>

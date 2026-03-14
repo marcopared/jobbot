@@ -1,37 +1,32 @@
 # TODO
-1. Simplify adoption works
-- come up with test cases -> how to build test cases 
-for this extension? how does it detect the greenhouse 
-site? (maybe also greenhouse api's might have an 
-option to apply automatically)
-2. Design feature to upload resume to Simplify, test 
-case design comes first
-3. Think: how to mitigate bot captchas? You are 
-assuming that this will work if we run it on a 
-server... if it doesn't work then we might have to run 
-it only locally (raspberry pi time?? or time to buy 
-gaming desktop??) for now if it doesn't work on 
-servers then running on macbook is fine
 
-1. Keep `extensions/simplify` as the repo-owned unpacked extension source and verify it still contains `manifest.json` before Simplify bootstrap/apply work.
-2. Maintain the persistent Simplify profile session with normal Simplify login when it expires; do not assume Google SSO bootstrap is reliable in the Playwright-launched browser.
-3. Re-run the dummy Simplify smoke test after extension/profile changes in both `file://` mode and localhost mode when needed.
-4. Continue using only `dry-run ATS smoke test` checks on harmless real ATS pages, and stop before final submission.
-5. Evaluate how much CAPTCHA/login friction makes local-only execution the practical deployment model for now.
+## Priority Work
 
-## Future Features
-1. Simplify resume upload
-2. Score enhacement: score based on YOE
-3. Score enhancement: score based on Jira stories pdf
-- Subtask: extract keywords and store somewhere, 
-extraction only needs to happen once or every time new 
-Jira stories pdf is uploaded
-- Subtask: use scoring with extracted keywords
-4. Custom resume builder based on application (per 
-application) and Jira stories pdf
+1. Improve job scoring quality
+   - Add stronger weighting controls for title, seniority, and domain fit.
+   - Validate scoring output against a curated operator-reviewed sample set.
 
-1. `resume replacement deferred`: add automated Simplify resume replacement/upload only when the current stored Simplify account state workflow is no longer enough.
-2. Add automated Simplify profile mutation/update flows after the current MVP.
-3. Score enhancement: score based on YOE.
-4. Score enhancement: score based on Jira stories PDF.
-5. Custom resume builder based on application and Jira stories PDF.
+2. Strengthen ATS analysis
+   - Improve keyword extraction quality from noisy job descriptions.
+   - Expand synonym handling and normalization for common skill variants.
+   - Surface more actionable ATS gap suggestions in UI.
+
+3. Expand custom resume generation
+   - Improve per-job resume tailoring from job description + master skills.
+   - Support richer experience source inputs (for example, structured project/Jira-derived materials).
+   - Add artifact quality checks to catch malformed or low-value resume outputs.
+
+4. Improve operator workflow ergonomics
+   - Add better review filters for high-score/high-match jobs.
+   - Add clearer manual process checkpoints for job review and intervention handling.
+
+## Stability / Ops
+
+1. Add stronger end-to-end checks for scrape -> score -> ATS -> resume pipeline.
+2. Tighten local observability around worker failures and partial pipeline runs.
+3. Document migration/cleanup plan for any remaining legacy apply-related statuses.
+
+## Future Research (After Core Is Stable)
+
+- Research an **optional** auto-apply capability only after scraping, scoring, ATS analysis,
+  and custom resume generation workflows are complete and stable.

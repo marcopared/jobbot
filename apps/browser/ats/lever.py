@@ -20,7 +20,7 @@ class LeverHandler(BaseATSHandler):
                 reason=InterventionReason.UNEXPECTED_FIELD,
                 note=(
                     "Lever apply flow started; manual review required for "
-                    "Simplify account-state autofill (local resume replacement deferred)."
+                    "form completion."
                 ),
                 apply_clicked=True,
                 resume_uploaded=bool(telemetry["resume_uploaded"]),
