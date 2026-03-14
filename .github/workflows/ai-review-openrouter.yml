@@ -23,6 +23,7 @@ jobs:
       issues: write
     uses: marcopared/gh-reusable-workflows/.github/workflows/ai-code-review-openrouter.yml@main
     with:
+      workflow_repo_ref: main
       model: "z-ai/glm-5"
       api_base: "https://openrouter.ai/api/v1"
       max_files: 25
