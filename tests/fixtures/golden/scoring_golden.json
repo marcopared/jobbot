@@ -1,0 +1,61 @@
+[
+  {
+    "id": "high_score",
+    "title": "Senior Backend Engineer",
+    "normalized_title": "senior backend engineer",
+    "description": "We're a fintech startup (Series A) building payments infrastructure. You'll work with Python, FastAPI, PostgreSQL, and AWS. Remote-first role.",
+    "location": "Remote",
+    "normalized_location": "remote",
+    "remote_flag": true,
+    "company": "PaymentsCo",
+    "expected_min_total": 50.0,
+    "expected_passes_threshold": true
+  },
+  {
+    "id": "low_score_junior",
+    "title": "Junior Software Engineer",
+    "normalized_title": "junior software engineer",
+    "description": "Entry-level role. Learn the basics of JavaScript.",
+    "location": "Austin, TX",
+    "normalized_location": "austin, tx",
+    "remote_flag": false,
+    "company": "UnknownCo",
+    "expected_max_total": 50.0,
+    "expected_passes_threshold": false
+  },
+  {
+    "id": "low_score_over_senior",
+    "title": "Principal Architect",
+    "normalized_title": "principal architect",
+    "description": "Staff/principal level. Design system architecture. 10+ years required.",
+    "location": "New York, NY",
+    "normalized_location": "new york, ny",
+    "remote_flag": false,
+    "company": "BigCorp",
+    "expected_seniority_fit": 40.0,
+    "expected_passes_threshold": false
+  },
+  {
+    "id": "moderate_score",
+    "title": "Software Engineer",
+    "normalized_title": "software engineer",
+    "description": "Backend work with Go and Python. We use Redis and Docker. Hybrid in NYC.",
+    "location": "New York, NY",
+    "normalized_location": "new york, ny",
+    "remote_flag": false,
+    "company": "TechCo",
+    "expected_min_total": 30.0,
+    "expected_seniority_fit": 100.0
+  },
+  {
+    "id": "remote_high_location",
+    "title": "Platform Engineer",
+    "normalized_title": "platform engineer",
+    "description": "",
+    "location": "Remote",
+    "normalized_location": "remote",
+    "remote_flag": true,
+    "company": "Startup",
+    "expected_location_remote": 100.0
+  }
+]

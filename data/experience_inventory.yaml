@@ -1,0 +1,77 @@
+# Experience Inventory (EPIC 7)
+# Source of truth for resume content. Version-controlled, grounded.
+# Schema: summary_variants, roles, projects, skills, contact, education
+
+version: 1
+
+contact:
+  name: "Jane Engineer"
+  email: "jane@example.com"
+  location: "San Francisco, CA"
+  linkedin_url: ""
+
+summary_variants:
+  BACKEND: |
+    Senior backend engineer with 8+ years building scalable APIs and data pipelines.
+    Experience with Python, Go, PostgreSQL, and event-driven systems.
+  PLATFORM_INFRA: |
+    Platform and infrastructure engineer with deep expertise in Kubernetes, AWS, and CI/CD.
+    Proven track record of improving reliability and developer productivity.
+  HYBRID: |
+    Full-stack engineer with strong backend and infrastructure experience.
+    Comfortable across the stack from APIs to deployment automation.
+
+skills:
+  - Python
+  - Go
+  - PostgreSQL
+  - Kubernetes
+  - AWS
+  - Docker
+  - Terraform
+  - Kafka
+  - Redis
+  - FastAPI
+  - Celery
+
+roles:
+  - company: "Acme Inc"
+    title: "Senior Software Engineer"
+    location: "Remote"
+    start: "2020-01"
+    end: "present"
+    bullets:
+      - text: "Built event-driven microservices using Python and Kafka, reducing latency by 40%"
+        tags: [backend, python, kafka]
+        metrics: ["40%"]
+      - text: "Led migration of 50+ services to Kubernetes, improving deployment frequency"
+        tags: [platform, kubernetes]
+        metrics: ["50+"]
+      - text: "Designed and implemented PostgreSQL schema migrations with zero downtime"
+        tags: [backend, postgresql]
+        metrics: []
+  - company: "Startup Co"
+    title: "Software Engineer"
+    location: "New York, NY"
+    start: "2017-06"
+    end: "2019-12"
+    bullets:
+      - text: "Developed REST APIs in Python/FastAPI serving 1M+ requests/day"
+        tags: [backend, python, fastapi]
+        metrics: ["1M+"]
+      - text: "Implemented CI/CD pipelines with GitHub Actions and Terraform"
+        tags: [platform, terraform]
+        metrics: []
+
+projects:
+  - name: "Internal CLI Tool"
+    description: "Go-based deployment CLI"
+    bullets:
+      - text: "Developed Go CLI adopted by 200+ engineers for deployments"
+        tags: [go, platform]
+        metrics: ["200+"]
+
+education:
+  - school: "MIT"
+    degree: "BS Computer Science"
+    year: "2015"

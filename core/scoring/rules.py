@@ -1,46 +1,61 @@
-"""Scoring rules config (SPEC §10.1)."""
+"""Scoring rules config (SPEC §10, EPIC 5).
 
-SCORING_RULES = {
-    "title_keywords": {
-        "positive": {
-            "backend": 2.0,
-            "software engineer": 2.0,
-            "platform": 1.5,
-            "fullstack": 1.0,
-            "full stack": 1.0,
-            "python": 1.5,
-            "api": 1.0,
-        },
-        "negative": {
-            "staff": -2.0,
-            "principal": -3.0,
-            "director": -3.0,
-            "vp": -3.0,
-            "intern": -5.0,
-            "junior": -1.0,
-        },
-    },
-    "description_keywords": {
-        "fintech": 2.0,
-        "financial": 1.5,
-        "payments": 1.5,
-        "banking": 1.0,
-        "crypto": 1.0,
-        "blockchain": 0.5,
-        "trading": 1.0,
-        "python": 1.0,
-        "fastapi": 1.5,
-        "django": 0.5,
-        "aws": 0.5,
-        "startup": 1.0,
-        "series a": 1.5,
-        "series b": 1.0,
-        "seed": 1.0,
-    },
-    "location": {
-        "new york": 2.0,
-        "nyc": 2.0,
-        "remote": 1.5,
-        "hybrid": 1.0,
-    },
+Deterministic weighted heuristic. Five factors, each 0-100, combined with weights.
+Tuning knobs: SCORING_WEIGHTS, keyword lists below.
+"""
+
+# Factor weights (must sum to 1.0)
+SCORING_WEIGHTS = {
+    "title_relevance": 0.25,    # 25%
+    "seniority_fit": 0.20,      # 20%
+    "domain_alignment": 0.20,   # 20%
+    "location_remote": 0.20,    # 20%
+    "tech_stack": 0.15,         # 15%
+}
+
+# Target job titles: matches score high (title relevance)
+TARGET_TITLES = [
+    "software engineer",
+    "backend engineer",
+    "backend developer",
+    "platform engineer",
+    "infrastructure engineer",
+    "full stack",
+    "fullstack",
+    "senior software engineer",
+    "senior backend",
+]
+
+# Negative title signals (junior, over-senior)
+JUNIOR_SIGNALS = ["intern", "junior", "entry", "associate", "graduate"]
+OVER_SENIOR_SIGNALS = ["staff", "principal", "architect", "director", "vp", "head of"]
+
+# Domain keywords (industry/vertical alignment)
+DOMAIN_KEYWORDS = {
+    "fintech": 100,
+    "financial": 80,
+    "payments": 85,
+    "banking": 75,
+    "crypto": 70,
+    "blockchain": 65,
+    "trading": 75,
+    "startup": 60,
+    "series a": 70,
+    "series b": 65,
+    "seed": 55,
+    "infrastructure": 80,
+    "platform": 80,
+    "developer tools": 75,
+}
+
+# Location/remote signals
+LOCATION_SIGNALS = {
+    "remote": 100,
+    "distributed": 90,
+    "anywhere": 90,
+    "hybrid": 75,
+    "new york": 70,
+    "nyc": 70,
+    "sf": 60,
+    "san francisco": 60,
 }

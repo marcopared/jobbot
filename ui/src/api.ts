@@ -1,20 +1,17 @@
 const BASE = "/api";
 
+/** v1 API: Job list item (GET /api/jobs) */
 export interface Job {
   id: string;
   title: string;
-  company_name_raw: string;
-  source: string;
-  status: string;
-  pipeline_status?: string;
-  score_total: number;
-  ats_match_score: number;
+  company: string;
   location: string | null;
-  url: string;
-  apply_url: string | null;
-  ats_type: string;
-  remote_flag: boolean;
-  scraped_at: string | null;
+  score: number;
+  persona: string | null;
+  pipeline_status: string;
+  user_status: string;
+  artifact_availability: boolean;
+  source: string | null;
 }
 
 export interface JobsResponse {
@@ -24,15 +21,20 @@ export interface JobsResponse {
   per_page: number;
 }
 
-export interface JobDetail extends Job {
+/** v1 API: Job detail (GET /api/jobs/{id}) */
+export interface JobDetail extends Omit<Job, "persona"> {
   description: string | null;
+  url: string | null;
+  apply_url: string | null;
+  source: string | null;
+  score_breakdown: { title_relevance?: number; seniority_fit?: number; tech_stack?: number; location_remote?: number; weights?: Record<string, number>; raw?: Record<string, unknown> } | null;
+  ats_gaps: { missing_keywords: string[]; found_keywords?: string[]; ats_compatibility_score?: number; raw?: Record<string, unknown> } | null;
+  persona: { matched_persona?: string; persona_confidence?: number; persona_rationale?: string } | null;
+  artifacts: { id: string; kind: string; filename: string; persona_name: string | null; generation_status: string | null; created_at: string | null; download_url: string; preview_url: string }[];
   salary_min: number | null;
   salary_max: number | null;
   posted_at: string | null;
-  score_breakdown_json: Record<string, number> | null;
-  ats_match_breakdown_json: Record<string, unknown> | null;
-  source_job_id: string | null;
-  source_payload_json: Record<string, unknown> | null;
+  remote_flag: boolean;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -105,7 +107,7 @@ export async function fetchJob(id: string): Promise<JobDetail> {
   return res.json();
 }
 
-export async function updateJobStatus(id: string, status: string): Promise<{ id: string; status: string }> {
+export async function updateJobStatus(id: string, status: string): Promise<{ id: string; user_status: string }> {
   const res = await fetch(`${BASE}/jobs/${id}/status`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -149,6 +151,40 @@ export async function fetchRunItems(
   const suffix = qs ? `?${qs}` : "";
   const res = await fetch(`${BASE}/runs/${runId}/items${suffix}`);
   if (!res.ok) throw new Error(`Failed to fetch run items: ${res.status}`);
+  return res.json();
+}
+
+export interface JobArtifact {
+  id: string;
+  kind: string;
+  filename: string;
+  persona_name: string | null;
+  generation_status: string | null;
+  created_at: string | null;
+  download_url: string;
+  preview_url: string;
+}
+
+export interface JobArtifactsResponse {
+  items: JobArtifact[];
+}
+
+export async function fetchJobArtifacts(jobId: string): Promise<JobArtifactsResponse> {
+  const res = await fetch(`${BASE}/jobs/${jobId}/artifacts`);
+  if (!res.ok) throw new Error(`Failed to fetch artifacts: ${res.status}`);
+  return res.json();
+}
+
+export async function triggerGenerateResume(jobId: string): Promise<{
+  job_id: string;
+  status: string;
+  task_id?: string;
+}> {
+  const res = await fetch(`${BASE}/jobs/${jobId}/generate-resume`, { method: "POST" });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Resume generation failed: ${res.status}`);
+  }
   return res.json();
 }
 

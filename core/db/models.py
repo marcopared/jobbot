@@ -99,6 +99,7 @@ class ArtifactKind(str, Enum):
 
 class JobSource(str, Enum):
     JOBSPY = "jobspy"
+    GREENHOUSE = "greenhouse"
     WELLFOUND = "wellfound"
     BUILTINNYC = "builtinnyc"
     YC = "yc"
@@ -277,6 +278,7 @@ class JobAnalysis(Base):
     persona_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     missing_keywords: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
     found_keywords: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    ats_categories: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     ats_compatibility_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     run_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     model_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

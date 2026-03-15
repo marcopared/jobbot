@@ -1,11 +1,33 @@
-import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urlparse
 
 from core.db.models import ATSType, JobSource
+from core.dedup import canonicalize_apply_url, compute_dedup_hash_from_raw
+
+
+def normalize_url(url: str | None) -> str:
+    """Canonical form of URL (strip params, fragment, trailing slash). Backward-compat alias."""
+    return canonicalize_apply_url(url)
+
+
+def compute_dedup_hash(
+    title: str,
+    company_name: str,
+    url: str,
+    location: str | None = None,
+) -> str:
+    """
+    Compute dedup_hash from title, company, url, and optional location.
+    Uses v1 spec: normalized company + title + location + canonical apply URL.
+    """
+    return compute_dedup_hash_from_raw(
+        company=company_name,
+        title=title,
+        location=location,
+        apply_url=url,
+    )
 
 
 @dataclass
@@ -45,24 +67,6 @@ class BaseScraper(ABC):
     def scrape(self, params: ScrapeParams) -> ScrapeResult:
         """Execute scrape and return normalized jobs."""
         ...
-
-
-def normalize_url(url: str) -> str:
-    """Strip tracking params, fragments, trailing slashes."""
-    parsed = urlparse(url)
-    clean = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
-    return clean
-
-
-def compute_dedup_hash(title: str, company_name: str, url: str) -> str:
-    normalized = (
-        title.strip().lower()
-        + "|"
-        + company_name.strip().lower()
-        + "|"
-        + normalize_url(url).lower()
-    )
-    return hashlib.sha256(normalized.encode()).hexdigest()
 
 
 ATS_URL_PATTERNS = {

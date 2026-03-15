@@ -15,10 +15,8 @@ from core.db.models import (
     ScrapeRunStatus,
 )
 from core.db.session import get_sync_session
-from core.scraping.base import (
-    compute_dedup_hash,
-    detect_ats_type,
-)
+from core.dedup import normalize_company, normalize_location, normalize_title
+from core.scraping.base import compute_dedup_hash, detect_ats_type
 from core.scraping.jobspy_scraper import JobSpyScraper
 from core.scraping.base import ScrapeParams
 
@@ -124,7 +122,12 @@ def scrape_jobspy(
     with get_sync_session() as session:
         for index, nj in enumerate(result.jobs, start=1):
             url_for_dedup = nj.apply_url or nj.url
-            dedup_hash = compute_dedup_hash(nj.title, nj.company_name, url_for_dedup)
+            dedup_hash = compute_dedup_hash(
+                nj.title,
+                nj.company_name,
+                url_for_dedup,
+                location=nj.location,
+            )
             ats_type = detect_ats_type(url_for_dedup)
             company_id = None
             company = (
@@ -146,14 +149,14 @@ def scrape_jobspy(
                 source_job_id=nj.source_job_id,
                 title=nj.title,
                 raw_title=nj.title,
-                normalized_title=nj.title,
+                normalized_title=normalize_title(nj.title),
                 company_id=company_id,
                 company_name_raw=nj.company_name,
                 raw_company=nj.company_name,
-                normalized_company=nj.company_name,
+                normalized_company=normalize_company(nj.company_name),
                 location=nj.location,
                 raw_location=nj.location,
-                normalized_location=nj.location,
+                normalized_location=normalize_location(nj.location) if nj.location else None,
                 remote_flag=nj.remote_flag,
                 url=nj.url,
                 apply_url=nj.apply_url,
@@ -205,6 +208,7 @@ def scrape_jobspy(
                     {
                         "index": index,
                         "outcome": "inserted",
+                        "dedup_reason": "new",
                         "job_id": str(inserted_job_id),
                         "dedup_hash": dedup_hash,
                         "source": nj.source.value,
@@ -243,6 +247,7 @@ def scrape_jobspy(
                     {
                         "index": index,
                         "outcome": "duplicate",
+                        "dedup_reason": "dedup_hash",
                         "job_id": existing_job_id,
                         "dedup_hash": dedup_hash,
                         "source": nj.source.value,

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "backend_1",
+    "normalized_title": "senior backend engineer",
+    "description": "Design and build APIs. Work with PostgreSQL, Redis, Python, FastAPI. Business logic and microservices.",
+    "expected_persona": "BACKEND"
+  },
+  {
+    "id": "backend_2",
+    "normalized_title": "backend developer",
+    "description": "REST APIs, GraphQL, database design. Java or Go. Spring or Django.",
+    "expected_persona": "BACKEND"
+  },
+  {
+    "id": "platform_1",
+    "normalized_title": "platform engineer",
+    "description": "Kubernetes, Terraform, AWS. CI/CD pipelines. Observability with Prometheus and Grafana.",
+    "expected_persona": "PLATFORM_INFRA"
+  },
+  {
+    "id": "platform_2",
+    "normalized_title": "infrastructure engineer",
+    "description": "Infrastructure as code, Docker, Kubernetes. Datadog, AWS, GCP.",
+    "expected_persona": "PLATFORM_INFRA"
+  },
+  {
+    "id": "platform_3",
+    "normalized_title": "sre",
+    "description": "Site reliability. Terraform, Kubernetes, observability, on-call.",
+    "expected_persona": "PLATFORM_INFRA"
+  },
+  {
+    "id": "hybrid_1",
+    "normalized_title": "full stack engineer",
+    "description": "Backend APIs and frontend React. PostgreSQL and Docker.",
+    "expected_persona": "HYBRID"
+  },
+  {
+    "id": "hybrid_2",
+    "normalized_title": "software engineer",
+    "description": "Python, FastAPI, Kubernetes, AWS. Mix of backend and infra.",
+    "expected_persona": "HYBRID"
+  },
+  {
+    "id": "hybrid_3",
+    "normalized_title": "fullstack developer",
+    "description": "Node.js, React, PostgreSQL, Docker.",
+    "expected_persona": "HYBRID"
+  },
+  {
+    "id": "ambiguous",
+    "normalized_title": "engineer",
+    "description": "General engineering role.",
+    "expected_persona": "HYBRID"
+  },
+  {
+    "id": "backend_api_heavy",
+    "normalized_title": "api engineer",
+    "description": "Build and maintain REST and GraphQL APIs. Database design.",
+    "expected_persona": "BACKEND"
+  }
+]

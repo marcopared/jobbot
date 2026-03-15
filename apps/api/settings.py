@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     scrape_hours_old: int = 48
     scrape_results_wanted: int = 50
     jobspy_enabled: bool = True
+    greenhouse_enabled: bool = True
     wellfound_enabled: bool = False
     builtinnyc_enabled: bool = False
     yc_enabled: bool = False
@@ -27,6 +28,8 @@ class Settings(BaseSettings):
     ntfy_topic_url: str = ""
     base_resume_path: str = "./storage/base_resume.pdf"
     master_skills_path: str = "./storage/master_skills.json"
+    experience_inventory_path: str = "./data/experience_inventory.yaml"
+    s3_artifact_bucket: str | None = None
     resume_tailor_enabled: bool = True
     playwright_headful: bool = True
     playwright_slow_mo_ms: int = 0

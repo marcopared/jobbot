@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from apps.api.routes.artifacts import router as artifacts_router
+from apps.api.routes.debug import router as debug_router
 from apps.api.routes.jobs import router as jobs_router
 from apps.api.routes.runs import router as runs_router
 from apps.api.routes.ws import router as ws_router
@@ -36,6 +37,7 @@ app = FastAPI(title="JobBot", lifespan=lifespan)
 app.include_router(jobs_router)
 app.include_router(artifacts_router)
 app.include_router(runs_router)
+app.include_router(debug_router)
 app.include_router(ws_router)
 
 
