@@ -8,12 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db
 from apps.worker.tasks.scrape import scrape_jobspy
-from core.db.models import Job, JobStatus, ScrapeRun, ScrapeRunStatus
+from core.db.models import Job, JobStatus, PipelineStatus, ScrapeRun, ScrapeRunStatus, UserStatus
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-APPROVE_FROM = {"NEW", "SCORED"}
-REJECT_FROM = {"NEW", "SCORED", "APPROVED"}
+APPROVE_FROM = {UserStatus.NEW.value, UserStatus.SCORED.value}
+REJECT_FROM = {UserStatus.NEW.value, UserStatus.SCORED.value, UserStatus.APPROVED.value}
 def _job_to_dict(j: Job) -> dict:
     return {
         "id": str(j.id),
@@ -102,8 +102,8 @@ async def bulk_approve(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
         if not job:
             continue
         if job.user_status in APPROVE_FROM:
-            job.user_status = "APPROVED"
-            job.status = "APPROVED"
+            job.user_status = UserStatus.APPROVED.value
+            job.status = JobStatus.APPROVED.value
             updated += 1
     await db.commit()
     return {"updated": updated}
@@ -118,8 +118,8 @@ async def bulk_reject(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
         if not job:
             continue
         if job.user_status in REJECT_FROM:
-            job.user_status = "ARCHIVED"
-            job.status = "ARCHIVED"
+            job.user_status = UserStatus.ARCHIVED.value
+            job.status = JobStatus.ARCHIVED.value
             updated += 1
     await db.commit()
     return {"updated": updated}
@@ -185,15 +185,15 @@ async def approve_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.user_status == "APPROVED":
+    if job.user_status == UserStatus.APPROVED.value:
         return {"id": str(job.id), "status": job.user_status}
     if job.user_status not in APPROVE_FROM:
         raise HTTPException(
             status_code=409,
             detail=f"Cannot transition from {job.user_status} to APPROVED",
         )
-    job.user_status = "APPROVED"
-    job.status = "APPROVED"
+    job.user_status = UserStatus.APPROVED.value
+    job.status = JobStatus.APPROVED.value
     await db.commit()
     await db.refresh(job)
     return {"id": str(job.id), "status": job.user_status}
@@ -205,15 +205,15 @@ async def reject_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.user_status == "ARCHIVED":
+    if job.user_status == UserStatus.ARCHIVED.value:
         return {"id": str(job.id), "status": job.user_status}
     if job.user_status not in REJECT_FROM:
         raise HTTPException(
             status_code=409,
             detail=f"Cannot transition from {job.user_status} to ARCHIVED",
         )
-    job.user_status = "ARCHIVED"
-    job.status = "ARCHIVED"
+    job.user_status = UserStatus.ARCHIVED.value
+    job.status = JobStatus.ARCHIVED.value
     await db.commit()
     await db.refresh(job)
     return {"id": str(job.id), "status": job.user_status}

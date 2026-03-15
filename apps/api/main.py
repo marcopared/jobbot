@@ -64,7 +64,9 @@ async def lifespan(app: FastAPI):
                 raw_location = location,
                 normalized_location = location,
                 user_status = status
-            WHERE raw_company = '' OR raw_title = ''
+            WHERE (raw_company = '' OR raw_title = '') 
+              AND company_name_raw IS NOT NULL 
+              AND title IS NOT NULL
         """))
 
         # Artifacts table

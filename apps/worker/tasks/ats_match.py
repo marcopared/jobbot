@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from apps.api.settings import Settings
 from apps.worker.celery_app import celery_app
-from core.db.models import Job, JobStatus
+from core.db.models import Job, JobStatus, PipelineStatus
 from core.db.session import get_sync_session
 from core.resumes.ats_scorer import compute_ats_match
 from core.resumes.parser import extract_text_from_pdf
@@ -40,7 +40,7 @@ def ats_match_resume(job_ids: list[str] | None = None):
             uuids = [UUID(jid) for jid in job_ids]
             stmt = select(Job).where(Job.id.in_(uuids))
         else:
-            stmt = select(Job).where(Job.pipeline_status == "SCORED")
+            stmt = select(Job).where(Job.pipeline_status == PipelineStatus.SCORED.value)
         result = session.execute(stmt)
         jobs = result.scalars().all()
 

@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from apps.worker.celery_app import celery_app
-from core.db.models import Job, JobStatus
+from core.db.models import Job, JobStatus, PipelineStatus, UserStatus
 from core.db.session import get_sync_session
 from core.scoring.scorer import score_job
 
@@ -18,10 +18,10 @@ def score_jobs(job_ids: list[str] | None = None):
             uuids = [UUID(jid) for jid in job_ids]
             stmt = select(Job).where(
                 Job.id.in_(uuids),
-                Job.user_status == JobStatus.NEW.value,
+                Job.user_status == UserStatus.NEW.value,
             )
         else:
-            stmt = select(Job).where(Job.user_status == JobStatus.NEW.value)
+            stmt = select(Job).where(Job.user_status == UserStatus.NEW.value)
         result = session.execute(stmt)
         jobs = result.scalars().all()
         for job in jobs:
@@ -29,12 +29,12 @@ def score_jobs(job_ids: list[str] | None = None):
             job.score_total = total
             job.score_breakdown_json = breakdown
             if total < 60.0:  # Configurable threshold in the future
-                job.pipeline_status = "REJECTED"
-                job.user_status = "ARCHIVED"
+                job.pipeline_status = PipelineStatus.REJECTED.value
+                job.user_status = UserStatus.NEW.value  # Keep NEW so users can still see and manually archive if desired
             else:
-                job.pipeline_status = "SCORED"
-                job.user_status = "SCORED"  # Or keep NEW, but legacy used SCORED
+                job.pipeline_status = PipelineStatus.SCORED.value
+                job.user_status = UserStatus.NEW.value
             # Keep legacy status updated for now
-            job.status = job.user_status
+            job.status = JobStatus.SCORED.value if total >= 60.0 else JobStatus.REJECTED.value
         session.commit()
     return {"scored": len(jobs)}
