@@ -65,11 +65,11 @@ def run_migrations_online() -> None:
 
     In this scenario we need to create an Engine
     and associate a connection with the context.
-
+    Uses Settings().database_url_sync so app and migrations share the same URL.
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    from sqlalchemy import create_engine
+    connectable = create_engine(
+        settings.database_url_sync,
         poolclass=pool.NullPool,
     )
 

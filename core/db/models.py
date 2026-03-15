@@ -19,6 +19,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from core.db.base import Base
 
 
+# --- Canonical vs legacy ownership ---
+# Canonical source of truth: pipeline_status, user_status, raw/normalized title/company/location.
+# Legacy Job.status is a compatibility mirror only. Use core.job_status.legacy_status_from_canonical()
+# to derive it. Do not use status to drive new behavior.
+
+
 # --- Enums (SPEC §7.1) ---
 
 
@@ -283,6 +289,7 @@ class JobAnalysis(Base):
 
     __table_args__ = (
         Index("ix_job_analyses_job_id", "job_id"),
+        Index("uq_job_analyses_job_id", "job_id", unique=True),
     )
 
 
@@ -309,6 +316,7 @@ class ScrapeRun(Base):
     )
 
 
+# Legacy: applications/interventions are internal tables for apply flow, not part of canonical job pipeline.
 class Application(Base):
     __tablename__ = "applications"
 
@@ -382,6 +390,7 @@ class Artifact(Base):
     )
 
 
+# Legacy: internal table for apply-flow interventions; retained for compatibility only.
 class Intervention(Base):
     __tablename__ = "interventions"
 

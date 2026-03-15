@@ -8,12 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db
 from apps.worker.tasks.scrape import scrape_jobspy
-from core.db.models import Job, JobStatus, PipelineStatus, ScrapeRun, ScrapeRunStatus, UserStatus
+from core.db.models import Job, PipelineStatus, ScrapeRun, ScrapeRunStatus, UserStatus
+from core.job_status import legacy_status_from_canonical
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
-
-APPROVE_FROM = {UserStatus.NEW.value, UserStatus.SCORED.value}
-REJECT_FROM = {UserStatus.NEW.value, UserStatus.SCORED.value, UserStatus.APPROVED.value}
 def _job_to_dict(j: Job) -> dict:
     return {
         "id": str(j.id),
@@ -93,34 +91,21 @@ async def run_scrape(
     return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id)}
 
 
-@router.post("/bulk-approve")
-async def bulk_approve(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
+@router.post("/bulk-status")
+async def bulk_status(body: BulkJobIds, status: str = Query(...), db: AsyncSession = Depends(get_db)):
+    valid_statuses = {s.value for s in UserStatus}
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid user_status: {status}")
+        
     updated = 0
     for jid in body.job_ids:
         result = await db.execute(select(Job).where(Job.id == jid))
         job = result.scalar_one_or_none()
         if not job:
             continue
-        if job.user_status in APPROVE_FROM:
-            job.user_status = UserStatus.APPROVED.value
-            job.status = JobStatus.APPROVED.value
-            updated += 1
-    await db.commit()
-    return {"updated": updated}
-
-
-@router.post("/bulk-reject")
-async def bulk_reject(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
-    updated = 0
-    for jid in body.job_ids:
-        result = await db.execute(select(Job).where(Job.id == jid))
-        job = result.scalar_one_or_none()
-        if not job:
-            continue
-        if job.user_status in REJECT_FROM:
-            job.user_status = UserStatus.ARCHIVED.value
-            job.status = JobStatus.ARCHIVED.value
-            updated += 1
+        job.user_status = status
+        job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
+        updated += 1
     await db.commit()
     return {"updated": updated}
 
@@ -129,6 +114,7 @@ async def bulk_reject(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
 async def list_jobs(
     db: AsyncSession = Depends(get_db),
     status: Optional[str] = None,
+    pipeline_status: Optional[str] = None,
     source: Optional[str] = None,
     q: Optional[str] = Query(None, description="Search title/company"),
     min_score: Optional[float] = None,
@@ -143,6 +129,15 @@ async def list_jobs(
     if status:
         stmt = stmt.where(Job.user_status == status)
         count_stmt = count_stmt.where(Job.user_status == status)
+    
+    if pipeline_status:
+        stmt = stmt.where(Job.pipeline_status == pipeline_status)
+        count_stmt = count_stmt.where(Job.pipeline_status == pipeline_status)
+    else:
+        # Hide REJECTED pipeline status by default unless explicitly requested
+        stmt = stmt.where(Job.pipeline_status != PipelineStatus.REJECTED.value)
+        count_stmt = count_stmt.where(Job.pipeline_status != PipelineStatus.REJECTED.value)
+        
     if source:
         stmt = stmt.where(Job.source == source)
         count_stmt = count_stmt.where(Job.source == source)
@@ -179,41 +174,24 @@ async def get_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     return _job_to_detail(job)
 
 
-@router.post("/{job_id}/approve")
-async def approve_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
+class UpdateJobStatusBody(BaseModel):
+    user_status: str
+
+@router.put("/{job_id}/status")
+async def update_job_status(
+    job_id: UUID, body: UpdateJobStatusBody, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.user_status == UserStatus.APPROVED.value:
-        return {"id": str(job.id), "status": job.user_status}
-    if job.user_status not in APPROVE_FROM:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot transition from {job.user_status} to APPROVED",
-        )
-    job.user_status = UserStatus.APPROVED.value
-    job.status = JobStatus.APPROVED.value
-    await db.commit()
-    await db.refresh(job)
-    return {"id": str(job.id), "status": job.user_status}
-
-
-@router.post("/{job_id}/reject")
-async def reject_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Job).where(Job.id == job_id))
-    job = result.scalar_one_or_none()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.user_status == UserStatus.ARCHIVED.value:
-        return {"id": str(job.id), "status": job.user_status}
-    if job.user_status not in REJECT_FROM:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot transition from {job.user_status} to ARCHIVED",
-        )
-    job.user_status = UserStatus.ARCHIVED.value
-    job.status = JobStatus.ARCHIVED.value
+    
+    valid_statuses = {s.value for s in UserStatus}
+    if body.user_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid user_status: {body.user_status}")
+        
+    job.user_status = body.user_status
+    job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
     await db.commit()
     await db.refresh(job)
     return {"id": str(job.id), "status": job.user_status}

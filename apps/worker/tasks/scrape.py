@@ -3,13 +3,14 @@ import json
 import logging
 
 import redis
-from sqlalchemy import select, text, update
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from apps.api.settings import Settings
 from core.db.models import (
     Company,
     Job,
+    JobSourceRecord,
     ScrapeRun,
     ScrapeRunStatus,
 )
@@ -121,12 +122,6 @@ def scrape_jobspy(
     duplicates = 0
     run_items: list[dict] = []
     with get_sync_session() as session:
-        session.execute(
-            text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS source_payload_json JSONB")
-        )
-        session.execute(
-            text("ALTER TABLE scrape_runs ADD COLUMN IF NOT EXISTS items_json JSONB")
-        )
         for index, nj in enumerate(result.jobs, start=1):
             url_for_dedup = nj.apply_url or nj.url
             dedup_hash = compute_dedup_hash(nj.title, nj.company_name, url_for_dedup)
@@ -178,6 +173,32 @@ def scrape_jobspy(
                 .returning(Job.id)
             )
             inserted_job_id = session.execute(stmt).scalar_one_or_none()
+            job_id_for_source = inserted_job_id
+            existing_job = None
+            if inserted_job_id is None:
+                existing_job = (
+                    session.execute(
+                        select(Job.id, Job.source_payload_json, Job.apply_url).where(
+                            Job.dedup_hash == dedup_hash
+                        )
+                    )
+                    .first()
+                )
+                if existing_job:
+                    job_id_for_source = existing_job[0]
+            # Insert provenance: every new (source_name, external_id) gets a job_sources row
+            if job_id_for_source is not None:
+                ext_id = nj.source_job_id or url_for_dedup or dedup_hash
+                session.execute(
+                    insert(JobSourceRecord)
+                    .values(
+                        job_id=job_id_for_source,
+                        source_name=nj.source.value,
+                        external_id=ext_id,
+                        raw_data=nj.raw_payload,
+                    )
+                    .on_conflict_do_nothing(index_elements=["source_name", "external_id"])
+                )
             if inserted_job_id is not None:
                 inserted += 1
                 run_items.append(
@@ -199,14 +220,6 @@ def scrape_jobspy(
                 )
             else:
                 duplicates += 1
-                existing_job = (
-                    session.execute(
-                        select(Job.id, Job.source_payload_json, Job.apply_url).where(
-                            Job.dedup_hash == dedup_hash
-                        )
-                    )
-                    .first()
-                )
                 existing_job_id = str(existing_job[0]) if existing_job is not None else None
                 had_payload = bool(existing_job and existing_job[1])
                 had_apply_url = bool(existing_job and existing_job[2])

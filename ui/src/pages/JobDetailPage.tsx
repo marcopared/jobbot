@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
-  approveJob,
+  updateJobStatus,
   fetchJob,
-  rejectJob,
   type JobDetail,
 } from "../api";
 import ArtifactViewer from "../components/ArtifactViewer";
@@ -46,11 +45,10 @@ export default function JobDetailPage() {
 
   const artifacts: ArtifactRow[] = []; // Intentionally left empty or can map job artifacts if available
 
-  const handleAction = async (action: "approve" | "reject") => {
+  const handleAction = async (status: string) => {
     if (!job) return;
     try {
-      if (action === "approve") await approveJob(job.id);
-      if (action === "reject") await rejectJob(job.id);
+      await updateJobStatus(job.id, status);
       await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Action failed";
@@ -70,8 +68,9 @@ export default function JobDetailPage() {
     );
   if (!job) return <div className="text-sm text-gray-500">Job not found.</div>;
 
-  const canApprove = job.status === "NEW" || job.status === "SCORED";
-  const canReject = job.status === "NEW" || job.status === "SCORED" || job.status === "APPROVED";
+  const canSave = job.status === "NEW" || job.status === "ARCHIVED";
+  const canArchive = job.status === "NEW" || job.status === "SAVED";
+  const canApply = job.status === "NEW" || job.status === "SAVED";
 
   return (
     <div className="space-y-4">
@@ -79,25 +78,38 @@ export default function JobDetailPage() {
         <div>
           <h1 className="text-2xl font-bold">{job.title}</h1>
           <p className="text-sm text-gray-600">{job.company_name_raw}</p>
-          <div className="mt-2">
+          <div className="mt-2 flex gap-2">
             <StatusBadge status={job.status} />
+            {job.pipeline_status && job.pipeline_status !== "SCORED" && job.pipeline_status !== "INGESTED" && (
+              <span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                Pipeline: {job.pipeline_status}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canApprove && (
+          {canSave && (
             <button
-              onClick={() => void handleAction("approve")}
+              onClick={() => void handleAction("SAVED")}
               className="rounded bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
             >
-              Approve
+              Save
             </button>
           )}
-          {canReject && (
+          {canApply && (
             <button
-              onClick={() => void handleAction("reject")}
+              onClick={() => void handleAction("APPLIED")}
+              className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Mark Applied
+            </button>
+          )}
+          {canArchive && (
+            <button
+              onClick={() => void handleAction("ARCHIVED")}
               className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
             >
-              Reject
+              Archive
             </button>
           )}
         </div>

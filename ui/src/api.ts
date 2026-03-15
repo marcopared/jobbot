@@ -6,6 +6,7 @@ export interface Job {
   company_name_raw: string;
   source: string;
   status: string;
+  pipeline_status?: string;
   score_total: number;
   ats_match_score: number;
   location: string | null;
@@ -104,41 +105,26 @@ export async function fetchJob(id: string): Promise<JobDetail> {
   return res.json();
 }
 
-export async function approveJob(id: string): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${BASE}/jobs/${id}/approve`, { method: "POST" });
+export async function updateJobStatus(id: string, status: string): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${BASE}/jobs/${id}/status`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_status: status }),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Approve failed: ${res.status}`);
+    throw new Error(err.detail || `Status update failed: ${res.status}`);
   }
   return res.json();
 }
 
-export async function rejectJob(id: string): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${BASE}/jobs/${id}/reject`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Reject failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function bulkApprove(jobIds: string[]): Promise<{ updated: number }> {
-  const res = await fetch(`${BASE}/jobs/bulk-approve`, {
+export async function bulkUpdateStatus(jobIds: string[], status: string): Promise<{ updated: number }> {
+  const res = await fetch(`${BASE}/jobs/bulk-status?status=${encodeURIComponent(status)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ job_ids: jobIds }),
   });
-  if (!res.ok) throw new Error(`Bulk approve failed: ${res.status}`);
-  return res.json();
-}
-
-export async function bulkReject(jobIds: string[]): Promise<{ updated: number }> {
-  const res = await fetch(`${BASE}/jobs/bulk-reject`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ job_ids: jobIds }),
-  });
-  if (!res.ok) throw new Error(`Bulk reject failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Bulk status update failed: ${res.status}`);
   return res.json();
 }
 
