@@ -27,8 +27,11 @@ class JobStatus(str, Enum):
     SCORED = "SCORED"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
-    APPLY_QUEUED = "APPLY_QUEUED"
+    SAVED = "SAVED"
     APPLIED = "APPLIED"
+    ARCHIVED = "ARCHIVED"
+    # Legacy statuses kept for DB compatibility if needed
+    APPLY_QUEUED = "APPLY_QUEUED"
     APPLY_FAILED = "APPLY_FAILED"
     INTERVENTION_REQUIRED = "INTERVENTION_REQUIRED"
 

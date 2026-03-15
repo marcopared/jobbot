@@ -25,8 +25,3 @@
 1. Add stronger end-to-end checks for scrape -> score -> ATS -> resume pipeline.
 2. Tighten local observability around worker failures and partial pipeline runs.
 3. Document migration/cleanup plan for any remaining legacy apply-related statuses.
-
-## Future Research (After Core Is Stable)
-
-- Research an **optional** auto-apply capability only after scraping, scoring, ATS analysis,
-  and custom resume generation workflows are complete and stable.

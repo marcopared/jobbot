@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useParams } from "react-router-dom";
 import {
   approveJob,
-  fetchApplications,
-  fetchInterventions,
   fetchJob,
   rejectJob,
-  type Application,
-  type Intervention,
   type JobDetail,
 } from "../api";
 import ArtifactViewer from "../components/ArtifactViewer";
@@ -25,8 +21,6 @@ type ArtifactRow = {
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<JobDetail | null>(null);
-  const [applications, setApplications] = useState<Application[]>([]);
-  const [interventions, setInterventions] = useState<Intervention[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,19 +29,8 @@ export default function JobDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [jobData, appsData, openInt, resolvedInt, abortedInt] = await Promise.all([
-        fetchJob(id),
-        fetchApplications({ job_id: id, page: "1", per_page: "50" }),
-        fetchInterventions({ status: "OPEN", page: "1", per_page: "100" }),
-        fetchInterventions({ status: "RESOLVED", page: "1", per_page: "100" }),
-        fetchInterventions({ status: "ABORTED", page: "1", per_page: "100" }),
-      ]);
+      const jobData = await fetchJob(id);
       setJob(jobData);
-      setApplications(appsData.items);
-      const allInterventions = [...openInt.items, ...resolvedInt.items, ...abortedInt.items].filter(
-        (i) => i.job_id === id,
-      );
-      setInterventions(allInterventions);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to load job details";
       setError(message);
@@ -61,36 +44,16 @@ export default function JobDetailPage() {
     void load();
   }, [load]);
 
-  const artifacts = useMemo<ArtifactRow[]>(() => {
-    const rows: ArtifactRow[] = [];
-    for (const intervention of interventions) {
-      if (intervention.screenshot_artifact_id) {
-        rows.push({
-          id: intervention.screenshot_artifact_id,
-          kind: "screenshot",
-          label: "Intervention Screenshot",
-          createdAt: intervention.created_at,
-        });
-      }
-      if (intervention.html_artifact_id) {
-        rows.push({
-          id: intervention.html_artifact_id,
-          kind: "html",
-          label: "Intervention HTML Snapshot",
-          createdAt: intervention.created_at,
-        });
-      }
-    }
-    return rows;
-  }, [interventions]);
+  const artifacts: ArtifactRow[] = []; // Intentionally left empty or can map job artifacts if available
 
-  const primaryIntervention = interventions[0];
-
-  const handleAction = async (action: "approve" | "reject") => {
+  const handleAction = async (action: "approve" | "reject" | "save" | "apply" | "archive") => {
     if (!job) return;
     try {
+      // For now, map UI actions to the existing approve/reject endpoints, 
+      // or if we have new status endpoints, we would call them.
       if (action === "approve") await approveJob(job.id);
       if (action === "reject") await rejectJob(job.id);
+      // We would need endpoints for save/apply/archive.
       await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Action failed";
@@ -155,10 +118,15 @@ export default function JobDetailPage() {
           <div className="prose max-w-none text-sm text-gray-700 whitespace-pre-wrap">
             {job.description || "No description available."}
           </div>
-          <div className="mt-4 text-sm">
+          <div className="mt-4 flex gap-4 text-sm">
             <a href={job.url} target="_blank" rel="noreferrer" className="text-indigo-700 underline">
               Open job listing
             </a>
+            {job.apply_url && (
+              <a href={job.apply_url} target="_blank" rel="noreferrer" className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 no-underline">
+                Open Application
+              </a>
+            )}
           </div>
         </section>
 
@@ -236,58 +204,7 @@ export default function JobDetailPage() {
         atsBreakdown={job.ats_match_breakdown_json}
       />
 
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900">Application History</h3>
-          <Link to="/applications" className="text-sm text-indigo-700 underline">
-            View all applications
-          </Link>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600">Status</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600">Method</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600">Started</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600">Error</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {applications.map((app) => (
-                <tr key={app.id}>
-                  <td className="px-3 py-2">
-                    <StatusBadge status={app.status} />
-                  </td>
-                  <td className="px-3 py-2">{app.method}</td>
-                  <td className="px-3 py-2">
-                    {app.started_at ? new Date(app.started_at).toLocaleString() : "N/A"}
-                  </td>
-                  <td className="px-3 py-2">{app.error_text ?? "—"}</td>
-                </tr>
-              ))}
-              {applications.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-gray-500">
-                    No applications yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <ArtifactViewer artifacts={artifacts} />
-
-      {primaryIntervention && (
-        <section className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm">
-          <span className="font-medium">Intervention linked:</span>{" "}
-          <Link className="text-indigo-700 underline" to="/interventions">
-            {primaryIntervention.id}
-          </Link>
-        </section>
-      )}
     </div>
   );
 }

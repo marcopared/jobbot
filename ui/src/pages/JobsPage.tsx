@@ -16,9 +16,9 @@ const STATUSES = [
   "SCORED",
   "APPROVED",
   "REJECTED",
+  "SAVED",
   "APPLIED",
-  "APPLY_FAILED",
-  "INTERVENTION_REQUIRED",
+  "ARCHIVED",
 ];
 
 export default function JobsPage() {

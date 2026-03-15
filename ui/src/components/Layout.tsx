@@ -1,43 +1,13 @@
 import { NavLink } from "react-router-dom";
-import { useEffect, useState } from "react";
 
-import { fetchInterventions } from "../api";
 import ToastHost from "./ToastHost";
 
 const NAV_ITEMS = [
   { to: "/jobs", label: "Jobs" },
-  { to: "/applications", label: "Applications" },
-  { to: "/interventions", label: "Interventions" },
   { to: "/runs", label: "Scrape Runs" },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const [openInterventions, setOpenInterventions] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadOpenCount = async () => {
-      try {
-        const data = await fetchInterventions({
-          status: "OPEN",
-          page: "1",
-          per_page: "1",
-        });
-        if (!cancelled) setOpenInterventions(data.total);
-      } catch {
-        // Keep nav stable on transient API errors.
-      }
-    };
-
-    void loadOpenCount();
-    const interval = window.setInterval(loadOpenCount, 15000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-
   return (
     <div className="flex min-h-screen">
       <aside className="hidden md:flex w-56 flex-col bg-gray-900 text-gray-100">
@@ -57,11 +27,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             >
               <span className="inline-flex items-center gap-2">
                 {item.label}
-                {item.to === "/interventions" && openInterventions > 0 && (
-                  <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-semibold text-white">
-                    {openInterventions}
-                  </span>
-                )}
               </span>
             </NavLink>
           ))}
@@ -83,11 +48,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               >
                 <span className="inline-flex items-center gap-1">
                   {item.label}
-                  {item.to === "/interventions" && openInterventions > 0 && (
-                    <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                      {openInterventions}
-                    </span>
-                  )}
                 </span>
               </NavLink>
             ))}

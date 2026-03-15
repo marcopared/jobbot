@@ -23,55 +23,6 @@ export interface JobsResponse {
   per_page: number;
 }
 
-export interface Intervention {
-  id: string;
-  job_id: string;
-  application_id: string | null;
-  created_at: string | null;
-  resolved_at: string | null;
-  status: string;
-  reason: string;
-  last_url: string | null;
-  screenshot_artifact_id: string | null;
-  html_artifact_id: string | null;
-  notes: string | null;
-}
-
-export interface InterventionsResponse {
-  items: Intervention[];
-  total: number;
-  page: number;
-  per_page: number;
-}
-
-export interface Application {
-  id: string;
-  job_id: string;
-  started_at: string | null;
-  finished_at: string | null;
-  status: string;
-  method: string;
-  error_text: string | null;
-  fields_json: Record<string, unknown> | null;
-  external_app_id: string | null;
-  created_at: string | null;
-}
-
-export interface ApplicationsResponse {
-  items: Application[];
-  total: number;
-  page: number;
-  per_page: number;
-}
-
-export interface ApplicationDetail extends Application {
-  job: {
-    id: string;
-    title: string;
-    company_name_raw: string;
-  };
-}
-
 export interface JobDetail extends Job {
   description: string | null;
   salary_min: number | null;
@@ -188,53 +139,6 @@ export async function bulkReject(jobIds: string[]): Promise<{ updated: number }>
     body: JSON.stringify({ job_ids: jobIds }),
   });
   if (!res.ok) throw new Error(`Bulk reject failed: ${res.status}`);
-  return res.json();
-}
-
-export async function fetchInterventions(params: Record<string, string>): Promise<InterventionsResponse> {
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${BASE}/interventions?${qs}`);
-  if (!res.ok) throw new Error(`Failed to fetch interventions: ${res.status}`);
-  return res.json();
-}
-
-export async function resolveIntervention(
-  id: string,
-  notes?: string,
-): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${BASE}/interventions/${id}/resolve`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(notes ? { notes } : {}),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Resolve failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function abortIntervention(id: string): Promise<{ id: string; status: string }> {
-  const res = await fetch(`${BASE}/interventions/${id}/abort`, { method: "POST" });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Abort failed: ${res.status}`);
-  }
-  return res.json();
-}
-
-export async function fetchApplications(
-  params: Record<string, string>,
-): Promise<ApplicationsResponse> {
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${BASE}/applications?${qs}`);
-  if (!res.ok) throw new Error(`Failed to fetch applications: ${res.status}`);
-  return res.json();
-}
-
-export async function fetchApplication(id: string): Promise<ApplicationDetail> {
-  const res = await fetch(`${BASE}/applications/${id}`);
-  if (!res.ok) throw new Error(`Failed to fetch application: ${res.status}`);
   return res.json();
 }
 
