@@ -8,22 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db
 from apps.worker.tasks.scrape import scrape_jobspy
-from core.db.models import Job, JobStatus, ScrapeRun, ScrapeRunStatus
+from core.db.models import Job, PipelineStatus, ScrapeRun, ScrapeRunStatus, UserStatus
+from core.job_status import legacy_status_from_canonical
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
-
-APPROVE_FROM = {JobStatus.NEW.value, JobStatus.SCORED.value}
-REJECT_FROM = {JobStatus.NEW.value, JobStatus.SCORED.value, JobStatus.APPROVED.value}
 def _job_to_dict(j: Job) -> dict:
     return {
         "id": str(j.id),
-        "title": j.title,
-        "company_name_raw": j.company_name_raw,
+        "title": j.normalized_title or j.title,
+        "company_name_raw": j.normalized_company or j.company_name_raw,
         "source": j.source,
-        "status": j.status,
+        "status": j.user_status,
+        "pipeline_status": j.pipeline_status,
         "score_total": j.score_total,
         "ats_match_score": j.ats_match_score,
-        "location": j.location,
+        "location": j.normalized_location or j.location,
         "url": j.url,
         "apply_url": j.apply_url,
         "ats_type": j.ats_type,
@@ -92,32 +91,21 @@ async def run_scrape(
     return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id)}
 
 
-@router.post("/bulk-approve")
-async def bulk_approve(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
+@router.post("/bulk-status")
+async def bulk_status(body: BulkJobIds, status: str = Query(...), db: AsyncSession = Depends(get_db)):
+    valid_statuses = {s.value for s in UserStatus}
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid user_status: {status}")
+        
     updated = 0
     for jid in body.job_ids:
         result = await db.execute(select(Job).where(Job.id == jid))
         job = result.scalar_one_or_none()
         if not job:
             continue
-        if job.status in APPROVE_FROM:
-            job.status = JobStatus.APPROVED.value
-            updated += 1
-    await db.commit()
-    return {"updated": updated}
-
-
-@router.post("/bulk-reject")
-async def bulk_reject(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
-    updated = 0
-    for jid in body.job_ids:
-        result = await db.execute(select(Job).where(Job.id == jid))
-        job = result.scalar_one_or_none()
-        if not job:
-            continue
-        if job.status in REJECT_FROM:
-            job.status = JobStatus.REJECTED.value
-            updated += 1
+        job.user_status = status
+        job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
+        updated += 1
     await db.commit()
     return {"updated": updated}
 
@@ -126,6 +114,7 @@ async def bulk_reject(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
 async def list_jobs(
     db: AsyncSession = Depends(get_db),
     status: Optional[str] = None,
+    pipeline_status: Optional[str] = None,
     source: Optional[str] = None,
     q: Optional[str] = Query(None, description="Search title/company"),
     min_score: Optional[float] = None,
@@ -138,8 +127,17 @@ async def list_jobs(
     stmt = select(Job)
     count_stmt = select(func.count()).select_from(Job)
     if status:
-        stmt = stmt.where(Job.status == status)
-        count_stmt = count_stmt.where(Job.status == status)
+        stmt = stmt.where(Job.user_status == status)
+        count_stmt = count_stmt.where(Job.user_status == status)
+    
+    if pipeline_status:
+        stmt = stmt.where(Job.pipeline_status == pipeline_status)
+        count_stmt = count_stmt.where(Job.pipeline_status == pipeline_status)
+    else:
+        # Hide REJECTED pipeline status by default unless explicitly requested
+        stmt = stmt.where(Job.pipeline_status != PipelineStatus.REJECTED.value)
+        count_stmt = count_stmt.where(Job.pipeline_status != PipelineStatus.REJECTED.value)
+        
     if source:
         stmt = stmt.where(Job.source == source)
         count_stmt = count_stmt.where(Job.source == source)
@@ -176,39 +174,24 @@ async def get_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     return _job_to_detail(job)
 
 
-@router.post("/{job_id}/approve")
-async def approve_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
+class UpdateJobStatusBody(BaseModel):
+    user_status: str
+
+@router.put("/{job_id}/status")
+async def update_job_status(
+    job_id: UUID, body: UpdateJobStatusBody, db: AsyncSession = Depends(get_db)
+):
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status == JobStatus.APPROVED.value:
-        return {"id": str(job.id), "status": job.status}
-    if job.status not in APPROVE_FROM:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot transition from {job.status} to APPROVED",
-        )
-    job.status = JobStatus.APPROVED.value
+    
+    valid_statuses = {s.value for s in UserStatus}
+    if body.user_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid user_status: {body.user_status}")
+        
+    job.user_status = body.user_status
+    job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
     await db.commit()
     await db.refresh(job)
-    return {"id": str(job.id), "status": job.status}
-
-
-@router.post("/{job_id}/reject")
-async def reject_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Job).where(Job.id == job_id))
-    job = result.scalar_one_or_none()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.status == JobStatus.REJECTED.value:
-        return {"id": str(job.id), "status": job.status}
-    if job.status not in REJECT_FROM:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Cannot transition from {job.status} to REJECTED",
-        )
-    job.status = JobStatus.REJECTED.value
-    await db.commit()
-    await db.refresh(job)
-    return {"id": str(job.id), "status": job.status}
+    return {"id": str(job.id), "status": job.user_status}

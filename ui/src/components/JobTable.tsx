@@ -7,7 +7,7 @@ interface Props {
   selected: Set<string>;
   onToggle: (id: string) => void;
   onToggleAll: () => void;
-  onAction: (id: string, action: "approve" | "reject") => void;
+  onAction: (id: string, status: string) => void;
 }
 
 function formatDate(iso: string | null): string {
@@ -113,27 +113,27 @@ function ActionButtons({
   onAction,
 }: {
   status: string;
-  onAction: (a: "approve" | "reject") => void;
+  onAction: (status: string) => void;
 }) {
-  const canApprove = status === "NEW" || status === "SCORED";
-  const canReject = status === "NEW" || status === "SCORED" || status === "APPROVED";
+  const canSave = status === "NEW" || status === "ARCHIVED";
+  const canArchive = status === "NEW" || status === "SAVED";
 
   return (
     <span className="inline-flex gap-1">
-      {canApprove && (
+      {canSave && (
         <button
-          onClick={() => onAction("approve")}
+          onClick={() => onAction("SAVED")}
           className="rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 transition"
         >
-          Approve
+          Save
         </button>
       )}
-      {canReject && (
+      {canArchive && (
         <button
-          onClick={() => onAction("reject")}
+          onClick={() => onAction("ARCHIVED")}
           className="rounded bg-red-500 px-2 py-1 text-xs font-medium text-white hover:bg-red-600 transition"
         >
-          Reject
+          Archive
         </button>
       )}
     </span>

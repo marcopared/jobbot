@@ -3,8 +3,11 @@ const COLORS: Record<string, string> = {
   SCORED: "bg-indigo-100 text-indigo-800",
   APPROVED: "bg-green-100 text-green-800",
   REJECTED: "bg-red-100 text-red-800",
-  APPLY_QUEUED: "bg-yellow-100 text-yellow-800",
+  SAVED: "bg-yellow-100 text-yellow-800",
   APPLIED: "bg-emerald-100 text-emerald-800",
+  ARCHIVED: "bg-gray-200 text-gray-800",
+  // Legacy
+  APPLY_QUEUED: "bg-yellow-100 text-yellow-800",
   APPLY_FAILED: "bg-red-200 text-red-900",
   INTERVENTION_REQUIRED: "bg-orange-100 text-orange-800",
 };

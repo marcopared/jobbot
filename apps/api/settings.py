@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     playwright_profile_name: str = "default"
     playwright_timeout_ms: int = 30000
     log_level: str = "DEBUG"
+    scoring_threshold: float = 60.0
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"

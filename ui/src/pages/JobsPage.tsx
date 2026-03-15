@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchJobs,
-  approveJob,
-  rejectJob,
-  bulkApprove,
-  bulkReject,
+  updateJobStatus,
+  bulkUpdateStatus,
   type Job,
 } from "../api";
 import JobTable from "../components/JobTable";
@@ -13,12 +11,9 @@ import { notifyError } from "../notify";
 const STATUSES = [
   "ALL",
   "NEW",
-  "SCORED",
-  "APPROVED",
-  "REJECTED",
+  "SAVED",
   "APPLIED",
-  "APPLY_FAILED",
-  "INTERVENTION_REQUIRED",
+  "ARCHIVED",
 ];
 
 export default function JobsPage() {
@@ -67,10 +62,9 @@ export default function JobsPage() {
     setPage(1);
   }, [status, search, sortBy, sortDir]);
 
-  const handleAction = async (id: string, action: "approve" | "reject") => {
+  const handleAction = async (id: string, status: string) => {
     try {
-      if (action === "approve") await approveJob(id);
-      else if (action === "reject") await rejectJob(id);
+      await updateJobStatus(id, status);
       await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Action failed";
@@ -96,12 +90,11 @@ export default function JobsPage() {
     }
   };
 
-  const handleBulk = async (action: "approve" | "reject") => {
+  const handleBulk = async (status: string) => {
     if (selected.size === 0) return;
     try {
       const ids = Array.from(selected);
-      if (action === "approve") await bulkApprove(ids);
-      else await bulkReject(ids);
+      await bulkUpdateStatus(ids, status);
       setSelected(new Set());
       await load();
     } catch (e) {
@@ -169,16 +162,16 @@ export default function JobsPage() {
         <div className="flex items-center gap-2 rounded bg-indigo-50 px-4 py-2 text-sm">
           <span className="font-medium">{selected.size} selected</span>
           <button
-            onClick={() => handleBulk("approve")}
+            onClick={() => handleBulk("SAVED")}
             className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
           >
-            Bulk Approve
+            Bulk Save
           </button>
           <button
-            onClick={() => handleBulk("reject")}
+            onClick={() => handleBulk("ARCHIVED")}
             className="rounded bg-red-500 px-3 py-1 text-xs font-medium text-white hover:bg-red-600"
           >
-            Bulk Reject
+            Bulk Archive
           </button>
           <button
             onClick={() => setSelected(new Set())}

@@ -68,14 +68,11 @@ This triggers `/api/jobs/run-scrape` and waits for completion.
 
 - Health: `GET /api/health`
 - Jobs: `GET /api/jobs`
-- Applications: `GET /api/applications`
-- Interventions: `GET /api/interventions?status=OPEN`
 - Runs: `GET /api/runs`
 - WebSocket logs: `WS /ws/logs`
 
 ## Storage
 
 - `storage/artifacts/` - generated artifacts (including resume outputs and snapshots)
-- `storage/profiles/` - Playwright/Chromium profile data for local browser automation tooling
 
 Both directories are auto-created on API startup.

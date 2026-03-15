@@ -4,17 +4,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 
-from apps.api.routes.applications import router as applications_router
 from apps.api.routes.artifacts import router as artifacts_router
-from apps.api.routes.interventions import router as interventions_router
 from apps.api.routes.jobs import router as jobs_router
 from apps.api.routes.runs import router as runs_router
 from apps.api.routes.ws import router as ws_router
 from apps.api.settings import Settings
-from core.db import Base  # imports models, registering them with Base.metadata
-from core.db.session import async_engine
 from core.logging_config import configure_logging
 
 settings = Settings()
@@ -33,23 +28,13 @@ async def lifespan(app: FastAPI):
     )
     Path(settings.artifact_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.profile_dir).mkdir(parents=True, exist_ok=True)
-    # Create all tables on startup
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await conn.execute(
-            text("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS source_payload_json JSONB")
-        )
-        await conn.execute(
-            text("ALTER TABLE scrape_runs ADD COLUMN IF NOT EXISTS items_json JSONB")
-        )
+    # Schema is managed by Alembic. Run `alembic upgrade head` before startup.
     yield
 
 
 app = FastAPI(title="JobBot", lifespan=lifespan)
 app.include_router(jobs_router)
-app.include_router(applications_router)
 app.include_router(artifacts_router)
-app.include_router(interventions_router)
 app.include_router(runs_router)
 app.include_router(ws_router)
 
