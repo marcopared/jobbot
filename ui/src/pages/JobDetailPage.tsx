@@ -46,14 +46,11 @@ export default function JobDetailPage() {
 
   const artifacts: ArtifactRow[] = []; // Intentionally left empty or can map job artifacts if available
 
-  const handleAction = async (action: "approve" | "reject" | "save" | "apply" | "archive") => {
+  const handleAction = async (action: "approve" | "reject") => {
     if (!job) return;
     try {
-      // For now, map UI actions to the existing approve/reject endpoints, 
-      // or if we have new status endpoints, we would call them.
       if (action === "approve") await approveJob(job.id);
       if (action === "reject") await rejectJob(job.id);
-      // We would need endpoints for save/apply/archive.
       await load();
     } catch (e) {
       const message = e instanceof Error ? e.message : "Action failed";

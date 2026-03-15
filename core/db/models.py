@@ -22,7 +22,24 @@ from core.db.base import Base
 # --- Enums (SPEC §7.1) ---
 
 
+class PipelineStatus(str, Enum):
+    INGESTED = "INGESTED"
+    DEDUPED = "DEDUPED"
+    SCORED = "SCORED"
+    REJECTED = "REJECTED"
+    CLASSIFIED = "CLASSIFIED"
+    ATS_ANALYZED = "ATS_ANALYZED"
+    RESUME_READY = "RESUME_READY"
+    FAILED = "FAILED"
+
+class UserStatus(str, Enum):
+    NEW = "NEW"
+    SAVED = "SAVED"
+    APPLIED = "APPLIED"
+    ARCHIVED = "ARCHIVED"
+
 class JobStatus(str, Enum):
+    # Legacy statuses kept for DB compatibility if needed
     NEW = "NEW"
     SCORED = "SCORED"
     APPROVED = "APPROVED"
@@ -30,7 +47,6 @@ class JobStatus(str, Enum):
     SAVED = "SAVED"
     APPLIED = "APPLIED"
     ARCHIVED = "ARCHIVED"
-    # Legacy statuses kept for DB compatibility if needed
     APPLY_QUEUED = "APPLY_QUEUED"
     APPLY_FAILED = "APPLY_FAILED"
     INTERVENTION_REQUIRED = "INTERVENTION_REQUIRED"
@@ -137,16 +153,24 @@ class Job(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    source: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_company: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    raw_title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    raw_location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    normalized_company: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    normalized_title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    normalized_location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
+    # Legacy fields kept for compatibility during migration
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="unknown")
     source_job_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
     company_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("companies.id"), nullable=True
     )
-    company_name_raw: Mapped[str] = mapped_column(Text, nullable=False)
+    company_name_raw: Mapped[str] = mapped_column(Text, nullable=False, default="")
     location: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     remote_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    url: Mapped[str] = mapped_column(Text, nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     apply_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     salary_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -159,6 +183,8 @@ class Job(Base):
     )
     ats_type: Mapped[str] = mapped_column(Text, default="unknown", nullable=False)
     status: Mapped[str] = mapped_column(Text, default="NEW", nullable=False)
+    pipeline_status: Mapped[str] = mapped_column(Text, default="INGESTED", nullable=False)
+    user_status: Mapped[str] = mapped_column(Text, default="NEW", nullable=False)
     score_total: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     score_breakdown_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     ats_match_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
@@ -187,11 +213,76 @@ class Job(Base):
     interventions: Mapped[list["Intervention"]] = relationship(
         "Intervention", back_populates="job"
     )
+    sources: Mapped[list["JobSourceRecord"]] = relationship(
+        "JobSourceRecord", back_populates="job"
+    )
+    analyses: Mapped[list["JobAnalysis"]] = relationship(
+        "JobAnalysis", back_populates="job"
+    )
 
     __table_args__ = (
         Index("ix_jobs_status_scraped_at", "status", "scraped_at"),
+        Index("ix_jobs_pipeline_status", "pipeline_status"),
+        Index("ix_jobs_user_status", "user_status"),
         Index("ix_jobs_company_id", "company_id"),
         Index("ix_jobs_source", "source"),
+    )
+
+class JobSourceRecord(Base):
+    __tablename__ = "job_sources"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False
+    )
+    source_name: Mapped[str] = mapped_column(Text, nullable=False)
+    external_id: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    provenance_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    job: Mapped["Job"] = relationship("Job", back_populates="sources")
+
+    __table_args__ = (
+        Index("ix_job_sources_job_id", "job_id"),
+        Index("ix_job_sources_source_ext_id", "source_name", "external_id", unique=True),
+    )
+
+class JobAnalysis(Base):
+    __tablename__ = "job_analyses"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False
+    )
+    total_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    seniority_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    tech_stack_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    location_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    persona_specific_scores: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    matched_persona: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    persona_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    persona_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    missing_keywords: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    found_keywords: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+    ats_compatibility_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    run_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    model_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prompt_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    job: Mapped["Job"] = relationship("Job", back_populates="analyses")
+
+    __table_args__ = (
+        Index("ix_job_analyses_job_id", "job_id"),
     )
 
 
@@ -269,6 +360,17 @@ class Artifact(Base):
     filename: Mapped[str] = mapped_column(Text, nullable=False)
     path: Mapped[str] = mapped_column(Text, nullable=False)
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    # New canonical fields
+    persona_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    file_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    format: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prompt_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    template_version: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    inventory_version_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generation_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

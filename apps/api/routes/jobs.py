@@ -12,18 +12,19 @@ from core.db.models import Job, JobStatus, ScrapeRun, ScrapeRunStatus
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-APPROVE_FROM = {JobStatus.NEW.value, JobStatus.SCORED.value}
-REJECT_FROM = {JobStatus.NEW.value, JobStatus.SCORED.value, JobStatus.APPROVED.value}
+APPROVE_FROM = {"NEW", "SCORED"}
+REJECT_FROM = {"NEW", "SCORED", "APPROVED"}
 def _job_to_dict(j: Job) -> dict:
     return {
         "id": str(j.id),
-        "title": j.title,
-        "company_name_raw": j.company_name_raw,
+        "title": j.normalized_title or j.title,
+        "company_name_raw": j.normalized_company or j.company_name_raw,
         "source": j.source,
-        "status": j.status,
+        "status": j.user_status,
+        "pipeline_status": j.pipeline_status,
         "score_total": j.score_total,
         "ats_match_score": j.ats_match_score,
-        "location": j.location,
+        "location": j.normalized_location or j.location,
         "url": j.url,
         "apply_url": j.apply_url,
         "ats_type": j.ats_type,
@@ -100,8 +101,9 @@ async def bulk_approve(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
         job = result.scalar_one_or_none()
         if not job:
             continue
-        if job.status in APPROVE_FROM:
-            job.status = JobStatus.APPROVED.value
+        if job.user_status in APPROVE_FROM:
+            job.user_status = "APPROVED"
+            job.status = "APPROVED"
             updated += 1
     await db.commit()
     return {"updated": updated}
@@ -115,8 +117,9 @@ async def bulk_reject(body: BulkJobIds, db: AsyncSession = Depends(get_db)):
         job = result.scalar_one_or_none()
         if not job:
             continue
-        if job.status in REJECT_FROM:
-            job.status = JobStatus.REJECTED.value
+        if job.user_status in REJECT_FROM:
+            job.user_status = "ARCHIVED"
+            job.status = "ARCHIVED"
             updated += 1
     await db.commit()
     return {"updated": updated}
@@ -138,8 +141,8 @@ async def list_jobs(
     stmt = select(Job)
     count_stmt = select(func.count()).select_from(Job)
     if status:
-        stmt = stmt.where(Job.status == status)
-        count_stmt = count_stmt.where(Job.status == status)
+        stmt = stmt.where(Job.user_status == status)
+        count_stmt = count_stmt.where(Job.user_status == status)
     if source:
         stmt = stmt.where(Job.source == source)
         count_stmt = count_stmt.where(Job.source == source)
@@ -182,17 +185,18 @@ async def approve_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status == JobStatus.APPROVED.value:
-        return {"id": str(job.id), "status": job.status}
-    if job.status not in APPROVE_FROM:
+    if job.user_status == "APPROVED":
+        return {"id": str(job.id), "status": job.user_status}
+    if job.user_status not in APPROVE_FROM:
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot transition from {job.status} to APPROVED",
+            detail=f"Cannot transition from {job.user_status} to APPROVED",
         )
-    job.status = JobStatus.APPROVED.value
+    job.user_status = "APPROVED"
+    job.status = "APPROVED"
     await db.commit()
     await db.refresh(job)
-    return {"id": str(job.id), "status": job.status}
+    return {"id": str(job.id), "status": job.user_status}
 
 
 @router.post("/{job_id}/reject")
@@ -201,14 +205,15 @@ async def reject_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    if job.status == JobStatus.REJECTED.value:
-        return {"id": str(job.id), "status": job.status}
-    if job.status not in REJECT_FROM:
+    if job.user_status == "ARCHIVED":
+        return {"id": str(job.id), "status": job.user_status}
+    if job.user_status not in REJECT_FROM:
         raise HTTPException(
             status_code=409,
-            detail=f"Cannot transition from {job.status} to REJECTED",
+            detail=f"Cannot transition from {job.user_status} to ARCHIVED",
         )
-    job.status = JobStatus.REJECTED.value
+    job.user_status = "ARCHIVED"
+    job.status = "ARCHIVED"
     await db.commit()
     await db.refresh(job)
-    return {"id": str(job.id), "status": job.status}
+    return {"id": str(job.id), "status": job.user_status}

@@ -18,16 +18,23 @@ def score_jobs(job_ids: list[str] | None = None):
             uuids = [UUID(jid) for jid in job_ids]
             stmt = select(Job).where(
                 Job.id.in_(uuids),
-                Job.status == JobStatus.NEW.value,
+                Job.user_status == JobStatus.NEW.value,
             )
         else:
-            stmt = select(Job).where(Job.status == JobStatus.NEW.value)
+            stmt = select(Job).where(Job.user_status == JobStatus.NEW.value)
         result = session.execute(stmt)
         jobs = result.scalars().all()
         for job in jobs:
             total, breakdown = score_job(job)
             job.score_total = total
             job.score_breakdown_json = breakdown
-            job.status = JobStatus.SCORED.value
+            if total < 60.0:  # Configurable threshold in the future
+                job.pipeline_status = "REJECTED"
+                job.user_status = "ARCHIVED"
+            else:
+                job.pipeline_status = "SCORED"
+                job.user_status = "SCORED"  # Or keep NEW, but legacy used SCORED
+            # Keep legacy status updated for now
+            job.status = job.user_status
         session.commit()
     return {"scored": len(jobs)}

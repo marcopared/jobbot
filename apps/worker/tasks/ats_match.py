@@ -40,7 +40,7 @@ def ats_match_resume(job_ids: list[str] | None = None):
             uuids = [UUID(jid) for jid in job_ids]
             stmt = select(Job).where(Job.id.in_(uuids))
         else:
-            stmt = select(Job).where(Job.status == JobStatus.SCORED.value)
+            stmt = select(Job).where(Job.pipeline_status == "SCORED")
         result = session.execute(stmt)
         jobs = result.scalars().all()
 

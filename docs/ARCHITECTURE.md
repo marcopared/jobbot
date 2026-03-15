@@ -112,7 +112,7 @@ The backend exposes a RESTful API built with **FastAPI (Python)** for the fronte
 - `GET /api/jobs/{id}`: Retrieve full job details, analysis, and scores.
 - `POST /api/jobs/{id}/generate-resume`: Manually trigger or regenerate a resume.
 - `GET /api/jobs/{id}/artifacts`: List available download links for a job.
-- `PUT /api/jobs/{id}/status`: Update user workflow status (e.g., `APPLIED`, `ARCHIVED`).
+- `PUT /api/jobs/{id}/status`: (Planned) Update user workflow status (e.g., `APPLIED`, `ARCHIVED`).
 
 ## 15. Worker / Pipeline Architecture
 The system relies heavily on asynchronous processing using a message broker (**Redis + Celery**). The core scoring, ATS, and resume logic are entirely Python-owned.
