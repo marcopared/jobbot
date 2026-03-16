@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   updateJobStatus,
   fetchJob,
+  triggerGenerateResume,
   type JobDetail,
 } from "../api";
 import ArtifactViewer from "../components/ArtifactViewer";
@@ -10,17 +11,11 @@ import ScoreBreakdown from "../components/ScoreBreakdown";
 import StatusBadge from "../components/StatusBadge";
 import { notifyError } from "../notify";
 
-type ArtifactRow = {
-  id: string;
-  kind: string;
-  label: string;
-  createdAt?: string | null;
-};
-
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -43,7 +38,22 @@ export default function JobDetailPage() {
     void load();
   }, [load]);
 
-  const artifacts: ArtifactRow[] = []; // Intentionally left empty or can map job artifacts if available
+  const handleGenerateResume = useCallback(async () => {
+    if (!id) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      await triggerGenerateResume(id);
+      // Refetch after a delay to show new artifact when ready
+      setTimeout(() => void load(), 5000);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Resume generation failed";
+      setError(message);
+      notifyError(message);
+    } finally {
+      setGenerating(false);
+    }
+  }, [id, load]);
 
   const handleAction = async (status: string) => {
     if (!job) return;
@@ -68,18 +78,23 @@ export default function JobDetailPage() {
     );
   if (!job) return <div className="text-sm text-gray-500">Job not found.</div>;
 
-  const canSave = job.status === "NEW" || job.status === "ARCHIVED";
-  const canArchive = job.status === "NEW" || job.status === "SAVED";
-  const canApply = job.status === "NEW" || job.status === "SAVED";
+  const canSave = job.user_status === "NEW" || job.user_status === "ARCHIVED";
+  const canArchive = job.user_status === "NEW" || job.user_status === "SAVED";
+  const canApply = job.user_status === "NEW" || job.user_status === "SAVED";
+  const canGenerateResume =
+    job.pipeline_status === "ATS_ANALYZED" || job.pipeline_status === "RESUME_READY";
 
   return (
     <div className="space-y-4">
+      <Link to="/jobs" className="text-sm text-indigo-600 hover:underline">
+        ← Back to jobs
+      </Link>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{job.title}</h1>
-          <p className="text-sm text-gray-600">{job.company_name_raw}</p>
+          <p className="text-sm text-gray-600">{job.company}</p>
           <div className="mt-2 flex gap-2">
-            <StatusBadge status={job.status} />
+            <StatusBadge status={job.user_status} />
             {job.pipeline_status && job.pipeline_status !== "SCORED" && job.pipeline_status !== "INGESTED" && (
               <span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
                 Pipeline: {job.pipeline_status}
@@ -128,9 +143,11 @@ export default function JobDetailPage() {
             {job.description || "No description available."}
           </div>
           <div className="mt-4 flex gap-4 text-sm">
-            <a href={job.url} target="_blank" rel="noreferrer" className="text-indigo-700 underline">
-              Open job listing
-            </a>
+            {job.url && (
+              <a href={job.url} target="_blank" rel="noreferrer" className="text-indigo-700 underline">
+                Open job listing
+              </a>
+            )}
             {job.apply_url && (
               <a href={job.apply_url} target="_blank" rel="noreferrer" className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 no-underline">
                 Open Application
@@ -144,7 +161,7 @@ export default function JobDetailPage() {
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Company</dt>
-              <dd className="text-right text-gray-900">{job.company_name_raw}</dd>
+              <dd className="text-right text-gray-900">{job.company}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Location</dt>
@@ -156,64 +173,65 @@ export default function JobDetailPage() {
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Score</dt>
-              <dd className="text-right text-gray-900">{job.score_total.toFixed(2)}</dd>
+              <dd className="text-right text-gray-900">{job.score.toFixed(2)}</dd>
             </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-gray-500">ATS Match</dt>
-              <dd className="text-right text-gray-900">{job.ats_match_score.toFixed(1)}%</dd>
-            </div>
+            {job.ats_gaps?.ats_compatibility_score != null && (
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500">ATS Match</dt>
+                <dd className="text-right text-gray-900">{job.ats_gaps.ats_compatibility_score.toFixed(1)}%</dd>
+              </div>
+            )}
           </dl>
         </section>
       </div>
 
-      <section className="rounded-lg border border-gray-200 bg-white p-4">
-        <h3 className="mb-2 text-base font-semibold text-gray-900">Raw Scrape Payload (JobSpy)</h3>
-        {job.source_payload_json ? (
-          <div className="space-y-3">
-            <div className="overflow-x-auto rounded border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-600">Column</th>
-                    <th className="px-3 py-2 text-left font-semibold text-gray-600">Value</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {Object.entries(job.source_payload_json)
-                    .sort(([a], [b]) => a.localeCompare(b))
-                    .map(([key, value]) => (
-                      <tr key={key}>
-                        <td className="px-3 py-2 font-mono text-xs text-gray-700">{key}</td>
-                        <td className="px-3 py-2 text-gray-900 break-all">
-                          {value === null ? "null" : typeof value === "object" ? JSON.stringify(value) : String(value)}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            <details className="rounded border border-gray-200 bg-gray-50 p-2">
-              <summary className="cursor-pointer text-sm font-medium text-gray-700">
-                View raw JSON
-              </summary>
-              <pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded bg-gray-900 p-3 text-xs text-gray-100">
-                {JSON.stringify(job.source_payload_json, null, 2)}
-              </pre>
-            </details>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-600">
-            No raw scrape payload is stored for this job yet. Run a new scrape to populate JobSpy columns.
-          </p>
-        )}
-      </section>
-
       <ScoreBreakdown
-        scoreBreakdown={job.score_breakdown_json}
-        atsBreakdown={job.ats_match_breakdown_json}
+        scoreBreakdown={
+          job.score_breakdown?.raw
+            ? (job.score_breakdown.raw as Record<string, number>)
+            : job.score_breakdown
+              ? {
+                  ...(job.score_breakdown.title_relevance != null && { title_relevance: job.score_breakdown.title_relevance }),
+                  ...(job.score_breakdown.seniority_fit != null && { seniority_fit: job.score_breakdown.seniority_fit }),
+                  ...(job.score_breakdown.tech_stack != null && { tech_stack: job.score_breakdown.tech_stack }),
+                  ...(job.score_breakdown.location_remote != null && { location_remote: job.score_breakdown.location_remote }),
+                }
+              : null
+        }
+        atsBreakdown={
+          job.ats_gaps
+            ? {
+                skills_found: job.ats_gaps.found_keywords ?? [],
+                skills_missing: job.ats_gaps.missing_keywords ?? [],
+                ...(job.ats_gaps.ats_compatibility_score != null && { keyword_overlap_pct: job.ats_gaps.ats_compatibility_score }),
+              }
+            : null
+        }
       />
 
-      <ArtifactViewer artifacts={artifacts} />
+      {job.persona && (
+        <section className="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="mb-2 text-lg font-semibold">Persona Classification</h2>
+          <p className="text-sm text-gray-700">
+            <span className="font-medium">{job.persona.matched_persona ?? "—"}</span>
+            {job.persona.persona_confidence != null && (
+              <span className="ml-2 text-gray-500">
+                ({(job.persona.persona_confidence * 100).toFixed(0)}% confidence)
+              </span>
+            )}
+          </p>
+          {job.persona.persona_rationale && (
+            <p className="mt-2 text-sm text-gray-600 italic">{job.persona.persona_rationale}</p>
+          )}
+        </section>
+      )}
+
+      <ArtifactViewer
+        artifacts={job.artifacts ?? []}
+        onGenerateResume={handleGenerateResume}
+        generating={generating}
+        canGenerateResume={canGenerateResume}
+      />
     </div>
   );
 }

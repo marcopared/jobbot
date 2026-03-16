@@ -22,6 +22,6 @@ def legacy_status_from_canonical(pipeline_status: str, user_status: str) -> str:
         return "APPLIED"
     if user_status == "ARCHIVED":
         return "ARCHIVED"
-    if pipeline_status == "SCORED":
+    if pipeline_status in ("SCORED", "CLASSIFIED", "ATS_ANALYZED", "RESUME_READY"):
         return "SCORED"
     return "NEW"

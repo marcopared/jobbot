@@ -1,0 +1,41 @@
+[
+  {
+    "id": "jd_python_postgres",
+    "description": "We use Python, FastAPI, and PostgreSQL. Experience with Docker and AWS required. Redis for caching.",
+    "user_skills": ["python", "fastapi", "postgresql", "redis", "aws", "docker"],
+    "expected_found_subset": ["python", "fastapi", "postgresql", "redis", "aws", "docker"],
+    "expected_score_min": 90,
+    "expected_score_max": 100
+  },
+  {
+    "id": "jd_postgres_synonym",
+    "description": "Our stack includes Postgres, Python, and Celery. K8s for orchestration.",
+    "user_skills": ["postgresql", "python", "kubernetes"],
+    "expected_found_subset": ["postgresql", "python", "kubernetes"],
+    "expected_synonym_postgres_mapped": true,
+    "expected_score_min": 66
+  },
+  {
+    "id": "jd_java_only",
+    "description": "Java and Spring. Oracle database. Must have 5+ years.",
+    "user_skills": ["python", "go"],
+    "expected_missing_subset": ["java", "spring"],
+    "expected_score_max": 50
+  },
+  {
+    "id": "jd_empty",
+    "description": "",
+    "user_skills": ["python"],
+    "expected_found_count": 0,
+    "expected_missing_count": 0,
+    "expected_score": 0.0
+  },
+  {
+    "id": "jd_all_matched",
+    "description": "Python, AWS, Docker.",
+    "user_skills": ["python", "aws", "docker"],
+    "expected_found_subset": ["python", "aws", "docker"],
+    "expected_missing_count": 0,
+    "expected_score": 100.0
+  }
+]

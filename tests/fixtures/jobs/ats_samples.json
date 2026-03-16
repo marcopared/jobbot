@@ -1,0 +1,22 @@
+[
+  {
+    "id": "jd_python_postgres",
+    "description": "We use Python, FastAPI, and PostgreSQL. Experience with Docker and AWS required. Redis for caching."
+  },
+  {
+    "id": "jd_postgres_synonym",
+    "description": "Our stack includes Postgres, Python, and Celery. K8s for orchestration."
+  },
+  {
+    "id": "jd_java_only",
+    "description": "Java and Spring. Oracle database. Must have 5+ years."
+  },
+  {
+    "id": "jd_empty",
+    "description": ""
+  },
+  {
+    "id": "jd_mixed_match",
+    "description": "Python backend, React frontend, PostgreSQL, Redis. Fintech startup."
+  }
+]

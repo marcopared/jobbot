@@ -8,13 +8,9 @@ import {
 import JobTable from "../components/JobTable";
 import { notifyError } from "../notify";
 
-const STATUSES = [
-  "ALL",
-  "NEW",
-  "SAVED",
-  "APPLIED",
-  "ARCHIVED",
-];
+const STATUSES = ["ALL", "NEW", "SAVED", "APPLIED", "ARCHIVED"];
+const PERSONAS = ["", "BACKEND", "PLATFORM_INFRA", "HYBRID"];
+const SOURCES = ["", "jobspy", "greenhouse", "wellfound", "builtinnyc", "yc"];
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -23,6 +19,10 @@ export default function JobsPage() {
   const [perPage] = useState(25);
   const [status, setStatus] = useState("ALL");
   const [search, setSearch] = useState("");
+  const [persona, setPersona] = useState("");
+  const [source, setSource] = useState("");
+  const [minScore, setMinScore] = useState("");
+  const [includeRejected, setIncludeRejected] = useState(false);
   const [sortBy, setSortBy] = useState("score_total");
   const [sortDir, setSortDir] = useState("desc");
   const [loading, setLoading] = useState(false);
@@ -41,6 +41,10 @@ export default function JobsPage() {
       };
       if (status !== "ALL") params.status = status;
       if (search.trim()) params.q = search.trim();
+      if (persona) params.persona = persona;
+      if (source) params.source = source;
+      if (minScore.trim() && !Number.isNaN(Number(minScore))) params.min_score = minScore.trim();
+      if (includeRejected) params.include_rejected = "1";
       const data = await fetchJobs(params);
       setJobs(data.items);
       setTotal(data.total);
@@ -51,7 +55,7 @@ export default function JobsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, status, search, sortBy, sortDir]);
+  }, [page, perPage, status, search, persona, source, minScore, includeRejected, sortBy, sortDir]);
 
   useEffect(() => {
     load();
@@ -60,7 +64,7 @@ export default function JobsPage() {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [status, search, sortBy, sortDir]);
+  }, [status, search, persona, source, minScore, includeRejected, sortBy, sortDir]);
 
   const handleAction = async (id: string, status: string) => {
     try {
@@ -138,6 +142,49 @@ export default function JobsPage() {
             onChange={(e) => setSearch(e.target.value)}
             className="rounded border border-gray-300 px-3 py-1.5 text-sm w-52"
           />
+          <select
+            value={persona}
+            onChange={(e) => setPersona(e.target.value)}
+            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            title="Filter by persona"
+          >
+            <option value="">All personas</option>
+            <option value="BACKEND">Backend</option>
+            <option value="PLATFORM_INFRA">Platform/Infra</option>
+            <option value="HYBRID">Hybrid</option>
+          </select>
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            title="Filter by source"
+          >
+            <option value="">All sources</option>
+            {SOURCES.filter(Boolean).map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            placeholder="Min score"
+            value={minScore}
+            onChange={(e) => setMinScore(e.target.value)}
+            min={0}
+            max={100}
+            step={1}
+            className="rounded border border-gray-300 px-3 py-1.5 text-sm w-20"
+          />
+          <label className="flex items-center gap-1.5 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={includeRejected}
+              onChange={(e) => setIncludeRejected(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Show rejected (debug)
+          </label>
           <select
             value={sortBy}
             onChange={(e) => handleSort(e.target.value)}
