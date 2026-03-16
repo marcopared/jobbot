@@ -25,7 +25,7 @@ from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
 
-from core.observability import with_log_context, get_metrics
+from core.observability import log_context, get_metrics
 from core.observability.metrics import TaskTimer
 
 settings = Settings()
@@ -71,17 +71,17 @@ def ingest_greenhouse(
     Creates ScrapeRun (source=greenhouse), fetches via connector, inserts
     Jobs and JobSourceRecords, records item-level outcomes in items_json.
     """
-    with_log_context(run_id=run_id, source_name="greenhouse", task_name="ingest_greenhouse")
-    metrics = get_metrics()
+    with log_context(run_id=run_id, source_name="greenhouse", task_name="ingest_greenhouse"):
+        metrics = get_metrics()
 
-    if not settings.greenhouse_enabled:
-        logger.info("Skipping Greenhouse ingest run_id=%s (greenhouse disabled)", run_id)
-        return {"status": "skipped", "reason": "GREENHOUSE_ENABLED=false"}
+        if not settings.greenhouse_enabled:
+            logger.info("Skipping Greenhouse ingest run_id=%s (greenhouse disabled)", run_id)
+            return {"status": "skipped", "reason": "GREENHOUSE_ENABLED=false"}
 
-    connector = create_greenhouse_connector(
-        board_token=board_token.strip(),
-        company_name=company_name.strip(),
-    )
+        connector = create_greenhouse_connector(
+            board_token=board_token.strip(),
+            company_name=company_name.strip(),
+        )
     logger.info(
         "Starting Greenhouse ingest run_id=%s board=%s company=%s",
         run_id,
@@ -130,6 +130,7 @@ def ingest_greenhouse(
 
     inserted = 0
     duplicates = 0
+    inserted_job_ids: list[str] = []
     run_items: list[dict] = []
 
     with get_sync_session() as session:
@@ -242,6 +243,7 @@ def ingest_greenhouse(
 
             if inserted_job_id is not None:
                 inserted += 1
+                inserted_job_ids.append(str(inserted_job_id))
                 if canonical_apply_url and job_id_for_source:
                     apply_url_to_job_id[canonical_apply_url] = job_id_for_source
                 run_items.append(
@@ -317,7 +319,8 @@ def ingest_greenhouse(
         f"Greenhouse ingest finished fetched={result.stats.get('fetched', 0)} inserted={inserted} duplicates={duplicates}",
         run_id=run_id,
     )
-    (score_jobs.s() | classify_jobs.s() | ats_match_resume.si()).delay()
+    if inserted_job_ids:
+        (score_jobs.s(inserted_job_ids) | classify_jobs.s() | ats_match_resume.s()).delay()
     logger.debug(
         "Queued post-ingest chain score_jobs -> classify_jobs -> ats_match_resume for run_id=%s",
         run_id,

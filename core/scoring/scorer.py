@@ -6,7 +6,8 @@ No LLM. Five factors, weighted sum 0-100. Explainable via stored breakdown.
 import json
 from pathlib import Path
 
-from core.resumes.keywords import TECH_KEYWORDS
+from core.matching import keyword_in_text, keywords_in_text, score_keywords_in_text
+from core.resumes.keywords import SYNONYM_MAP, TECH_KEYWORDS
 from core.scoring.rules import (
     DOMAIN_KEYWORDS,
     JUNIOR_SIGNALS,
@@ -36,32 +37,29 @@ def _load_master_skills(master_skills_path: str | None) -> set[str]:
 
 
 def _score_title_relevance(title: str) -> float:
-    """Score 0-100: match against target titles."""
+    """Score 0-100: match against target titles. Uses word-boundary matching."""
     t = (title or "").lower()
     if not t.strip():
         return 0.0
     best = 0.0
     for target in TARGET_TITLES:
-        if target in t:
-            # Exact match of full target
-            if t == target or t.startswith(target + " ") or f" {target} " in t or t.endswith(" " + target):
-                return 100.0
-            # Partial match
-            best = max(best, 80.0)
-    # Fallback: any engineering signal
-    if any(x in t for x in ["engineer", "developer", "software"]):
+        if keyword_in_text(t, target):
+            # Whole-phrase match (e.g. software engineer, series a)
+            return 100.0
+    # Fallback: any engineering signal (whole-word)
+    if any(keyword_in_text(t, x) for x in ["engineer", "developer", "software"]):
         best = max(best, 50.0)
     return best if best > 0 else 30.0  # Default for unknown titles
 
 
 def _score_seniority_fit(title: str, description: str) -> float:
-    """Score 0-100: penalize junior and over-senior."""
+    """Score 0-100: penalize junior and over-senior. Uses word-boundary matching."""
     combined = ((title or "") + " " + (description or "")).lower()
     for sig in JUNIOR_SIGNALS:
-        if sig in combined:
+        if keyword_in_text(combined, sig):
             return 20.0  # Strong penalty
     for sig in OVER_SENIOR_SIGNALS:
-        if sig in combined:
+        if keyword_in_text(combined, sig):
             return 40.0  # Moderate penalty (user may still qualify)
     return 100.0  # Sweet spot: mid-level / senior without over-senior labels
 
@@ -70,11 +68,7 @@ def _score_domain_alignment(description: str) -> float:
     """Score 0-100: domain keyword match (capped at 100)."""
     if not description:
         return 50.0  # Neutral if no description
-    d = description.lower()
-    total = 0.0
-    for kw, score in DOMAIN_KEYWORDS.items():
-        if kw in d:
-            total += score
+    total = score_keywords_in_text(description, DOMAIN_KEYWORDS)
     return min(100.0, total) if total > 0 else 50.0
 
 
@@ -82,12 +76,10 @@ def _score_location_remote(location: str | None, remote_flag: bool, description:
     """Score 0-100: remote/hybrid/location compatibility."""
     if remote_flag:
         return 100.0
-    loc = (location or "").lower()
-    desc = (description or "").lower()
-    combined = loc + " " + desc
+    combined = ((location or "") + " " + (description or "")).lower()
     best = 0.0
     for signal, score in LOCATION_SIGNALS.items():
-        if signal in combined:
+        if keyword_in_text(combined, signal):
             best = max(best, score)
             break
     return best if best > 0 else 40.0  # Unknown location: moderate penalty
@@ -97,12 +89,11 @@ def _score_tech_stack(description: str, user_skills: set[str]) -> float:
     """Score 0-100: overlap between JD tech keywords and user skills."""
     if not description:
         return 50.0
-    d = description.lower()
-    jd_keywords: set[str] = set()
-    for category_keywords in TECH_KEYWORDS.values():
-        for kw in category_keywords:
-            if kw in d:
-                jd_keywords.add(kw)
+    all_tech = set().union(*TECH_KEYWORDS.values())
+    jd_keywords = keywords_in_text(description, all_tech)
+    for synonym, canonical in SYNONYM_MAP.items():
+        if keyword_in_text(description, synonym):
+            jd_keywords.add(canonical)
     if not jd_keywords:
         return 50.0
     overlap = jd_keywords & user_skills

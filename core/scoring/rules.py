@@ -1,7 +1,8 @@
 """Scoring rules config (SPEC §10, EPIC 5).
 
 Deterministic weighted heuristic. Five factors, each 0-100, combined with weights.
-Tuning knobs: SCORING_WEIGHTS, keyword lists below.
+Tuning knobs: SCORING_WEIGHTS, keyword lists below. All keyword/title matching
+for these rules uses core.matching (word-boundary-aware).
 """
 
 # Factor weights (must sum to 1.0)

@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     log_level: str = "DEBUG"
     scoring_threshold: float = 60.0
 
+    # Debug endpoints (e.g. GET /api/debug/failures): disabled by default.
+    # Enable only in local/dev when explicitly set (DEBUG_ENDPOINTS_ENABLED=true).
+    debug_endpoints_enabled: bool = False
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

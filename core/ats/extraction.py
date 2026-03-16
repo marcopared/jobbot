@@ -2,12 +2,14 @@
 
 No LLM. Extracts tech keywords with synonym mapping and normalization.
 Compares against user competencies (master_skills) to produce found/missing.
+Uses word-boundary matching to avoid false positives (e.g. "java" in "javascript").
 """
 
 import json
 from pathlib import Path
 from typing import NamedTuple
 
+from core.matching import keyword_in_text
 from core.resumes.keywords import SYNONYM_MAP, TECH_KEYWORDS, normalize_keyword
 
 
@@ -15,22 +17,23 @@ def _extract_jd_keywords(text: str) -> set[str]:
     """
     Extract tech keywords from job description with synonym normalization.
 
-    Checks both canonical keywords and synonym variants in text
-    (e.g. "postgres" in text -> add "postgresql").
+    Uses word-boundary matching to avoid false positives (e.g. "java" in "javascript",
+    "go" in "argo", "sql" in unrelated strings).
+    Synonym-in-text: if "postgres" in text, add canonical "postgresql".
     """
     if not text or not text.strip():
         return set()
     text_lower = text.lower()
     found: set[str] = set()
 
-    # Direct canonical matches
+    # Direct canonical matches with word boundaries
     for kw in set().union(*TECH_KEYWORDS.values()):
-        if kw in text_lower:
+        if keyword_in_text(text_lower, kw):
             found.add(kw)
 
     # Synonym-in-text: if "postgres" in text, add canonical "postgresql"
     for synonym, canonical in SYNONYM_MAP.items():
-        if synonym in text_lower:
+        if keyword_in_text(text_lower, synonym):
             found.add(canonical)
 
     return found

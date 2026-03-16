@@ -1,5 +1,7 @@
 # JobBot System Specification and Architecture
 
+**v1 implementation:** Redis + Celery workers, React + Vite UI, deterministic scoring, rules-based persona classifier, grounded inventory-driven resume generation, GCS/local artifact storage. No LLM dependency. Manual review and manual apply only.
+
 ## 1. Executive Summary
 JobBot is an automated pipeline designed to streamline the job search process for software engineers. Instead of blindly applying to jobs, JobBot focuses on high-quality discovery, evaluation, and preparation. It ingests job listings from various sources, scores them for relevance, classifies them into targeted professional personas, and generates highly tailored resumes optimized for Applicant Tracking Systems (ATS). The user is then presented with a curated list of high-value opportunities and ready-to-use application artifacts, leaving the final manual application step to the user.
 
@@ -22,7 +24,7 @@ To maintain clear system boundaries and avoid brittleness, the following are exp
 ## 4. End-to-End System Flow
 1. **Ingestion Cron:** Scheduled workers poll ATS APIs and scrapers to fetch raw job listings.
 2. **Normalization & Deduplication:** Raw data is mapped to a canonical `Job` schema. The system checks against existing records to prevent duplicates.
-3. **Scoring Pipeline:** The normalized job is passed through a scoring engine. Jobs below a configurable threshold are persisted for historical analysis and model tuning, but are marked as `REJECTED` and hidden from the user.
+3. **Scoring Pipeline:** The normalized job is passed through a deterministic scoring engine. Jobs below a configurable threshold are persisted for historical analysis and rule tuning, but are marked as `REJECTED` and hidden from the user.
 4. **Classification & Analysis:** High-scoring jobs are analyzed to determine the best-fit persona and extract ATS keywords.
 5. **Artifact Generation:** An asynchronous worker generates a tailored resume using the user's base experience inventory and the extracted job signals.
 6. **Review & Action:** The user logs into the UI, reviews the curated job feed, downloads the tailored resume, and manually applies via the provided URL.
@@ -80,7 +82,7 @@ Deduplication occurs immediately after normalization. The `dedup_hash` serves as
 3. **Fuzzy Matching (Secondary Assist):** For edge cases, a similarity score using PostgreSQL `pg_trgm` trigram similarity on the company and title is computed. This is not a hard constraint, but a secondary assist used for pre-insert conflict detection or to flag potential duplicates for manual operator review.
 
 ## 10. Scoring System Design (v1)
-The scoring system uses a weighted heuristic model (five factors, 0–100 each) implemented in Python:
+The scoring system uses a deterministic weighted heuristic (five factors, 0–100 each) implemented in Python. All keyword matching uses word-boundary-aware helpers in `core/matching.py` (avoids false positives like "java" in "javascript").
 - **Title Relevance (25%):** Matches against target titles (e.g., "Senior Software Engineer").
 - **Seniority Match (20%):** Penalizes roles that are too junior or excessively senior.
 - **Domain Alignment (20%):** Keyword matching for industry/vertical (fintech, startup, etc.).
@@ -93,7 +95,7 @@ The v1 classifier is **rules-based and deterministic** (no LLM). It implements a
 - **Backend Engineer:** Triggered by title signals and keyword matches (API, databases, business logic, backend languages).
 - **Platform / Infrastructure Engineer:** Triggered by infra keywords (Kubernetes, CI/CD, AWS/GCP, observability).
 - **Hybrid:** Fallback when signals are mixed or ambiguous.
-The selected persona dictates which subset of the `Experience Inventory` is prioritized during resume generation.
+Uses word-boundary-aware matching via `core/matching.py` for title and description keywords. The selected persona dictates which subset of the `Experience Inventory` is prioritized during resume generation.
 
 ## 12. Resume Generation Architecture (v1)
 v1 has exactly one resume-generation path: experience inventory → grounded selection → deterministic HTML → Playwright PDF → artifact storage. No other path (e.g., base-resume parsing or LLM rewriting) is supported.
@@ -116,14 +118,14 @@ Generated resumes are stored on the local filesystem by default (`storage/artifa
 ## 14. API Design
 The backend exposes a RESTful API built with **FastAPI (Python)** for the frontend:
 - `GET /api/jobs`: List jobs with filtering (user_status, score, persona). Excludes REJECTED by default; use `include_rejected=true` for debugging.
-- `GET /api/jobs/{id}`: Retrieve full job details, analysis, and scores. Returns 404 for REJECTED jobs unless `include_rejected=true`. Use `debug=true` to include `debug_data` (source_payload_json, dedup_hash).
+- `GET /api/jobs/{id}`: Retrieve full job details, analysis, and scores. Returns 404 for REJECTED jobs unless `include_rejected=true`. Use `debug=true` to include `debug_data` (source_payload_json, dedup_hash) only when `DEBUG_ENDPOINTS_ENABLED=true`; otherwise the flag is ignored and internal fields are omitted.
 - `POST /api/jobs/{id}/generate-resume`: Manually trigger or regenerate a resume. Requires `pipeline_status` ATS_ANALYZED or RESUME_READY; returns 409 if not ready.
 - `GET /api/jobs/{id}/artifacts`: List available download links for a job.
 - `PUT /api/jobs/{id}/status`: Update user workflow status. Only SAVED, APPLIED, ARCHIVED are writable; NEW is the initial state, not client-settable.
 
 ## 15. Worker / Pipeline Architecture (v1)
 The system uses **Redis + Celery** for asynchronous processing. All scoring, classification, ATS, and resume logic are Python-owned.
-- **Queues:** Celery routes tasks to `default`, `scrape`, and `ingestion` queues. Classification and resume tasks run on the default queue (no separate LLM or render queues in v1).
+- **Queues:** Celery routes tasks to `default`, `scrape`, and `ingestion` queues. Classification and resume tasks run on the default queue.
 - **Task flow:** Scrape/ingest → score → classify → ats_match → (manual) generate-resume.
 
 ## 16. UI Architecture (v1)
@@ -136,12 +138,12 @@ The Review Interface is a Single Page Application (SPA) built with **React** and
 - **Structured Logging:** Services output structured logs with context (`trace_id`, `job_id`) to track a job's journey through the pipeline.
 - **Metrics:** Task-level metrics (histograms, counters) are instrumented for scoring, classification, ATS, and resume generation. Datadog or similar can consume them when configured.
 
-*Future: Alerting on elevated error rates, DLQ dashboards.*
+*Future (not v1): Alerting on elevated error rates, DLQ dashboards.*
 
 ## 18. Failure Handling (v1)
 - **Retries:** Transient errors in worker tasks use exponential backoff (Celery retry).
 - **Failure Recording:** Task failures are recorded (e.g., to Redis) for visibility; no formal DLQ in v1.
-- **v1 has no LLM dependency:** Classification and resume content are deterministic; pipeline does not depend on external LLM availability.
+- **Deterministic pipeline:** Classification and resume content are deterministic; no external LLM or generative service dependencies.
 
 ## 19. Testing Strategy (v1)
 - **Unit Tests:** Validate deduplication logic, scoring heuristics, connector normalization, rules-based classification, and ATS extraction.

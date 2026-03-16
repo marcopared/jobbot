@@ -17,16 +17,16 @@ MAX_FAILURES = 100
 
 @dataclass
 class TaskFailureRecord:
-    """Record of a task that failed after max retries."""
+    """Record of a task that failed after max retries. No raw args/kwargs (security)."""
 
     task_name: str
-    args: list
-    kwargs: dict
     error: str
     timestamp: str
     retries: int
     job_id: str | None = None
     run_id: str | None = None
+    args_count: int = 0
+    kwargs_count: int = 0
 
 
 def record_task_failure(
@@ -60,13 +60,13 @@ def record_task_failure(
 
         record = TaskFailureRecord(
             task_name=task_name,
-            args=[str(a) for a in args[:5]],  # Truncate for storage
-            kwargs={k: str(v)[:200] for k, v in list(kwargs.items())[:10]},
             error=str(error)[:1000],
             timestamp=ts,
             retries=retries,
             job_id=job_id,
             run_id=run_id,
+            args_count=len(args or ()),
+            kwargs_count=len(kwargs or {}),
         )
         client = redis.Redis.from_url(redis_url, decode_responses=True)
         payload = json.dumps(asdict(record))

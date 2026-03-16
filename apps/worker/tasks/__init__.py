@@ -8,6 +8,7 @@ from apps.worker.tasks.notify import send_notification
 __all__ = [
     "scrape_jobspy",
     "score_jobs",
+    "classify_jobs",
     "ats_match_resume",
     "generate_grounded_resume_task",
     "send_notification",

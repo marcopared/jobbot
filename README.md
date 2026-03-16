@@ -108,7 +108,10 @@ Runs `POST /api/jobs/run-scrape` and waits for completion.
 | `GET /api/jobs/{id}/artifacts` | List artifacts for a job |
 | `GET /api/runs` | List scrape/ingest runs |
 | `GET /api/runs/{id}` | Run detail |
-| `WS /ws/logs` | WebSocket log stream |
+| `GET /api/debug/failures` | Recent task failures (debug-only; requires `DEBUG_ENDPOINTS_ENABLED=true`) |
+| `WS /ws/logs` | WebSocket log stream (debug-only; requires `DEBUG_ENDPOINTS_ENABLED=true`) |
+
+Debug endpoints are disabled by default; enable only for local/dev use.
 
 ## Storage
 

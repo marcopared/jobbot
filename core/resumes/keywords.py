@@ -40,11 +40,15 @@ def normalize_keyword(kw: str) -> str:
 
 
 def extract_keywords(text: str) -> set[str]:
-    """Extract known tech keywords from text, with synonym normalization."""
-    text_lower = text.lower()
+    """Extract known tech keywords from text, with synonym normalization. Uses word-boundary matching."""
+    from core.matching import keyword_in_text
+
     found: set[str] = set()
     all_keywords = set().union(*TECH_KEYWORDS.values())
     for kw in all_keywords:
-        if kw in text_lower:
+        if keyword_in_text(text, kw):
             found.add(kw)
+    for synonym, canonical in SYNONYM_MAP.items():
+        if keyword_in_text(text, synonym):
+            found.add(canonical)
     return found

@@ -4,7 +4,7 @@ Deterministic heuristics for BACKEND, PLATFORM_INFRA, HYBRID.
 Tuning knobs: keyword weights, title signals, thresholds.
 """
 
-# Title signals by persona (substring match, lowercase)
+# Title signals by persona (word-boundary match via core.matching.keyword_in_text)
 TITLE_SIGNALS = {
     "backend": [
         "backend",
@@ -31,7 +31,7 @@ TITLE_SIGNALS = {
     ],
 }
 
-# Description/tech keywords by persona (presence in combined text)
+# Description/tech keywords by persona (word-boundary match in combined text via core.matching)
 BACKEND_KEYWORDS = {
     "api": 2.0,
     "rest": 1.5,
