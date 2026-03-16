@@ -2,6 +2,7 @@
 
 Selects content from structured inventory based on job score, ATS analysis,
 and persona. No freeform LLM output; all content is from inventory.
+Uses word-boundary matching for keyword overlap to avoid false positives.
 """
 
 from core.inventory.types import (
@@ -11,16 +12,17 @@ from core.inventory.types import (
     ProjectBullet,
     Project,
 )
+from core.matching import keyword_in_text
 
 
 def _bullet_keyword_overlap(bullet: RoleBullet | ProjectBullet, keywords: set[str]) -> int:
-    """Count overlap between bullet text/tags and target keywords (normalized)."""
-    text_lower = bullet.text.lower()
+    """Count overlap between bullet text/tags and target keywords (normalized).
+    Text uses word-boundary matching; tags use exact set membership."""
     tags_lower = {t.lower() for t in (bullet.tags or [])}
     overlap = 0
     for kw in keywords:
         kw_lower = kw.lower()
-        if kw_lower in text_lower:
+        if keyword_in_text(bullet.text, kw_lower):
             overlap += 1
         elif kw_lower in tags_lower:
             overlap += 1

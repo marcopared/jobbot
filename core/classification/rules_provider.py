@@ -5,6 +5,7 @@ Fallback: HYBRID when signals are mixed.
 """
 
 from core.classification.interface import PersonaClassifier
+from core.matching import keyword_in_text, score_keywords_in_text
 from core.classification.rules import (
     BACKEND_KEYWORDS,
     CONFIDENCE_HIGH,
@@ -24,15 +25,15 @@ class RulesBasedClassifier(PersonaClassifier):
         title_lower = (inputs.normalized_title or "").lower()
         desc_lower = (inputs.description or "").lower()
 
-        # Title-based scores (strong signal)
+        # Title-based scores (strong signal) — use word-boundary matching
         backend_title_score = sum(
-            1 for s in TITLE_SIGNALS["backend"] if s in title_lower
+            1 for s in TITLE_SIGNALS["backend"] if keyword_in_text(title_lower, s)
         )
         platform_title_score = sum(
-            1 for s in TITLE_SIGNALS["platform_infra"] if s in title_lower
+            1 for s in TITLE_SIGNALS["platform_infra"] if keyword_in_text(title_lower, s)
         )
         hybrid_title_score = sum(
-            1 for s in TITLE_SIGNALS["hybrid"] if s in title_lower
+            1 for s in TITLE_SIGNALS["hybrid"] if keyword_in_text(title_lower, s)
         )
 
         # Description/keyword scores
@@ -132,11 +133,7 @@ def _combine_inputs(inputs: ClassificationInput) -> str:
 
 
 def _score_keywords(text: str, kw_weights: dict) -> float:
-    total = 0.0
-    for kw, weight in kw_weights.items():
-        if kw in text:
-            total += weight
-    return total
+    return score_keywords_in_text(text, kw_weights)
 
 
 def _score_ats_categories(

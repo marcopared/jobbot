@@ -11,6 +11,10 @@ settings = Settings()
 
 @router.websocket("/ws/logs")
 async def ws_logs(websocket: WebSocket):
+    if not settings.debug_endpoints_enabled:
+        await websocket.accept()
+        await websocket.close(code=1008, reason="Debug endpoints disabled")
+        return
     await websocket.accept()
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     pubsub = redis.pubsub()

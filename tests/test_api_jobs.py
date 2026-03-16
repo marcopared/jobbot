@@ -118,8 +118,28 @@ async def test_bulk_status_rejects_new(client):
     assert "NEW" in resp.json().get("detail", "")
 
 
-async def test_get_job_debug_returns_extra(client):
-    """GET /api/jobs/{id}?debug=true includes debug_data."""
+async def test_get_job_debug_disabled_no_internal_data(client):
+    """GET /api/jobs/{id}?debug=true omits debug_data when DEBUG_ENDPOINTS_ENABLED is False (default)."""
+    list_resp = await client.get("/api/jobs?per_page=1")
+    assert list_resp.status_code == 200
+    items = list_resp.json().get("items") or []
+    if not items:
+        pytest.skip("No jobs in DB")
+    job_id = items[0]["id"]
+    resp = await client.get(f"/api/jobs/{job_id}?debug=true")
+    assert resp.status_code == 200
+    data = resp.json()
+    # debug_data must be None/omitted when debug endpoints are disabled
+    assert data.get("debug_data") is None
+    assert "dedup_hash" not in (data.get("debug_data") or {})
+    assert "source_payload_json" not in (data.get("debug_data") or {})
+
+
+async def test_get_job_debug_enabled_returns_data(client, monkeypatch):
+    """GET /api/jobs/{id}?debug=true includes debug_data when DEBUG_ENDPOINTS_ENABLED is True."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "debug_endpoints_enabled", True)
     list_resp = await client.get("/api/jobs?per_page=1")
     assert list_resp.status_code == 200
     items = list_resp.json().get("items") or []

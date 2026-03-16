@@ -145,3 +145,38 @@ def test_labeled_examples_match(classifier):
         assert result.persona.value == ex["expected_persona"], (
             f"Example {ex['id']}: expected {ex['expected_persona']}, got {result.persona.value}"
         )
+
+
+def test_javascript_not_counted_as_java(classifier):
+    """Word-boundary: 'javascript' must not count as 'java' for backend scoring."""
+    inputs = ClassificationInput(
+        normalized_title="software engineer",
+        description="We use JavaScript and TypeScript for frontend. No Java.",
+    )
+    result = classifier.classify(inputs)
+    # Should NOT get backend credit for "java" from "javascript"
+    assert "backend_desc_score" in result.matched_signals
+    # Backend score should be low - no java, no other backend keywords
+    assert result.matched_signals["backend_desc_score"] < 2.0
+
+
+def test_going_not_counted_as_go(classifier):
+    """Word-boundary: 'going' must not count as 'go' for backend scoring."""
+    inputs = ClassificationInput(
+        normalized_title="platform engineer",
+        description="We are going to build infrastructure. Argo workflows.",
+    )
+    result = classifier.classify(inputs)
+    # Should NOT get backend credit for "go" from "going" or "argo"
+    assert result.matched_signals["backend_desc_score"] < 1.0
+
+
+def test_business_logic_multiword_phrase(classifier):
+    """Multi-word phrase 'business logic' should match as whole phrase."""
+    inputs = ClassificationInput(
+        normalized_title="backend engineer",
+        description="Implement business logic and APIs.",
+    )
+    result = classifier.classify(inputs)
+    assert result.persona == Persona.BACKEND
+    assert result.matched_signals["backend_desc_score"] >= 2.0

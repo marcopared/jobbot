@@ -198,3 +198,107 @@ def test_threshold_low_scoring_junior_intern():
     )
     total, _ = score_job(job, master_skills_path=None)
     assert total < 60
+
+
+def test_javascript_not_counted_as_java_tech_stack(tmp_path):
+    """Word-boundary: 'javascript' in JD must not match user skill 'java' for tech overlap."""
+    skills_file = tmp_path / "master_skills.json"
+    skills_file.write_text(json.dumps(["java", "spring"]))
+    job = _MockJob(
+        normalized_title="software engineer",
+        title="Software Engineer",
+        description="We use JavaScript and TypeScript for frontend development.",
+        location="remote",
+        remote_flag=True,
+    )
+    total, bd = score_job(job, master_skills_path=str(skills_file))
+    # JD has javascript/typescript only; java not in JD as whole word -> 0% tech overlap
+    assert bd["tech_stack"] == 0.0
+
+
+def test_going_not_counted_as_go_tech_stack(tmp_path):
+    """Word-boundary: 'going' in JD must not match user skill 'go' for tech overlap."""
+    skills_file = tmp_path / "master_skills.json"
+    skills_file.write_text(json.dumps(["go", "python"]))
+    job = _MockJob(
+        normalized_title="backend engineer",
+        title="Backend Engineer",
+        description="We are going to use Python for backend. Argo CD for workflows.",
+        location="remote",
+        remote_flag=True,
+    )
+    total, bd = score_job(job, master_skills_path=str(skills_file))
+    # JD has python only (go/going/argo don't match); 1/1 = 100% if python matches
+    assert bd["tech_stack"] == 100.0  # Only python in JD, user has it
+
+
+def test_go_matched_as_standalone_tech_stack(tmp_path):
+    """Word-boundary: 'go' as standalone word should match for tech overlap."""
+    skills_file = tmp_path / "master_skills.json"
+    skills_file.write_text(json.dumps(["go", "python"]))
+    job = _MockJob(
+        normalized_title="backend engineer",
+        title="Backend Engineer",
+        description="Backend in Go and Python. Microservices.",
+        location="remote",
+        remote_flag=True,
+    )
+    total, bd = score_job(job, master_skills_path=str(skills_file))
+    assert bd["tech_stack"] == 100.0  # Both go and python in JD, user has both
+
+
+def test_postgresql_not_double_counted_as_sql(tmp_path):
+    """postgresql in JD should not double-count as generic sql (sql not in TECH_KEYWORDS)."""
+    skills_file = tmp_path / "master_skills.json"
+    skills_file.write_text(json.dumps(["postgresql"]))
+    job = _MockJob(
+        normalized_title="backend engineer",
+        title="Backend Engineer",
+        description="PostgreSQL database. NoSQL optional.",
+        location="remote",
+        remote_flag=True,
+    )
+    total, bd = score_job(job, master_skills_path=str(skills_file))
+    # Only postgresql in JD; user has it -> 100%
+    assert bd["tech_stack"] == 100.0
+
+
+def test_series_a_phrase_domain_match():
+    """Multi-word 'series a' in domain must match as whole phrase (word-boundary)."""
+    job = _MockJob(
+        normalized_title="software engineer",
+        title="Software Engineer",
+        description="We are a Series A fintech startup. Payments infrastructure.",
+        location="remote",
+        remote_flag=True,
+    )
+    total, bd = score_job(job, master_skills_path=None)
+    assert bd["domain_alignment"] > 50
+
+
+def test_new_york_phrase_location_match():
+    """Multi-word 'new york' in location must match as whole phrase (word-boundary)."""
+    job = _MockJob(
+        normalized_title="backend engineer",
+        title="Backend Engineer",
+        description="Hybrid role.",
+        location="New York, NY",
+        normalized_location="new york, ny",
+        remote_flag=False,
+    )
+    total, bd = score_job(job, master_skills_path=None)
+    assert bd["location_remote"] >= 70
+
+
+def test_architecture_not_penalized_as_architect():
+    """'architecture' in description must not match 'architect' (over-senior signal)."""
+    job = _MockJob(
+        normalized_title="senior software engineer",
+        title="Senior Software Engineer",
+        description="Design system architecture. Microservices.",
+        location="remote",
+        remote_flag=True,
+    )
+    total, bd = score_job(job, master_skills_path=None)
+    # Should NOT get over-senior penalty from "architecture" containing "architect"
+    assert bd["seniority_fit"] == 100.0

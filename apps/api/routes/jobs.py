@@ -320,9 +320,10 @@ async def get_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
     include_rejected: bool = Query(False, description="Allow viewing REJECTED jobs (debug)"),
-    debug: bool = Query(False, description="Include internal debug data (source_payload_json, dedup_hash)"),
+    debug: bool = Query(False, description="Include internal debug data (source_payload_json, dedup_hash); requires DEBUG_ENDPOINTS_ENABLED=true"),
 ):
-    """Retrieve full job details, analysis, scores, and artifact metadata."""
+    """Retrieve full job details, analysis, scores, and artifact metadata.
+    When debug=true, internal debug_data is included only if DEBUG_ENDPOINTS_ENABLED is set."""
     result = await db.execute(
         select(Job)
         .where(Job.id == job_id)
@@ -338,7 +339,9 @@ async def get_job(
         key=lambda a: a.created_at.timestamp() if a.created_at else 0.0,
         reverse=True,
     )
-    return _job_to_detail_response(job, artifacts, debug=debug)
+    # Gate debug_data behind debug_endpoints_enabled (same as /api/debug/*)
+    effective_debug = debug and settings.debug_endpoints_enabled
+    return _job_to_detail_response(job, artifacts, debug=effective_debug)
 
 
 @router.put("/{job_id}/status", response_model=UpdateStatusResponse)

@@ -1,6 +1,7 @@
 """Structured log context: run_id, job_id, source_name, artifact_id (EPIC 10)."""
 
 import logging
+from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
 
@@ -43,6 +44,36 @@ def with_log_context(
         ctx["task_name"] = task_name
     _log_context.set(ctx)
     return ctx
+
+
+@contextmanager
+def log_context(
+    *,
+    run_id: str | None = None,
+    job_id: str | None = None,
+    source_name: str | None = None,
+    artifact_id: str | None = None,
+    task_name: str | None = None,
+):
+    """
+    Context manager for scoped log context. Restores previous context on exit.
+
+    Usage:
+        with log_context(task_name="score_jobs"):
+            ...
+    """
+    prev = dict(_log_context.get())
+    with_log_context(
+        run_id=run_id,
+        job_id=job_id,
+        source_name=source_name,
+        artifact_id=artifact_id,
+        task_name=task_name,
+    )
+    try:
+        yield
+    finally:
+        _log_context.set(prev)
 
 
 def _build_extra(extra: dict | None) -> dict:

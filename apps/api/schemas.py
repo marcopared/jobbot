@@ -107,7 +107,7 @@ class JobDetailResponse(BaseModel):
     posted_at: str | None = None
     remote_flag: bool = False
 
-    # Present only when debug=true on GET /api/jobs/{id}
+    # Present only when debug=true AND DEBUG_ENDPOINTS_ENABLED=true on GET /api/jobs/{id}
     debug_data: dict | None = None
 
 
