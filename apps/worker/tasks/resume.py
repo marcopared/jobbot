@@ -1,3 +1,5 @@
+"""Resume generation tasks. v1 uses only the grounded inventory-driven PDF path."""
+
 import logging
 from uuid import UUID
 
@@ -5,20 +7,8 @@ from apps.worker.celery_app import celery_app
 from core.db.session import get_sync_session
 from core.observability import with_log_context, get_metrics
 from core.resumes.grounded_generator import generate_grounded_resume
-from core.resumes.manager import prepare_resume
 
 logger = logging.getLogger(__name__)
-
-
-@celery_app.task
-def prepare_resume_task(job_id: str):
-    """Prepare resume artifact for a job (legacy path). Return artifact ID or None."""
-    with get_sync_session() as session:
-        artifact = prepare_resume(session=session, job_id=UUID(job_id))
-        if artifact is None:
-            return {"artifact_id": None}
-        session.commit()
-        return {"artifact_id": str(artifact.id)}
 
 
 @celery_app.task(

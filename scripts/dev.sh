@@ -8,11 +8,27 @@ export LOG_LEVEL=DEBUG
 
 echo "Starting Docker services..."
 docker compose up -d
+
+echo "Waiting for Postgres..."
+for i in $(seq 1 30); do
+  if docker compose exec -T postgres pg_isready -U postgres -d jobbot >/dev/null 2>&1; then
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "Postgres did not become ready in time."
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "Running migrations..."
+alembic upgrade head
+
 echo "Starting API, worker, and UI dev server..."
 PYTHONPATH=. uvicorn apps.api.main:app --reload --log-level debug --port 8000 > /tmp/jobbot-api.log 2>&1 &
 API_PID=$!
 
-PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l debug -Q default,scrape > /tmp/jobbot-worker.log 2>&1 &
+PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l debug -Q default,scrape,ingestion > /tmp/jobbot-worker.log 2>&1 &
 WORKER_PID=$!
 
 (

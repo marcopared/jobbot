@@ -81,6 +81,8 @@ export default function JobDetailPage() {
   const canSave = job.user_status === "NEW" || job.user_status === "ARCHIVED";
   const canArchive = job.user_status === "NEW" || job.user_status === "SAVED";
   const canApply = job.user_status === "NEW" || job.user_status === "SAVED";
+  const canGenerateResume =
+    job.pipeline_status === "ATS_ANALYZED" || job.pipeline_status === "RESUME_READY";
 
   return (
     <div className="space-y-4">
@@ -228,6 +230,7 @@ export default function JobDetailPage() {
         artifacts={job.artifacts ?? []}
         onGenerateResume={handleGenerateResume}
         generating={generating}
+        canGenerateResume={canGenerateResume}
       />
     </div>
   );

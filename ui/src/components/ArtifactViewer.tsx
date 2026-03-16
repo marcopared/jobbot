@@ -13,6 +13,7 @@ type Props = {
   artifacts: ArtifactItem[];
   onGenerateResume?: () => void;
   generating?: boolean;
+  canGenerateResume?: boolean;
 };
 
 function formatDate(value?: string | null): string {
@@ -40,11 +41,14 @@ export default function ArtifactViewer({
   artifacts,
   onGenerateResume,
   generating = false,
+  canGenerateResume = false,
 }: Props) {
   const hasPending = artifacts.some((a) => {
     const s = (a.generation_status || "").toLowerCase();
     return s === "queued" || s === "running" || s === "pending";
   });
+
+  const buttonEnabled = canGenerateResume && !generating && !hasPending;
 
   return (
     <section className="rounded-lg border border-gray-200 bg-white p-4">
@@ -53,13 +57,20 @@ export default function ArtifactViewer({
         <div className="space-y-3">
           <p className="text-sm text-gray-500">No resume generated yet.</p>
           {onGenerateResume && (
-            <button
-              onClick={onGenerateResume}
-              disabled={generating}
-              className="rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {generating ? "Generating…" : "Generate Resume"}
-            </button>
+            <>
+              <button
+                onClick={onGenerateResume}
+                disabled={!buttonEnabled}
+                className="rounded bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generating ? "Generating…" : "Generate Resume"}
+              </button>
+              {!buttonEnabled && !generating && !hasPending && (
+                <p className="text-xs text-gray-500">
+                  Resume generation becomes available after ATS analysis completes.
+                </p>
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -123,14 +134,19 @@ export default function ArtifactViewer({
         </ul>
       )}
       {onGenerateResume && artifacts.length > 0 && !hasPending && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
           <button
             onClick={onGenerateResume}
-            disabled={generating}
-            className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            disabled={!buttonEnabled}
+            className="rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {generating ? "Generating…" : "Regenerate Resume"}
           </button>
+          {!buttonEnabled && !generating && (
+            <p className="text-xs text-gray-500">
+              Resume generation becomes available after ATS analysis completes.
+            </p>
+          )}
         </div>
       )}
     </section>

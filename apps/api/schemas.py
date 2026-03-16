@@ -107,6 +107,9 @@ class JobDetailResponse(BaseModel):
     posted_at: str | None = None
     remote_flag: bool = False
 
+    # Present only when debug=true on GET /api/jobs/{id}
+    debug_data: dict | None = None
+
 
 # --- Status update ---
 
@@ -114,7 +117,7 @@ class JobDetailResponse(BaseModel):
 class UpdateStatusRequest(BaseModel):
     """Request body for PUT /api/jobs/{id}/status."""
 
-    user_status: str = Field(..., description="One of: NEW, SAVED, APPLIED, ARCHIVED")
+    user_status: str = Field(..., description="One of: SAVED, APPLIED, ARCHIVED (NEW is not client-settable)")
 
 
 class UpdateStatusResponse(BaseModel):

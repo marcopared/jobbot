@@ -1,6 +1,6 @@
 # JobBot System Specification
 
-> **Note:** The system specification and architecture documentation have been consolidated into a single authoritative source of truth. 
+> **Note:** The system specification and architecture documentation have been consolidated into a single authoritative source of truth. The docs describe the **v1 implementation** (rules-based classification, grounded selection, Playwright PDF rendering, Redis + Celery, React + Vite).
 > 
 > Please refer to [docs/ARCHITECTURE.md](./ARCHITECTURE.md) for the complete engineering design document, which covers:
 > - End-to-End System Flow

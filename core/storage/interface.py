@@ -1,6 +1,6 @@
 """Storage abstraction for resume artifacts (EPIC 7).
 
-S3 in production, local filesystem fallback in development.
+GCS in production, local filesystem fallback in development.
 """
 
 import logging
@@ -37,5 +37,15 @@ class ArtifactStorage(Protocol):
         ...
 
     def get_local_path(self, key: str) -> Path | None:
-        """Return local filesystem path if using local storage; None for S3."""
+        """Return local filesystem path if using local storage; None for cloud backends."""
+        ...
+
+    def get_signed_url(
+        self,
+        key: str,
+        disposition: str = "attachment",
+        ttl_seconds: int | None = None,
+        filename: str | None = None,
+    ) -> str | None:
+        """Return a signed URL for download/preview. Local storage returns None (serve from disk)."""
         ...

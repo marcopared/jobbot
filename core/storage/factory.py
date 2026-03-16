@@ -1,35 +1,36 @@
 """Factory for artifact storage backend (EPIC 7)."""
 
-import os
+from apps.api.settings import Settings
 
+from core.storage.gcs_store import GCSArtifactStorage
 from core.storage.interface import ArtifactStorage
 from core.storage.local_store import LocalArtifactStorage
-from core.storage.s3_store import S3ArtifactStorage
 
 
 def get_artifact_storage(
-    artifact_dir: str,
-    s3_bucket: str | None = None,
-    s3_prefix: str = "resumes",
-    s3_region: str | None = None,
+    artifact_dir: str | None = None,
+    artifact_storage_provider: str | None = None,
+    gcs_artifact_bucket: str | None = None,
+    gcs_project_id: str | None = None,
+    gcs_prefix: str | None = None,
+    gcs_signed_url_ttl_seconds: int | None = None,
 ) -> ArtifactStorage:
     """
-    Return S3 storage when bucket configured and credentials present;
+    Return GCS storage when provider is 'gcs' and bucket is configured;
     otherwise local filesystem fallback.
     """
-    bucket = s3_bucket or os.environ.get("AWS_S3_ARTIFACT_BUCKET")
-    if bucket and _has_aws_credentials():
-        return S3ArtifactStorage(
+    settings = Settings()
+    provider = artifact_storage_provider or settings.artifact_storage_provider
+    bucket = gcs_artifact_bucket or settings.gcs_artifact_bucket
+    prefix = gcs_prefix if gcs_prefix is not None else settings.gcs_prefix
+    root_dir = artifact_dir or settings.artifact_dir
+
+    if provider == "gcs" and bucket:
+        return GCSArtifactStorage(
             bucket=bucket,
-            prefix=s3_prefix,
-            region=s3_region or os.environ.get("AWS_REGION"),
+            prefix=prefix,
+            project_id=gcs_project_id or settings.gcs_project_id,
+            signed_url_ttl_seconds=gcs_signed_url_ttl_seconds
+            or settings.gcs_signed_url_ttl_seconds,
         )
-    return LocalArtifactStorage(root_dir=artifact_dir)
-
-
-def _has_aws_credentials() -> bool:
-    return bool(
-        os.environ.get("AWS_ACCESS_KEY_ID")
-        or os.environ.get("AWS_PROFILE")
-        or os.environ.get("AWS_ROLE_ARN")
-    )
+    return LocalArtifactStorage(root_dir=root_dir, prefix=prefix)

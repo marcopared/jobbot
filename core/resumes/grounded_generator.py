@@ -83,9 +83,36 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
     if not job:
         return GenerationResult(artifact=None, status="failed", error="Job not found")
 
-    # Require ATS-analyzed job with persona
+    # Strict readiness check: fail closed unless job is analysis-ready (defense-in-depth).
+    # Must match API gate: pipeline_status and analysis/persona required.
+    RESUME_READY_STATUSES = frozenset(
+        {PipelineStatus.ATS_ANALYZED.value, PipelineStatus.RESUME_READY.value}
+    )
+    if job.pipeline_status not in RESUME_READY_STATUSES:
+        return GenerationResult(
+            artifact=None,
+            status="failed",
+            error=f"Resume generation requires pipeline_status ATS_ANALYZED or RESUME_READY. "
+            f"Current: {job.pipeline_status}.",
+        )
+
     analysis = _get_job_analysis(session, job_id)
-    persona = (analysis and analysis.matched_persona) or "HYBRID"
+    if not analysis:
+        return GenerationResult(
+            artifact=None,
+            status="failed",
+            error="Resume generation requires a JobAnalysis row. None found.",
+        )
+
+    persona = analysis.matched_persona
+    if not persona or not str(persona).strip():
+        return GenerationResult(
+            artifact=None,
+            status="failed",
+            error="Resume generation requires matched_persona in JobAnalysis. "
+            "Cannot fall back to HYBRID when analysis is incomplete.",
+        )
+
     target_keywords = _build_target_keywords(job, analysis)
 
     # Load inventory
@@ -158,7 +185,7 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
     html = render_html(resume_data)
 
     try:
-        pdf_bytes = render_html_to_pdf_bytes(html)
+        pdf_bytes = render_html_to_pdf_bytes(html, timeout_ms=settings.playwright_timeout_ms)
     except Exception as e:
         logger.exception("PDF render failed for job %s", job_id)
         return GenerationResult(
@@ -167,17 +194,15 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
             error=f"PDF render failed: {e}",
         )
 
-    # Store
-    storage = get_artifact_storage(
-        artifact_dir=settings.artifact_dir,
-        s3_bucket=getattr(settings, "s3_artifact_bucket", None),
-    )
+    # Store (storage backend: local or GCS)
+    storage = get_artifact_storage()
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    storage_key = f"resumes/{job_id}/{timestamp}_resume.pdf"
+    # Relative key: backends apply the resumes/ prefix exactly once
+    relative_key = f"{job_id}/{timestamp}_resume.pdf"
 
     try:
         store_result = storage.store(
-            key=storage_key,
+            key=relative_key,
             data=pdf_bytes,
             content_type="application/pdf",
         )

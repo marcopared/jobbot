@@ -26,14 +26,16 @@ class Settings(BaseSettings):
     pushover_token: str = ""
     pushover_user: str = ""
     ntfy_topic_url: str = ""
-    base_resume_path: str = "./storage/base_resume.pdf"
     master_skills_path: str = "./storage/master_skills.json"
     experience_inventory_path: str = "./data/experience_inventory.yaml"
-    s3_artifact_bucket: str | None = None
-    resume_tailor_enabled: bool = True
-    playwright_headful: bool = True
-    playwright_slow_mo_ms: int = 0
-    playwright_profile_name: str = "default"
+
+    # Artifact storage: local | gcs
+    artifact_storage_provider: str = "local"
+    gcs_artifact_bucket: str | None = None
+    gcs_project_id: str | None = None
+    gcs_prefix: str = "resumes"
+    gcs_signed_url_ttl_seconds: int = 900
+    # PDF rendering: Playwright timeout for HTML→PDF (ms). v1 always headless.
     playwright_timeout_ms: int = 30000
     log_level: str = "DEBUG"
     scoring_threshold: float = 60.0

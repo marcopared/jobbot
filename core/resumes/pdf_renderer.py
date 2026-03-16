@@ -1,7 +1,6 @@
-"""PDF rendering via Playwright (EPIC 7)."""
+"""PDF rendering via Playwright (EPIC 7). v1 always headless."""
 
 import logging
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -12,11 +11,12 @@ _PDF_OPTS = {
 }
 
 
-def render_html_to_pdf_bytes(html_content: str) -> bytes:
+def render_html_to_pdf_bytes(html_content: str, *, timeout_ms: int = 30000) -> bytes:
     """
     Render HTML to PDF using Playwright. Returns PDF bytes.
 
     Invoked from Python. Requires: pip install playwright && playwright install chromium
+    v1 always runs headless. timeout_ms applies to content loading (set_content).
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -29,7 +29,7 @@ def render_html_to_pdf_bytes(html_content: str) -> bytes:
         browser = p.chromium.launch(headless=True)
         try:
             page = browser.new_page()
-            page.set_content(html_content, wait_until="networkidle")
+            page.set_content(html_content, wait_until="networkidle", timeout=timeout_ms)
             # Omit path to get bytes instead of writing to file
             pdf_bytes = page.pdf(**_PDF_OPTS)
         finally:
@@ -39,12 +39,3 @@ def render_html_to_pdf_bytes(html_content: str) -> bytes:
         raise RuntimeError("Playwright page.pdf() returned None")
     logger.debug("Rendered PDF: %d bytes", len(pdf_bytes))
     return pdf_bytes
-
-
-def render_html_to_pdf(html_content: str, output_path: str | Path) -> None:
-    """Render HTML to PDF and write to file. For legacy/copy use."""
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    pdf_bytes = render_html_to_pdf_bytes(html_content)
-    output_path.write_bytes(pdf_bytes)
-    logger.info("Rendered PDF to %s", output_path)

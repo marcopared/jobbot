@@ -22,6 +22,7 @@ from core.scraping.base import ScrapeParams
 
 from apps.worker.celery_app import celery_app
 from apps.worker.tasks.score import score_jobs
+from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
 
 settings = Settings()
@@ -288,8 +289,11 @@ def scrape_jobspy(
         f"Scrape finished fetched={result.stats.get('fetched', 0)} inserted={inserted} duplicates={duplicates}",
         run_id=run_id,
     )
-    (score_jobs.s() | ats_match_resume.si()).delay()
-    logger.debug("Queued post-scrape chain score_jobs -> ats_match_resume for run_id=%s", run_id)
+    (score_jobs.s() | classify_jobs.s() | ats_match_resume.si()).delay()
+    logger.debug(
+        "Queued post-scrape chain score_jobs -> classify_jobs -> ats_match_resume for run_id=%s",
+        run_id,
+    )
     return {
         "run_id": str(run_id),
         "status": "SUCCESS",

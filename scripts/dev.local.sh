@@ -44,19 +44,22 @@ UI_LOG="$LOG_DIR/jobbot-ui.log"
 echo "Starting Docker services..."
 docker compose up -d
 
-if [ "$RESET_DATA" = true ]; then
-  echo "Reset flag enabled. Waiting for Postgres..."
-  for i in {1..30}; do
-    if docker compose exec -T postgres pg_isready -U postgres -d jobbot >/dev/null 2>&1; then
-      break
-    fi
-    if [ "$i" -eq 30 ]; then
-      echo "Postgres did not become ready in time."
-      exit 1
-    fi
-    sleep 1
-  done
+echo "Waiting for Postgres..."
+for i in $(seq 1 30); do
+  if docker compose exec -T postgres pg_isready -U postgres -d jobbot >/dev/null 2>&1; then
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    echo "Postgres did not become ready in time."
+    exit 1
+  fi
+  sleep 1
+done
 
+echo "Running migrations..."
+alembic upgrade head
+
+if [ "$RESET_DATA" = true ]; then
   echo "Clearing runtime database records..."
   docker compose exec -T postgres psql -U postgres -d jobbot -v ON_ERROR_STOP=1 -c \
     "TRUNCATE TABLE interventions, artifacts, applications, jobs, companies, scrape_runs RESTART IDENTITY CASCADE;"
@@ -72,7 +75,7 @@ echo "Starting API, worker, and UI dev server..."
 PYTHONPATH=. uvicorn apps.api.main:app --reload --log-level debug --port 8000 > "$API_LOG" 2>&1 &
 API_PID=$!
 
-PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l debug -Q default,scrape > "$WORKER_LOG" 2>&1 &
+PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l debug -Q default,scrape,ingestion > "$WORKER_LOG" 2>&1 &
 WORKER_PID=$!
 
 (

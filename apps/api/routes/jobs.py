@@ -30,6 +30,9 @@ from core.job_status import legacy_status_from_canonical
 
 settings = Settings()
 
+# User workflow: NEW is the initial state; clients may only set SAVED, APPLIED, ARCHIVED.
+WRITABLE_USER_STATUSES = frozenset({UserStatus.SAVED.value, UserStatus.APPLIED.value, UserStatus.ARCHIVED.value})
+
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
@@ -90,7 +93,9 @@ def _build_ats_gaps(j: Job, analysis: JobAnalysis | None) -> ATSGaps | None:
     )
 
 
-def _job_to_detail_response(j: Job, artifacts: list[Artifact]) -> JobDetailResponse:
+def _job_to_detail_response(
+    j: Job, artifacts: list[Artifact], debug: bool = False
+) -> JobDetailResponse:
     """Build detail response from Job (expects analyses loaded)."""
     analysis = j.analyses[0] if j.analyses else None
     persona = None
@@ -113,6 +118,12 @@ def _job_to_detail_response(j: Job, artifacts: list[Artifact]) -> JobDetailRespo
         )
         for a in artifacts
     ]
+    debug_data = None
+    if debug:
+        debug_data = {
+            "source_payload_json": j.source_payload_json,
+            "dedup_hash": j.dedup_hash,
+        }
     return JobDetailResponse(
         id=str(j.id),
         title=j.normalized_title or j.title or "",
@@ -135,6 +146,7 @@ def _job_to_detail_response(j: Job, artifacts: list[Artifact]) -> JobDetailRespo
         salary_max=j.salary_max,
         posted_at=j.posted_at.isoformat() if j.posted_at else None,
         remote_flag=j.remote_flag or False,
+        debug_data=debug_data,
     )
 
 
@@ -218,9 +230,11 @@ async def run_scrape(
 
 @router.post("/bulk-status")
 async def bulk_status(body: BulkJobIds, status: str = Query(...), db: AsyncSession = Depends(get_db)):
-    valid_statuses = {s.value for s in UserStatus}
-    if status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid user_status: {status}")
+    if status not in WRITABLE_USER_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"user_status must be one of {sorted(WRITABLE_USER_STATUSES)}; NEW is not client-settable",
+        )
         
     updated = 0
     for jid in body.job_ids:
@@ -305,7 +319,8 @@ async def list_jobs(
 async def get_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    debug: bool = Query(False, description="Include internal debug data (e.g. source_payload_json)"),
+    include_rejected: bool = Query(False, description="Allow viewing REJECTED jobs (debug)"),
+    debug: bool = Query(False, description="Include internal debug data (source_payload_json, dedup_hash)"),
 ):
     """Retrieve full job details, analysis, scores, and artifact metadata."""
     result = await db.execute(
@@ -316,12 +331,14 @@ async def get_job(
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if not include_rejected and job.pipeline_status == PipelineStatus.REJECTED.value:
+        raise HTTPException(status_code=404, detail="Job not found")
     artifacts = sorted(
         job.artifacts or [],
         key=lambda a: a.created_at.timestamp() if a.created_at else 0.0,
         reverse=True,
     )
-    return _job_to_detail_response(job, artifacts)
+    return _job_to_detail_response(job, artifacts, debug=debug)
 
 
 @router.put("/{job_id}/status", response_model=UpdateStatusResponse)
@@ -333,9 +350,11 @@ async def update_job_status(
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    valid_statuses = {s.value for s in UserStatus}
-    if body.user_status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid user_status: {body.user_status}")
+    if body.user_status not in WRITABLE_USER_STATUSES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"user_status must be one of {sorted(WRITABLE_USER_STATUSES)}; NEW is not client-settable",
+        )
     job.user_status = body.user_status
     job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
     await db.commit()
@@ -343,15 +362,27 @@ async def update_job_status(
     return UpdateStatusResponse(id=str(job.id), user_status=job.user_status)
 
 
+# Resume generation requires the full pipeline: score → classify → ats_match.
+# Only ATS_ANALYZED and RESUME_READY have complete persona + ATS keyword data.
+RESUME_READY_PIPELINE_STATUSES = frozenset(
+    {PipelineStatus.ATS_ANALYZED.value, PipelineStatus.RESUME_READY.value}
+)
+
+
 @router.post("/{job_id}/generate-resume", response_model=GenerateResumeResponse)
 async def trigger_generate_resume(job_id: UUID, db: AsyncSession = Depends(get_db)):
     """Trigger or regenerate tailored resume for a job. Enqueues Celery task."""
-    result = await db.execute(
-        select(Job).where(Job.id == job_id).options(selectinload(Job.analyses))
-    )
+    result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    if job.pipeline_status not in RESUME_READY_PIPELINE_STATUSES:
+        raise HTTPException(
+            status_code=409,
+            detail="Resume generation requires score → classify → ATS analysis. "
+            "Job pipeline_status must be ATS_ANALYZED or RESUME_READY. "
+            f"Current: {job.pipeline_status}.",
+        )
     task = generate_grounded_resume_task.delay(str(job_id))
     return GenerateResumeResponse(job_id=str(job_id), status="queued", task_id=str(task.id))
 

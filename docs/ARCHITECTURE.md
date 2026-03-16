@@ -79,78 +79,81 @@ Deduplication occurs immediately after normalization. The `dedup_hash` serves as
 2. **Deterministic Hashing (Canonical):** A composite hash of `lowercase(normalized_company) + lowercase(normalized_title) + normalized_location` (stored in the `dedup_hash` column with a unique constraint). This is the primary mechanism preventing duplicate inserts.
 3. **Fuzzy Matching (Secondary Assist):** For edge cases, a similarity score using PostgreSQL `pg_trgm` trigram similarity on the company and title is computed. This is not a hard constraint, but a secondary assist used for pre-insert conflict detection or to flag potential duplicates for manual operator review.
 
-## 10. Scoring System Design
-The scoring system uses a weighted heuristic model implemented in Python:
-- **Title Relevance (30%):** Matches against target titles (e.g., "Senior Software Engineer").
+## 10. Scoring System Design (v1)
+The scoring system uses a weighted heuristic model (five factors, 0–100 each) implemented in Python:
+- **Title Relevance (25%):** Matches against target titles (e.g., "Senior Software Engineer").
 - **Seniority Match (20%):** Penalizes roles that are too junior or excessively senior.
-- **Tech Stack Relevance (30%):** Keyword matching between the job description and the user's core competencies (e.g., Python, Go, Kubernetes).
+- **Domain Alignment (20%):** Keyword matching for industry/vertical (fintech, startup, etc.).
 - **Location/Remote (20%):** High score for "Remote", lower for incompatible geographic locations.
+- **Tech Stack (15%):** Overlap between job description tech keywords and user's `master_skills`.
 Jobs scoring below a defined threshold (e.g., 60/100) are marked as `REJECTED` in the pipeline and skip downstream processing.
 
-## 11. Persona Classification System
-An LLM-based classifier evaluates the job description.
-- **Backend Engineer:** Triggered by heavy emphasis on API design, databases, business logic, and backend languages (Go, Python, Java).
-- **Platform / Infrastructure Engineer:** Triggered by infrastructure-as-code, Kubernetes, CI/CD, AWS/GCP, and observability tools.
-- **Hybrid:** Fallback for roles demanding a mix of both.
+## 11. Persona Classification System (v1)
+The v1 classifier is **rules-based and deterministic** (no LLM). It implements a `PersonaClassifier` interface; an optional LLM provider may be added in the future.
+- **Backend Engineer:** Triggered by title signals and keyword matches (API, databases, business logic, backend languages).
+- **Platform / Infrastructure Engineer:** Triggered by infra keywords (Kubernetes, CI/CD, AWS/GCP, observability).
+- **Hybrid:** Fallback when signals are mixed or ambiguous.
 The selected persona dictates which subset of the `Experience Inventory` is prioritized during resume generation.
 
-## 12. Resume Generation Architecture
-1. **Data Assembly:** The system gathers the `JobAnalysis`, the selected `Persona`, and the `Experience Inventory`.
-2. **Content Tailoring:** An LLM prompt is constructed to *both select and rewrite* the most relevant bullet points from the structured experience inventory. The LLM ensures ATS keywords are naturally integrated while maintaining factual accuracy.
-3. **Formatting:** The tailored content is injected into a deterministic HTML template.
-4. **Compilation:** A rendering engine (Playwright invoked via Python) converts the HTML template into a PDF. *(Note: v1 renders PDF only; DOCX generation is deferred to a future iteration to constrain initial scope).*
+## 12. Resume Generation Architecture (v1)
+v1 has exactly one resume-generation path: experience inventory → grounded selection → deterministic HTML → Playwright PDF → artifact storage. No other path (e.g., base-resume parsing or LLM rewriting) is supported.
 
-## 13. Artifact Storage Strategy
-Generated resumes are stored in AWS S3.
-- Artifacts are keyed by `job_id` and `timestamp` (e.g., `resumes/{job_id}/{timestamp}_resume.pdf`).
-- The database `artifacts` table stores the pre-signed URL or CDN link for fast retrieval by the UI.
-- A lifecycle policy automatically deletes artifacts for jobs older than 90 days to minimize storage costs.
+1. **Data Assembly:** The system gathers the `JobAnalysis`, the selected `Persona`, and the structured `Experience Inventory` (YAML).
+2. **Content Selection:** Grounded selection chooses roles, projects, and bullets from the inventory by keyword overlap and persona-tag matching. No freeform LLM output; all content is from the inventory. v1 uses a conservative/no-op rewrite—bullets are used as-is; no invented experience.
+3. **Formatting:** Selected content is injected into a deterministic HTML template.
+4. **Rendering:** Playwright (invoked from Python via `playwright.sync_api`) renders the HTML to PDF. v1 outputs PDF only; DOCX is deferred to a future iteration.
+
+## 13. Artifact Storage Strategy (v1)
+Generated resumes are stored on the local filesystem by default (`storage/artifacts/` or `ARTIFACT_DIR`).
+- Artifacts are keyed by `job_id` and timestamp.
+- The database `artifacts` table stores metadata and `path` (storage key). `file_url` is nullable and optional; GCS-backed artifacts do not persist URLs.
+- **Local:** Files served directly via `FileResponse`.
+- **GCS:** Objects remain private. Preview/download routes generate signed URLs on demand using Application Default Credentials (ADC). Local dev: `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`; deployed: attached service account.
+- No duplicate prefixing: producers pass relative keys; backends apply the configured prefix exactly once.
+
+*Future: CDN links, lifecycle policies for automated cleanup.*
 
 ## 14. API Design
 The backend exposes a RESTful API built with **FastAPI (Python)** for the frontend:
-- `GET /api/jobs`: List jobs with filtering (user_status, score, persona).
-- `GET /api/jobs/{id}`: Retrieve full job details, analysis, and scores.
-- `POST /api/jobs/{id}/generate-resume`: Manually trigger or regenerate a resume.
+- `GET /api/jobs`: List jobs with filtering (user_status, score, persona). Excludes REJECTED by default; use `include_rejected=true` for debugging.
+- `GET /api/jobs/{id}`: Retrieve full job details, analysis, and scores. Returns 404 for REJECTED jobs unless `include_rejected=true`. Use `debug=true` to include `debug_data` (source_payload_json, dedup_hash).
+- `POST /api/jobs/{id}/generate-resume`: Manually trigger or regenerate a resume. Requires `pipeline_status` ATS_ANALYZED or RESUME_READY; returns 409 if not ready.
 - `GET /api/jobs/{id}/artifacts`: List available download links for a job.
-- `PUT /api/jobs/{id}/status`: (Planned) Update user workflow status (e.g., `APPLIED`, `ARCHIVED`).
+- `PUT /api/jobs/{id}/status`: Update user workflow status. Only SAVED, APPLIED, ARCHIVED are writable; NEW is the initial state, not client-settable.
 
-## 15. Worker / Pipeline Architecture
-The system relies heavily on asynchronous processing using a message broker (**Redis + Celery**). The core scoring, ATS, and resume logic are entirely Python-owned.
-- **Queues:**
-  - `ingestion_queue`: High throughput, fetches data.
-  - `scoring_queue`: CPU bound, runs heuristics.
-  - `llm_queue`: Rate-limited, handles persona classification and content tailoring.
-  - `render_queue`: IO/CPU bound, generates PDFs.
-This decoupling ensures that rate limits from LLM providers or ATS APIs do not block the entire pipeline.
+## 15. Worker / Pipeline Architecture (v1)
+The system uses **Redis + Celery** for asynchronous processing. All scoring, classification, ATS, and resume logic are Python-owned.
+- **Queues:** Celery routes tasks to `default`, `scrape`, and `ingestion` queues. Classification and resume tasks run on the default queue (no separate LLM or render queues in v1).
+- **Task flow:** Scrape/ingest → score → classify → ats_match → (manual) generate-resume.
 
-## 16. UI Architecture
-The Review Interface is a Single Page Application (SPA) built with **React and Vite**.
+## 16. UI Architecture (v1)
+The Review Interface is a Single Page Application (SPA) built with **React** and **Vite**.
 - **Dashboard:** A list view of jobs categorized by user status (`New`, `Saved`, `Applied`, `Archived`).
 - **Job Detail View:** Displays the original description alongside the JobBot insights (Score breakdown, Persona, Missing ATS Keywords).
 - **Action Panel:** Contains the "Download Resume" buttons and a primary "Open Application" button that opens the external ATS link in a new tab, reinforcing that the system does not apply on the user's behalf.
 
-## 17. Observability and Logging
-- **Structured Logging:** All services output JSON logs including `trace_id` and `job_id` to track a job's journey through the pipeline.
-- **Metrics:** Datadog tracks:
-  - Ingestion volume per source.
-  - Pipeline processing time.
-  - LLM API latency and error rates.
-  - Resume generation success rates.
-- **Alerting:** Alerts trigger on elevated error rates in the `llm_queue` or if ingestion connectors fail consecutively.
+## 17. Observability and Logging (v1)
+- **Structured Logging:** Services output structured logs with context (`trace_id`, `job_id`) to track a job's journey through the pipeline.
+- **Metrics:** Task-level metrics (histograms, counters) are instrumented for scoring, classification, ATS, and resume generation. Datadog or similar can consume them when configured.
 
-## 18. Failure Handling
-- **Retries:** Transient errors (network timeouts, rate limits) in worker queues use exponential backoff.
-- **Dead Letter Queue (DLQ):** Jobs that fail processing after maximum retries are moved to a DLQ for manual inspection.
-- **Graceful Degradation:** If the LLM service is down, jobs are still ingested and scored, but classification and resume generation are paused and queued for later.
+*Future: Alerting on elevated error rates, DLQ dashboards.*
 
-## 19. Testing Strategy
-- **Unit Tests:** Validate deduplication logic, scoring heuristics, and connector normalization.
+## 18. Failure Handling (v1)
+- **Retries:** Transient errors in worker tasks use exponential backoff (Celery retry).
+- **Failure Recording:** Task failures are recorded (e.g., to Redis) for visibility; no formal DLQ in v1.
+- **v1 has no LLM dependency:** Classification and resume content are deterministic; pipeline does not depend on external LLM availability.
+
+## 19. Testing Strategy (v1)
+- **Unit Tests:** Validate deduplication logic, scoring heuristics, connector normalization, rules-based classification, and ATS extraction.
 - **Integration Tests:** Ensure worker tasks correctly transition job states in the database.
-- **E2E Tests:** Simulate the API flow from ingestion webhook to artifact retrieval.
-- **Prompt Evaluations:** Automated tests for LLM prompts to ensure persona classification accuracy and formatting stability against a golden dataset of job descriptions.
+- **E2E/API Tests:** Simulate the API flow from ingestion/scrape to artifact retrieval.
+- **Golden Tests:** Labeled examples validate persona classification accuracy and ATS extraction against fixtures.
 
-## 20. Future Extensions
-While out of scope for the initial rewrite, the architecture supports:
+## 20. Future Extensions (not v1)
+The following are out of scope for v1 but the architecture supports:
+- **LLM Persona Classifier:** Optional provider behind the `PersonaClassifier` interface; v1 uses rules-based only.
+- **LLM Content Tailoring:** Light rephrasing to front-load ATS keywords while keeping facts intact; v1 uses selection only, no rewrite.
+- **DOCX Resume Output:** v1 produces PDF only.
 - **Editable Resumes:** Allowing users to tweak the generated markdown/HTML in the UI before final PDF compilation.
 - **Multi-User Support:** Isolating `Experience Inventories` and `Personas` by `user_id` for a SaaS offering.
 - **Additional ATS Connectors:** Pluggable architecture makes it trivial to add Workday, SmartRecruiters, or custom scrapers.
