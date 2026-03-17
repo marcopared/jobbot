@@ -1,57 +1,92 @@
 # TODO
 
-Active backlog for JobBot v1. Product scope: manual job discovery, scoring, ATS analysis, tailored resume generation. **Auto-apply and Simplify-first workflows are not in scope.**
+Active backlog for the next JobBot implementation wave.
 
----
+**Implementation order:** Stabilization first. No new product scope in docs-only PRs. See `IMPLEMENTATION_PLAN.md` for PR boundaries and merge rules.
+
+**Product scope** (unchanged):
+- automated job discovery through artifact-ready
+- manual application remains the final human step
+- no browser automation
+- no automated application submission
 
 ## Now
 
-1. **Scoring quality**
-   - Add stronger weighting controls for title, seniority, and domain fit.
-   - Validate scoring output against a curated operator-reviewed sample set.
+1. **Documentation refresh** (docs-only stabilization)
+   - Align docs with the current system (real repo is source of truth).
+   - Clearly distinguish implemented, partially implemented, and remaining.
+   - Ensure implementation order, do-not-touch, and acceptance-criteria sections exist for agents.
 
-2. **ATS analysis**
-   - Improve keyword extraction from noisy job descriptions.
-   - Expand synonym handling and normalization for common skill variants.
-   - Surface more actionable ATS gap suggestions in the UI.
+2. **DB and model foundation** — *Implemented* (source_role, resolution_status, generation runs; migration 004).
+   - Extend canonical job model for multi-source ingestion.
+   - Add source-role and resolution concepts.
+   - Add generation-eligibility and generation-run tracking.
+   - Add safe, incremental migrations from the current baseline.
 
-3. **Resume generation**
-   - Improve per-job tailoring from job description + master skills.
-   - Add artifact quality checks to catch malformed or low-value resume outputs.
+3. **Official ATS expansion** — *Implemented* (Lever, Ashby connectors; generalized run-ingestion).
+   - Add Lever connector.
+   - Add Ashby connector.
+   - Generalize canonical ingestion API beyond Greenhouse-only assumptions.
+   - Keep Greenhouse, Lever, and Ashby aligned to one canonical normalization contract.
 
----
+4. **Direct URL ingest** — *Implemented* (POST /api/jobs/ingest-url; url_provider).
+   - Add supported ATS URL ingest for Greenhouse, Lever, and Ashby.
+   - Add provider detection and clean unsupported-provider errors.
+   - Route URL-ingested jobs into the standard downstream pipeline.
 
 ## Next
 
-4. **Operator workflow**
-   - Add better filters for high-score/high-match jobs.
-   - Add clearer manual process checkpoints for job review.
+5. **Broad discovery lane** — *Implemented* (AGG-1, SERP1 via run-discovery; feature-flagged).
+   - Add AGG-1 as the first structured broad multi-company discovery source.
+   - Keep it query-driven and rate-limit-aware.
+   - Mark discovery records distinctly from canonical records.
 
-5. **Additional connectors**
-   - Add Lever connector (pluggable architecture supports it).
-   - Consider Workday, SmartRecruiters, or other ATS connectors as needed.
+6. **Automated generation funnel** — *Implemented* (generation gate; auto-gen when ENABLE_AUTO_RESUME_GENERATION=true).
+   - Add explicit generation gate after ATS analysis.
+   - Automatically generate artifacts for eligible jobs.
+   - Preserve manual regenerate behavior for override/debug.
 
-6. **GCS / GCP operational follow-ups**
-   - Document and validate signed URL behavior in production.
-   - Lifecycle policies for artifact cleanup; optional CDN links.
+7. **Ready-to-apply backend surface** — *Implemented* (GET /api/jobs/ready-to-apply).
+   - Add an artifact-ready feed for jobs with usable apply URLs.
+   - Add richer filters for source role, confidence, generation eligibility, and resolution status.
+   - Expose enough status detail for UI throughput mode.
 
----
+8. **Worker/pipeline hardening**
+   - Make discovery, ingestion, resolution, analysis, and generation states explicit.
+   - Improve failure recording and observability by phase.
+   - Add stale/apply-link verification.
 
 ## Later
 
-7. **Pipeline stability**
-   - Stronger end-to-end checks for scrape → score → ATS → resume.
-   - Better observability around worker failures and partial pipeline runs.
+9. **Optional SERP lane**
+   - Add one SERP-derived provider behind a feature flag.
+   - Treat it as lower-confidence discovery only.
+   - Keep it disabled by default until the core system is stable.
 
-8. **Jira-derived scoring (optional)**
-   - Support structured project/Jira-derived materials for richer experience inputs and scoring signals, if desired.
+10. **UI throughput mode**
+   - Rework the default UI around a ready-to-apply queue.
+   - Add source/provenance visibility.
+   - Add URL ingest entry point.
+   - Surface generation and resolution status clearly.
 
----
+11. **Source controls and operations**
+   - Add source configs / enable-disable controls.
+   - Add per-source quotas or caps where useful.
+   - Improve operational dashboards for runs, failures, and generation throughput.
 
-## Archived / not v1
+## Later / optional
 
-The following are out of scope for v1. Kept for reference only.
+12. **Additional ATS ecosystems**
+   - Revisit Workday or other undocumented/public-but-brittle sources only after the core lanes are stable.
+   - Treat partner-feed integrations as a separate business/access problem, not an immediate coding task.
 
-- **Auto-apply / browser automation:** System does not submit applications. Users manually apply via job URL.
-- **Simplify-first workflow:** No job-description simplification or pre-apply rewrite flow.
-- **Legacy schema cleanup:** Migration/cleanup for any remaining legacy apply-related statuses (`APPLY_QUEUED`, `APPLY_FAILED`, `INTERVENTION_REQUIRED`, etc.) in existing data. Operational hygiene; no new apply features.
+13. **Remote-job supplements**
+   - Consider remote-only supplemental APIs if they add meaningful signal beyond AGG-1 plus ATS connectors.
+
+## Explicitly not in scope
+
+- automated application submission
+- browser automation for job applications
+- interview scheduling
+- generic arbitrary crawling as the main ingestion strategy
+- treating SERP/search results as canonical truth by default

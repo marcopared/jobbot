@@ -1,10 +1,12 @@
-"""Pipeline chain tests: score -> classify -> ATS for JobSpy and Greenhouse paths.
+"""Pipeline chain tests: score -> classify -> ATS -> generation_gate for all ingestion paths.
 
-Both ingestion paths (JobSpy scrape, Greenhouse connector) use the same canonical
-post-ingestion chain. These tests verify:
+JobSpy scrape, Greenhouse/canonical ingest, and discovery use the same post-ingestion chain.
+These tests verify:
 - INGESTED jobs reach CLASSIFIED and ATS_ANALYZED
 - Score-threshold rejection is preserved (REJECTED jobs skip classification/ATS)
 - Persona data exists for eligible jobs from both paths
+- ats_match chains to evaluate_generation_gate; gate runs for all paths
+- Full Celery chain (score->classify->ats->gate) executes end-to-end
 
 Requires: Postgres with migrations applied (alembic upgrade head).
 Run: pytest tests/test_pipeline_chain.py
@@ -15,12 +17,13 @@ import uuid
 import pytest
 
 from core.dedup import compute_dedup_hash_from_raw, normalize_company, normalize_title
-from core.db.models import Company, Job, JobAnalysis, PipelineStatus
+from core.db.models import Company, Job, JobAnalysis, PipelineStatus, ResolutionStatus, SourceRole
 from core.db.session import get_sync_session
 
-from apps.worker.tasks.score import score_jobs
-from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
+from apps.worker.tasks.classify import classify_jobs
+from apps.worker.tasks.generation import evaluate_generation_gate
+from apps.worker.tasks.score import score_jobs
 
 
 def _make_ingested_job(
@@ -29,6 +32,9 @@ def _make_ingested_job(
     description: str = "Build APIs. Python, FastAPI, AWS, PostgreSQL. Fintech.",
     location: str = "Remote",
     remote_flag: bool = True,
+    source_role: str | None = None,
+    source_confidence: float | None = None,
+    resolution_status: str | None = None,
 ) -> uuid.UUID:
     """Insert a Job with pipeline_status=INGESTED. Returns job_id."""
     unique = str(uuid.uuid4())[:8]
@@ -47,29 +53,36 @@ def _make_ingested_job(
         session.add(company)
         session.flush()
 
-        job = Job(
-            source=source,
-            source_job_id=unique,
-            title=title,
-            raw_title=title,
-            normalized_title=normalize_title(title),
-            company_id=company.id,
-            company_name_raw=company_name,
-            raw_company=company_name,
-            normalized_company=normalize_company(company_name),
-            location=location,
-            raw_location=location,
-            normalized_location=location.lower() if location else None,
-            remote_flag=remote_flag,
-            url=apply_url,
-            apply_url=apply_url,
-            description=description,
-            status="NEW",
-            user_status="NEW",
-            pipeline_status=PipelineStatus.INGESTED.value,
-            score_total=0.0,
-            dedup_hash=dedup_hash,
-        )
+        job_kw: dict = {
+            "source": source,
+            "source_job_id": unique,
+            "title": title,
+            "raw_title": title,
+            "normalized_title": normalize_title(title),
+            "company_id": company.id,
+            "company_name_raw": company_name,
+            "raw_company": company_name,
+            "normalized_company": normalize_company(company_name),
+            "location": location,
+            "raw_location": location,
+            "normalized_location": location.lower() if location else None,
+            "remote_flag": remote_flag,
+            "url": apply_url,
+            "apply_url": apply_url,
+            "description": description,
+            "status": "NEW",
+            "user_status": "NEW",
+            "pipeline_status": PipelineStatus.INGESTED.value,
+            "score_total": 0.0,
+            "dedup_hash": dedup_hash,
+        }
+        if source_role is not None:
+            job_kw["source_role"] = source_role
+        if source_confidence is not None:
+            job_kw["source_confidence"] = source_confidence
+        if resolution_status is not None:
+            job_kw["resolution_status"] = resolution_status
+        job = Job(**job_kw)
         session.add(job)
         session.flush()
         job_id = job.id
@@ -112,8 +125,13 @@ def _get_analysis(job_id: uuid.UUID) -> dict | None:
 
 
 def test_jobspy_ingested_job_reaches_classified_and_ats_analyzed():
-    """JobSpy-created job (source=jobspy, INGESTED) flows through full chain to CLASSIFIED and ATS_ANALYZED."""
-    job_id = _make_ingested_job(source="jobspy")
+    """JobSpy-created job (source=jobspy, source_role=discovery) flows through full chain to ATS_ANALYZED."""
+    job_id = _make_ingested_job(
+        source="jobspy",
+        source_role=SourceRole.DISCOVERY.value,
+        source_confidence=0.8,
+        resolution_status=ResolutionStatus.PENDING.value,
+    )
     job_ids = [str(job_id)]
 
     score_jobs.apply(kwargs={"job_ids": job_ids})
@@ -188,3 +206,45 @@ def test_score_threshold_rejection_preserved():
     ats_match_resume.apply()
     state = _get_job_state(job_id)
     assert state["pipeline_status"] == PipelineStatus.REJECTED.value
+
+
+def test_ats_match_chains_to_evaluate_generation_gate():
+    """ats_match returns job_ids; evaluate_generation_gate runs and respects gate (queued=0 when disabled)."""
+    job_id = _make_ingested_job(source="greenhouse")
+    job_ids = [str(job_id)]
+
+    score_jobs.apply(kwargs={"job_ids": job_ids})
+    classify_jobs.apply(kwargs={"job_ids": job_ids})
+    out = ats_match_resume.apply(kwargs={"job_ids": job_ids}).get()
+    assert "job_ids" in out
+    assert str(job_id) in out["job_ids"]
+
+    gate_out = evaluate_generation_gate.apply(kwargs={"chain_output": out}).get()
+    assert "evaluated" in gate_out
+    assert "queued" in gate_out
+    assert gate_out["evaluated"] >= 1
+    # With ENABLE_AUTO_RESUME_GENERATION=false (default), no jobs queued
+    assert gate_out["queued"] == 0
+
+
+def test_full_chain_as_scrape_runs_end_to_end():
+    """Full Celery chain score->classify->ats->gate runs when invoked like scrape (no job_ids to score)."""
+    job_id = _make_ingested_job(
+        source="jobspy",
+        source_role=SourceRole.DISCOVERY.value,
+        source_confidence=0.8,
+        resolution_status=ResolutionStatus.PENDING.value,
+    )
+    chain = (
+        score_jobs.s()
+        | classify_jobs.s()
+        | ats_match_resume.s()
+        | evaluate_generation_gate.s()
+    )
+    result = chain.apply().get()
+    assert "evaluated" in result
+    assert "queued" in result
+    assert result["evaluated"] >= 1, "Gate should receive at least our job from chain"
+    state = _get_job_state(job_id)
+    assert state is not None
+    assert state["pipeline_status"] == PipelineStatus.ATS_ANALYZED.value

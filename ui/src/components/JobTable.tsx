@@ -1,6 +1,7 @@
 import type { Job } from "../api";
 import { Link } from "react-router-dom";
 import StatusBadge from "./StatusBadge";
+import SourceRoleBadge from "./SourceRoleBadge";
 
 interface Props {
   jobs: Job[];
@@ -8,9 +9,18 @@ interface Props {
   onToggle: (id: string) => void;
   onToggleAll: () => void;
   onAction: (id: string, status: string) => void;
+  /** When true (Ready to Apply page), show Apply link to job detail */
+  showApplyLink?: boolean;
 }
 
-export default function JobTable({ jobs, selected, onToggle, onToggleAll, onAction }: Props) {
+export default function JobTable({
+  jobs,
+  selected,
+  onToggle,
+  onToggleAll,
+  onAction,
+  showApplyLink = false,
+}: Props) {
   const allSelected = jobs.length > 0 && jobs.every((j) => selected.has(j.id));
 
   return (
@@ -40,8 +50,11 @@ export default function JobTable({ jobs, selected, onToggle, onToggleAll, onActi
             <th className="px-3 py-3 text-left font-semibold text-gray-600">Status</th>
             <th className="px-3 py-3 text-center font-semibold text-gray-600">Resume</th>
             <th className="px-3 py-3 text-left font-semibold text-gray-600 hidden lg:table-cell">
-              Source
+              Provenance
             </th>
+            {showApplyLink && (
+              <th className="px-3 py-3 text-center font-semibold text-gray-600">Apply</th>
+            )}
             <th className="px-3 py-3 text-right font-semibold text-gray-600">Actions</th>
           </tr>
         </thead>
@@ -83,14 +96,24 @@ export default function JobTable({ jobs, selected, onToggle, onToggleAll, onActi
               </td>
               <td className="px-3 py-2 text-center">
                 {job.artifact_availability ? (
-                  <span className="text-green-600" title="Resume available">✓</span>
+                  <span className="text-green-600" title="Resume ready">✓</span>
                 ) : (
                   <span className="text-gray-300" title="No resume yet">—</span>
                 )}
               </td>
-              <td className="px-3 py-2 text-gray-500 hidden lg:table-cell text-xs">
-                {job.source ?? "—"}
+              <td className="px-3 py-2 hidden lg:table-cell">
+                <SourceRoleBadge source={job.source} />
               </td>
+              {showApplyLink && (
+                <td className="px-3 py-2 text-center">
+                  <Link
+                    to={`/jobs/${job.id}`}
+                    className="inline-flex items-center rounded bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 no-underline"
+                  >
+                    Apply
+                  </Link>
+                </td>
+              )}
               <td className="px-3 py-2 text-right">
                 <ActionButtons status={job.user_status} onAction={(a) => onAction(job.id, a)} />
               </td>
@@ -98,7 +121,10 @@ export default function JobTable({ jobs, selected, onToggle, onToggleAll, onActi
           ))}
           {jobs.length === 0 && (
             <tr>
-              <td colSpan={10} className="px-3 py-8 text-center text-gray-400">
+              <td
+                colSpan={10 + (showApplyLink ? 1 : 0)}
+                className="px-3 py-8 text-center text-gray-400"
+              >
                 No jobs found.
               </td>
             </tr>

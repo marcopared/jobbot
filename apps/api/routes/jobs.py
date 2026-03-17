@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,15 +18,34 @@ from apps.api.schemas import (
     JobListItem,
     JobListResponse,
     PersonaInfo,
+    ResolveJobResponse,
     ScoreBreakdown,
     UpdateStatusRequest,
     UpdateStatusResponse,
 )
 from apps.api.settings import Settings
 from apps.worker.tasks.scrape import scrape_jobspy
-from apps.worker.tasks.ingest import ingest_greenhouse
+from apps.worker.tasks.ingest import (
+    ingest_ashby,
+    ingest_greenhouse,
+    ingest_lever,
+    ingest_url,
+)
+from apps.worker.tasks.discovery import run_discovery
+from apps.worker.tasks.resolution import resolve_discovery_job
 from apps.worker.tasks.resume import generate_grounded_resume_task
-from core.db.models import Artifact, Job, JobAnalysis, PipelineStatus, ScrapeRun, ScrapeRunStatus, UserStatus
+from core.connectors.url_provider import parse_supported_url
+from core.db.models import (
+    Artifact,
+    Job,
+    JobAnalysis,
+    PipelineStatus,
+    ResolutionStatus,
+    ScrapeRun,
+    ScrapeRunStatus,
+    SourceRole,
+    UserStatus,
+)
 from core.job_status import legacy_status_from_canonical
 
 settings = Settings()
@@ -158,9 +178,27 @@ class RunScrapeBody(BaseModel):
 
 
 class RunIngestionBody(BaseModel):
-    connector: str  # "greenhouse" for v1
-    board_token: str
+    """Generalized canonical ingestion. Fields vary by connector."""
+    connector: Literal["greenhouse", "lever", "ashby"]
     company_name: str
+    # Greenhouse
+    board_token: Optional[str] = None
+    # Lever
+    client_name: Optional[str] = None
+    # Ashby
+    job_board_name: Optional[str] = None
+
+
+class IngestUrlBody(BaseModel):
+    url: str
+
+
+class RunDiscoveryBody(BaseModel):
+    """Discovery run. Connector agg1 (primary) or serp1 (optional, feature-flagged)."""
+    connector: Literal["agg1", "serp1"]
+    query: Optional[str] = None
+    location: Optional[str] = None
+    results_per_page: Optional[int] = None
 
 
 class BulkJobIds(BaseModel):
@@ -172,30 +210,143 @@ async def run_ingestion(
     body: RunIngestionBody,
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger connector-based ingestion (e.g. Greenhouse). Enqueues Celery task."""
-    if body.connector != "greenhouse":
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported connector: {body.connector}. Use 'greenhouse'.",
-        )
-    scrape_run = ScrapeRun(
-        source="greenhouse",
-        status=ScrapeRunStatus.RUNNING.value,
-        params_json={
+    """Trigger connector-based ingestion (Greenhouse, Lever, Ashby). Enqueues Celery task."""
+    if body.connector == "greenhouse":
+        if not body.board_token:
+            raise HTTPException(
+                status_code=400,
+                detail="board_token required for greenhouse connector.",
+            )
+        params = {"board_token": body.board_token, "company_name": body.company_name}
+        task_fn = ingest_greenhouse.delay
+        task_kwargs = {
+            "run_id": None,
             "board_token": body.board_token,
             "company_name": body.company_name,
-        },
+        }
+    elif body.connector == "lever":
+        if not body.client_name:
+            raise HTTPException(
+                status_code=400,
+                detail="client_name required for lever connector.",
+            )
+        params = {"client_name": body.client_name, "company_name": body.company_name}
+        task_fn = ingest_lever.delay
+        task_kwargs = {
+            "run_id": None,
+            "client_name": body.client_name,
+            "company_name": body.company_name,
+        }
+    elif body.connector == "ashby":
+        if not body.job_board_name:
+            raise HTTPException(
+                status_code=400,
+                detail="job_board_name required for ashby connector.",
+            )
+        params = {"job_board_name": body.job_board_name, "company_name": body.company_name}
+        task_fn = ingest_ashby.delay
+        task_kwargs = {
+            "run_id": None,
+            "job_board_name": body.job_board_name,
+            "company_name": body.company_name,
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported connector: {body.connector}. Supported: greenhouse, lever, ashby.",
+        )
+
+    scrape_run = ScrapeRun(
+        source=body.connector,
+        status=ScrapeRunStatus.RUNNING.value,
+        params_json=params,
     )
     db.add(scrape_run)
     await db.commit()
     await db.refresh(scrape_run)
     run_id = str(scrape_run.id)
-    task = ingest_greenhouse.delay(
-        run_id=run_id,
-        board_token=body.board_token,
-        company_name=body.company_name,
-    )
+    task_kwargs["run_id"] = run_id
+    task = task_fn(**task_kwargs)
     return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id)}
+
+
+@router.post("/run-discovery")
+async def run_discovery_route(
+    body: RunDiscoveryBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger broad discovery via AGG-1 or SERP1. Enqueues Celery task."""
+    connector = body.connector
+    if connector == "agg1":
+        if not settings.enable_agg1_discovery:
+            raise HTTPException(
+                status_code=403,
+                detail="AGG-1 discovery is disabled (ENABLE_AGG1_DISCOVERY=false).",
+            )
+    elif connector == "serp1":
+        if not settings.enable_serp1_discovery:
+            raise HTTPException(
+                status_code=403,
+                detail="SERP1 discovery is disabled (ENABLE_SERP1_DISCOVERY=false).",
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported discovery connector: {connector}. Supported: agg1, serp1.",
+        )
+    params = {
+        "connector": connector,
+        "query": body.query,
+        "location": body.location,
+        "results_per_page": body.results_per_page or 20,
+    }
+    scrape_run = ScrapeRun(
+        source=connector,
+        status=ScrapeRunStatus.RUNNING.value,
+        params_json=params,
+    )
+    db.add(scrape_run)
+    await db.commit()
+    await db.refresh(scrape_run)
+    run_id = str(scrape_run.id)
+    task = run_discovery.delay(
+        run_id=run_id,
+        connector=connector,
+        query=body.query,
+        location=body.location,
+        results_per_page=body.results_per_page or 20,
+    )
+    return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id), "connector": connector}
+
+
+@router.post("/ingest-url")
+async def ingest_url_route(
+    body: IngestUrlBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Ingest a single job from a supported ATS URL (Greenhouse, Lever, Ashby). Enqueues Celery task."""
+    if not settings.url_ingest_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="URL ingest is disabled (URL_INGEST_ENABLED=false).",
+        )
+    parsed = parse_supported_url(body.url)
+    if parsed is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported job URL. Supported providers: greenhouse, lever, ashby.",
+        )
+    scrape_run = ScrapeRun(
+        source="url_ingest",
+        status=ScrapeRunStatus.RUNNING.value,
+        params_json={"url": body.url, "provider": parsed.provider},
+    )
+    db.add(scrape_run)
+    await db.commit()
+    await db.refresh(scrape_run)
+    run_id = str(scrape_run.id)
+    task = ingest_url.delay(run_id=run_id, url=body.url)
+    return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id), "provider": parsed.provider}
 
 
 @router.post("/run-scrape")
@@ -226,6 +377,46 @@ async def run_scrape(
         results_wanted=results_wanted,
     )
     return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id)}
+
+
+@router.get("/ready-to-apply", response_model=JobListResponse)
+async def list_ready_to_apply(
+    db: AsyncSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    sort_by: str = Query("artifact_ready_at", description="Sort column (artifact_ready_at, score_total, scraped_at)"),
+    sort_dir: str = Query("desc"),
+):
+    """
+    Jobs with artifact ready for manual application (ARCH §11.2).
+    Filters: pipeline_status=RESUME_READY, artifact_ready_at IS NOT NULL, user_status=NEW.
+    """
+    stmt = (
+        select(Job)
+        .where(Job.pipeline_status == PipelineStatus.RESUME_READY.value)
+        .where(Job.artifact_ready_at.isnot(None))
+        .where(Job.user_status == UserStatus.NEW.value)
+        .options(selectinload(Job.analyses), selectinload(Job.artifacts))
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(Job)
+        .where(Job.pipeline_status == PipelineStatus.RESUME_READY.value)
+        .where(Job.artifact_ready_at.isnot(None))
+        .where(Job.user_status == UserStatus.NEW.value)
+    )
+    sort_col = getattr(Job, sort_by, Job.artifact_ready_at)
+    if sort_dir == "asc":
+        stmt = stmt.order_by(sort_col.asc().nullslast())
+    else:
+        stmt = stmt.order_by(sort_col.desc().nullslast())
+    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
+    result = await db.execute(stmt)
+    jobs = result.unique().scalars().all()
+    total_result = await db.execute(count_stmt)
+    total = total_result.scalar() or 0
+    items = [_job_to_list_item(j) for j in jobs]
+    return JobListResponse(items=items, total=total, page=page, per_page=per_page)
 
 
 @router.post("/bulk-status")
@@ -342,6 +533,43 @@ async def get_job(
     # Gate debug_data behind debug_endpoints_enabled (same as /api/debug/*)
     effective_debug = debug and settings.debug_endpoints_enabled
     return _job_to_detail_response(job, artifacts, debug=effective_debug)
+
+
+@router.post("/{job_id}/resolve", response_model=ResolveJobResponse)
+async def resolve_job(job_id: UUID, db: AsyncSession = Depends(get_db)):
+    """
+    Force canonical enrichment for a discovery job (ARCH §11.2).
+    When the job's apply_url maps to Greenhouse, Lever, or Ashby, fetches
+    canonical data and enriches in place. Enqueues Celery task.
+    """
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.source_role != SourceRole.DISCOVERY.value:
+        raise HTTPException(
+            status_code=400,
+            detail="Job is not a discovery record. Resolution applies only to source_role=discovery.",
+        )
+    if job.resolution_status == ResolutionStatus.RESOLVED_CANONICAL.value:
+        return ResolveJobResponse(
+            job_id=str(job_id),
+            status="already_resolved",
+            task_id=None,
+            reason="Job already resolved to canonical.",
+        )
+    url_to_resolve = (job.apply_url or job.url or "").strip()
+    if not url_to_resolve:
+        raise HTTPException(
+            status_code=400,
+            detail="Job has no apply_url or url to resolve.",
+        )
+    task = resolve_discovery_job.delay(str(job_id))
+    return ResolveJobResponse(
+        job_id=str(job_id),
+        status="queued",
+        task_id=str(task.id),
+    )
 
 
 @router.put("/{job_id}/status", response_model=UpdateStatusResponse)

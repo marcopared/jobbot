@@ -17,6 +17,24 @@ class Settings(BaseSettings):
     scrape_results_wanted: int = 50
     jobspy_enabled: bool = True
     greenhouse_enabled: bool = True
+    lever_enabled: bool = True
+    ashby_enabled: bool = True
+    url_ingest_enabled: bool = True
+    # Discovery lane (ARCH §11.2, IMPLEMENTATION_PLAN §6)
+    enable_agg1_discovery: bool = False
+    # SERP1: explicit stub. When enabled, returns empty results; never raises.
+    # Keeps route/task wiring. Real provider integration is optional (FOLLOWUP_DISCOVERY.md).
+    enable_serp1_discovery: bool = False
+    # Automation funnel (PR5, ARCH §10): auto-generate resumes for eligible jobs
+    enable_auto_resume_generation: bool = False
+    # Generation gate thresholds
+    generation_canonical_score_threshold: float = 60.0
+    generation_discovery_score_threshold: float = 70.0
+    generation_discovery_confidence_min: float = 0.7
+    # AGG-1: Adzuna API used as reference implementation
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""
+    adzuna_country: str = "us"
     wellfound_enabled: bool = False
     builtinnyc_enabled: bool = False
     yc_enabled: bool = False

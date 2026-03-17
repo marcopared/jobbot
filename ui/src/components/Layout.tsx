@@ -3,8 +3,9 @@ import { NavLink } from "react-router-dom";
 import ToastHost from "./ToastHost";
 
 const NAV_ITEMS = [
-  { to: "/jobs", label: "Jobs" },
-  { to: "/runs", label: "Scrape Runs" },
+  { to: "/ready", label: "Ready to Apply", isHome: true },
+  { to: "/jobs", label: "All Jobs", isHome: false },
+  { to: "/runs", label: "Runs", isHome: false },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -22,10 +23,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   isActive
                     ? "bg-gray-700 text-white"
                     : "text-gray-300 hover:bg-gray-800 hover:text-white"
-                }`
+                } ${item.isHome && isActive ? "ring-1 ring-indigo-400" : ""}`
               }
             >
               <span className="inline-flex items-center gap-2">
+                {item.isHome && <span className="text-indigo-300">⌂</span>}
                 {item.label}
               </span>
             </NavLink>

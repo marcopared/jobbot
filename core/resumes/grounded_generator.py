@@ -239,5 +239,6 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
     session.flush()
 
     job.pipeline_status = PipelineStatus.RESUME_READY.value
+    job.artifact_ready_at = datetime.now(UTC)
 
     return GenerationResult(artifact=artifact, status="success")

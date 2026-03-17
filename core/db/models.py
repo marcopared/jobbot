@@ -121,6 +121,64 @@ class ApplyMethod(str, Enum):
     MANUAL = "manual"
 
 
+# --- Source / resolution / generation enums (ARCH §3, §5, §7) ---
+
+
+class SourceRole(str, Enum):
+    """Distinguishes canonical ATS, discovery, and direct URL ingest."""
+    CANONICAL = "canonical"
+    DISCOVERY = "discovery"
+    URL_INGEST = "url_ingest"
+
+
+class ResolutionStatus(str, Enum):
+    """Discovery-to-canonical resolution outcome."""
+    PENDING = "pending"
+    RESOLVED_CANONICAL = "resolved_canonical"
+    RESOLVED_DISCOVERY_ONLY = "resolved_discovery_only"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class GenerationEligibility(str, Enum):
+    """Whether job qualifies for auto-generation."""
+    ELIGIBLE = "eligible"
+    INELIGIBLE = "ineligible"
+    PENDING = "pending"
+
+
+class WorkplaceType(str, Enum):
+    REMOTE = "remote"
+    ONSITE = "onsite"
+    HYBRID = "hybrid"
+    OTHER = "other"
+
+
+class EmploymentType(str, Enum):
+    FULL_TIME = "full_time"
+    PART_TIME = "part_time"
+    CONTRACT = "contract"
+    INTERNSHIP = "internship"
+    OTHER = "other"
+
+
+class SalaryInterval(str, Enum):
+    HOUR = "hour"
+    DAY = "day"
+    WEEK = "week"
+    MONTH = "month"
+    YEAR = "year"
+
+
+class GenerationRunStatus(str, Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCESS = "success"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+
 # --- Models (SPEC §7.2) ---
 
 
@@ -198,6 +256,35 @@ class Job(Base):
     ats_match_breakdown_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     source_payload_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     dedup_hash: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+
+    # --- Canonical ATS expansion, discovery vs canonical, URL ingest (ARCH §5.1) ---
+    source_role: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    canonical_source_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    canonical_external_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    canonical_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    workplace_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    employment_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    department: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    team: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requisition_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    salary_currency: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    salary_interval: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    location_structured_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    content_quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # --- Generation eligibility (ARCH §10) ---
+    generation_eligibility: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    generation_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    auto_generated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    artifact_ready_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # --- Provenance / resolution (ARCH §6, §7) ---
+    resolution_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resolution_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    stale_flag: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -226,6 +313,12 @@ class Job(Base):
     analyses: Mapped[list["JobAnalysis"]] = relationship(
         "JobAnalysis", back_populates="job"
     )
+    generation_runs: Mapped[list["GenerationRun"]] = relationship(
+        "GenerationRun", back_populates="job"
+    )
+    resolution_attempts: Mapped[list["JobResolutionAttempt"]] = relationship(
+        "JobResolutionAttempt", back_populates="job"
+    )
 
     __table_args__ = (
         Index("ix_jobs_status_scraped_at", "status", "scraped_at"),
@@ -233,6 +326,11 @@ class Job(Base):
         Index("ix_jobs_user_status", "user_status"),
         Index("ix_jobs_company_id", "company_id"),
         Index("ix_jobs_source", "source"),
+        Index("ix_jobs_source_role", "source_role"),
+        Index("ix_jobs_generation_eligibility", "generation_eligibility"),
+        Index("ix_jobs_artifact_ready_at", "artifact_ready_at"),
+        Index("ix_jobs_resolution_status", "resolution_status"),
+        Index("ix_jobs_stale_flag", "stale_flag"),
     )
 
 class JobSourceRecord(Base):
@@ -292,6 +390,94 @@ class JobAnalysis(Base):
     __table_args__ = (
         Index("ix_job_analyses_job_id", "job_id"),
         Index("uq_job_analyses_job_id", "job_id", unique=True),
+    )
+
+
+class GenerationRun(Base):
+    """Records automatic and manual generation attempts (ARCH §5.3)."""
+    __tablename__ = "generation_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, default="queued", nullable=False)
+    inputs_hash: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    artifact_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("artifacts.id"), nullable=True
+    )
+    triggered_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # auto | manual
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    job: Mapped["Job"] = relationship("Job", back_populates="generation_runs")
+    artifact: Mapped[Optional["Artifact"]] = relationship(
+        "Artifact", foreign_keys=[artifact_id]
+    )
+
+    __table_args__ = (
+        Index("ix_generation_runs_job_id", "job_id"),
+        Index("ix_generation_runs_status", "status"),
+        Index("ix_generation_runs_created_at", "created_at"),
+    )
+
+
+class JobResolutionAttempt(Base):
+    """Records discovery-to-canonical reconciliation attempts (ARCH §5.3)."""
+    __tablename__ = "job_resolution_attempts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False
+    )
+    resolution_status: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    failure_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    canonical_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    canonical_source_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    attempted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    job: Mapped["Job"] = relationship("Job", back_populates="resolution_attempts")
+
+    __table_args__ = (
+        Index("ix_job_resolution_attempts_job_id", "job_id"),
+        Index("ix_job_resolution_attempts_attempted_at", "attempted_at"),
+    )
+
+
+class SourceConfig(Base):
+    """Feature-flag and config for sources (ARCH §5.3)."""
+    __tablename__ = "source_configs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    source_name: Mapped[str] = mapped_column(Text, nullable=False)
+    config_key: Mapped[str] = mapped_column(Text, nullable=False)
+    config_value_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("ix_source_configs_source_key", "source_name", "config_key", unique=True),
     )
 
 
