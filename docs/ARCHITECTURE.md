@@ -15,7 +15,7 @@ It should be read together with:
 
 Source of truth: the real repository. The codebase has:
 - **Canonical ATS:** Greenhouse, Lever, Ashby ingestion
-- **Discovery:** JobSpy scrape; AGG-1 and SERP1 (feature-flagged)
+- **Discovery:** JobSpy scrape; AGG-1 and SERP1 lanes exist behind feature flags
 - **URL ingest:** supported ATS job URLs (Greenhouse, Lever, Ashby)
 - Deterministic scoring, rules-based classification, ATS analysis
 - Generation gate; manual and auto resume generation (auto when `ENABLE_AUTO_RESUME_GENERATION=true`)
@@ -60,8 +60,8 @@ Broad, query-driven sources used for coverage.
 
 Initial discovery set:
 - JobSpy
-- AGG-1
-- one optional SERP provider
+- AGG-1 = Adzuna for this alpha implementation wave
+- SERP1 = DataForSEO Google Jobs for this alpha implementation wave
 
 #### Direct URL ingest
 Deterministic provider-specific ingest using a pasted job URL.
@@ -76,7 +76,21 @@ Initial direct URL providers:
 - discovery sources are not canonical truth by default
 - canonical sources win during merge/reconciliation
 - discovery sources may still be sufficient for downstream processing if their content quality and apply URL quality are strong enough
+- Adzuna is a medium-confidence discovery provider
+- DataForSEO Google Jobs is a lower-confidence discovery provider than Adzuna
 - SERP-derived sources must remain lower-confidence and feature-flagged
+
+### 3.3 Provider-specific alpha discovery contract
+
+The target provider contract for this wave is:
+
+- `AGG-1 -> Adzuna`
+- `SERP1 -> DataForSEO Google Jobs`
+
+Current repo truth and target state must remain distinct:
+
+- current repo truth: AGG-1 and SERP1 lanes exist, but the docs must not imply the Adzuna and DataForSEO implementations are already complete unless code lands
+- alpha implementation target: Adzuna is the real structured discovery provider and DataForSEO Google Jobs is the real SERP discovery provider for this wave
 
 ## 4. Connector architecture
 
@@ -111,6 +125,142 @@ Likely fields:
 - normalized_location
 - source_confidence
 - content_quality_score
+
+### 4.3 Adzuna discovery design
+
+Adzuna is the real `AGG-1` provider for this implementation wave.
+
+Retrieval design:
+
+- use the page-based search endpoint: `/jobs/{country}/search/{page}`
+- fetch sequential pages per run until the per-run cap is reached or the provider returns no more useful results
+- support a bounded page count so one discovery run cannot expand without limit
+
+Query parameters and filters to support in alpha:
+
+- `what` for the primary title/keyword search
+- `where` for human-readable location targeting
+- `distance` when a radius filter is supplied
+- `results_per_page`
+- `max_days_old`
+- `sort_by=date` as the default freshness-oriented mode
+- `salary_min`
+- `salary_max`
+- `full_time`
+- `part_time`
+- `contract`
+- `permanent`
+- `category` when the caller supplies a mapped category filter
+
+Per-run fetch cap:
+
+- impose a hard cap on total Adzuna jobs fetched per discovery run
+- page count and `results_per_page` should both participate in that cap
+- the cap is an implementation setting, but the architecture requires it to be explicit and enforced
+
+Fields to map into the discovery model:
+
+- `id -> external_id`
+- `title`
+- `company.display_name -> company`
+- `location.display_name -> location`
+- `description`
+- `redirect_url -> apply_url` and source outbound URL
+- `created -> posted_at`
+- `category.label` or `category.tag` into discovery metadata when useful
+- `salary_min`, `salary_max`, `contract_time`, `contract_type`, `latitude`, `longitude` when present
+
+All provider fields that are not cleanly represented in the current schema should remain in `raw_payload`.
+
+#### Alpha provider mapping fields
+
+For the alpha implementation, the Adzuna normalization contract is frozen as:
+
+- `id -> external_id`
+- `title -> title`
+- `company.display_name -> company`
+- `location.display_name -> location`
+- `description -> description`
+- `redirect_url -> apply_url` and `source_url`
+- `created -> posted_at`
+- `salary_min -> salary_min`
+- `salary_max -> salary_max`
+- `contract_time -> contract_time`
+- `contract_type -> contract_type`
+
+Any Adzuna fields not mapped above must still be preserved in `raw_payload`.
+
+### 4.4 DataForSEO Google Jobs discovery design
+
+DataForSEO Google Jobs is the real `SERP1` provider target for this implementation wave.
+
+Provider scope:
+
+- use Google Jobs endpoints only
+- do not broaden SERP1 to generic web search, arbitrary crawling, or non-jobs endpoints in this wave
+
+Authentication:
+
+- use DataForSEO basic auth credentials on each request
+
+Synchronous wrapper design:
+
+- submit a task with `/v3/serp/google/jobs/task_post`
+- poll for readiness in a bounded loop using `/v3/serp/google/jobs/tasks_ready`
+- fetch advanced normalized results with `/v3/serp/google/jobs/task_get/advanced/{id}`
+- do not rely on postback/pingback for the alpha implementation
+- do not use the HTML endpoint for the core alpha path
+
+Request parameters to support in alpha:
+
+- `keyword`
+- one of `location_name` or `location_code`
+- one of `language_code` or `language_name`
+- `depth`
+- `employment_type`
+- `location_radius`
+- `priority=1` by default unless the implementation later introduces an explicit reason to pay for higher priority
+
+Normalization targets from advanced results:
+
+- `job_id -> external_id`
+- `title`
+- `employer_name -> company`
+- `location`
+- `source_url -> apply_url` when usable
+- `source_name`
+- `salary`
+- `contract_type`
+- `timestamp` or `time_ago` into posted-time metadata
+- `check_url` and raw item metadata into provenance/debug fields
+
+Timeout and failure behavior:
+
+- polling must be bounded by both attempt count and wall-clock timeout
+- if `task_post` fails, the discovery run records a provider error and exits cleanly
+- if polling times out, the run records a timeout or incomplete-provider result and does not block the rest of the pipeline
+- if `task_get/advanced` fails after readiness, the run records the failure and does not fabricate partial normalized jobs
+
+Confidence semantics:
+
+- DataForSEO Google Jobs remains lower-confidence than Adzuna and lower-confidence than canonical ATS
+- the results are discovery candidates only
+- they must never be treated as canonical truth during merge, resolution, or generation decisions
+
+#### Alpha provider mapping fields
+
+For the alpha implementation, the DataForSEO Google Jobs normalization contract is frozen as:
+
+- use a stable provider job id as `external_id` when present; otherwise derive a deterministic id from stable job fields
+- `title -> title`
+- `employer` or `company` provider field -> `company`
+- `location -> location`
+- `snippet` or `description` when available -> `description`
+- `source_url` and `apply_url` when available -> `source_url` and `apply_url`
+- `posted_at` when available -> `posted_at`
+- all unmatched provider fields must be preserved in `raw_payload`
+
+If the provider returns additional provenance or debugging fields such as `check_url`, timestamps, or result metadata, keep them in `raw_payload` unless there is already a first-class schema field for them.
 
 #### CanonicalJobPayload
 Used for high-confidence provider sources.
@@ -148,7 +298,13 @@ The current backbone remains valid:
 
 The next wave should extend this model instead of replacing it.
 
-### 5.1 `jobs` columns
+### 5.1 Schema decision for the alpha discovery wave
+
+- assume no new migration by default
+- use the existing schema and `raw_payload` for provider-specific fields that do not yet map cleanly
+- only add a new migration later if implementation proves a required provider field cannot be represented cleanly without harming correctness or debuggability
+
+### 5.2 `jobs` columns
 
 **Implemented (migration 004):** source_role, source_confidence, canonical_source_name, canonical_external_id, canonical_url, workplace_type, employment_type, department, team, requisition_id, salary_currency, salary_interval, location_structured_json, content_quality_score, generation_eligibility, generation_reason, artifact_ready_at, auto_generated_at, resolution_status, resolution_confidence, stale_flag
 
@@ -160,7 +316,7 @@ The next wave should extend this model instead of replacing it.
 - source_updated_at
 - closed_at
 
-### 5.2 `job_sources` columns
+### 5.3 `job_sources` columns
 
 Target (not yet added):
 - `source_role`
@@ -175,7 +331,7 @@ Target (not yet added):
 - `raw_description_present`
 - `url_present`
 
-### 5.3 Tables
+### 5.4 Tables
 
 #### Implemented (migration 004)
 
@@ -270,6 +426,11 @@ Target pipeline states:
 
 The migration to this queue model can be incremental, but the target behavior should be clear from the beginning.
 
+Current vs target must stay explicit in implementation work:
+
+- current repo truth: discovery and downstream work may still share the current queue layout
+- target design: provider-specific discovery, resolution, analysis, and generation should separate onto clearer queues as the implementation matures
+
 ## 9. Task graph
 
 ### 9.1 Discovery path
@@ -282,6 +443,11 @@ The migration to this queue model can be incremental, but the target behavior sh
 -> ats_match
 -> generation gate
 -> generate resume when eligible
+
+Provider notes for the alpha path:
+
+- Adzuna enters this path directly from a page-based fetch loop
+- DataForSEO Google Jobs enters this path through `task_post -> bounded polling -> task_get/advanced -> normalize`
 
 ### 9.2 Canonical ingest path
 `ingest_canonical_task`
@@ -314,8 +480,8 @@ A job is generation-eligible only when:
 
 Recommended default behavior:
 - canonical ATS jobs: eligible at moderate threshold
-- AGG-1 discovery jobs: eligible only at stricter threshold and sufficient content quality
-- SERP-only unresolved jobs: not eligible by default
+- Adzuna discovery jobs: eligible only at stricter threshold and sufficient content quality
+- DataForSEO Google Jobs discovery jobs: stricter still and not eligible by default unless they clear the higher discovery gate
 
 ## 11. API design
 

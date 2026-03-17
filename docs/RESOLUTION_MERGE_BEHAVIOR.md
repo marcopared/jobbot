@@ -14,6 +14,10 @@ When a discovery job resolves to a supported canonical ATS source (Greenhouse, L
 
 5. **Downstream pipeline** — After successful resolution, the job is re-queued through score → classify → ats_match → generation_gate, so it benefits from the enriched content.
 
+Provider-specific clarification:
+
+- whether the discovery record originated from Adzuna, DataForSEO Google Jobs, or another discovery lane, successful resolution still enriches the same job in place; provenance from the originating discovery source is preserved.
+
 ## No duplication
 
 - The same job record is reused; canonical data overwrites/merges into it.
