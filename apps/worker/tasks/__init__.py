@@ -4,6 +4,14 @@ from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
 from apps.worker.tasks.resume import generate_grounded_resume_task
 from apps.worker.tasks.notify import send_notification
+from apps.worker.tasks.discovery import run_discovery
+from apps.worker.tasks.generation import evaluate_generation_gate
+from apps.worker.tasks.ingest import (
+    ingest_ashby,
+    ingest_greenhouse,
+    ingest_lever,
+    ingest_url,
+)
 
 __all__ = [
     "scrape_jobspy",
@@ -12,4 +20,10 @@ __all__ = [
     "ats_match_resume",
     "generate_grounded_resume_task",
     "send_notification",
+    "run_discovery",
+    "evaluate_generation_gate",
+    "ingest_ashby",
+    "ingest_greenhouse",
+    "ingest_lever",
+    "ingest_url",
 ]
