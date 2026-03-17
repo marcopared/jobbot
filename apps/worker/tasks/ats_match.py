@@ -47,6 +47,7 @@ def ats_match_resume(self, job_ids: list[str] | dict | None = None):
     with log_context(task_name="ats_match_resume"):
         metrics = get_metrics()
         matched_count = 0
+        matched_job_ids: list[str] = []
         with get_sync_session() as session:
             if ids:
                 uuids = [UUID(jid) for jid in ids]
@@ -96,9 +97,10 @@ def ats_match_resume(self, job_ids: list[str] | dict | None = None):
                     job.pipeline_status = PipelineStatus.ATS_ANALYZED.value
                     job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
                     matched_count += 1
+                    matched_job_ids.append(str(job.id))
 
             session.commit()
 
         metrics.increment("ats.analysis.success", value=matched_count)
         logger.info("ATS matched %s jobs", matched_count, extra={"task_name": "ats_match_resume"})
-        return {"matched": matched_count}
+        return {"matched": matched_count, "job_ids": matched_job_ids}

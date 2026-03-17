@@ -138,6 +138,15 @@ class GenerateResumeResponse(BaseModel):
     task_id: str | None = None
 
 
+class ResolveJobResponse(BaseModel):
+    """Response for POST /api/jobs/{id}/resolve."""
+
+    job_id: str
+    status: str  # queued | no_op | already_resolved
+    task_id: str | None = None
+    reason: str | None = None
+
+
 # --- Artifacts ---
 
 

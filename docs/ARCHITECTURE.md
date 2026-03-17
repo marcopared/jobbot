@@ -1,162 +1,464 @@
-# JobBot System Specification and Architecture
+# JobBot Architecture
 
-**v1 implementation:** Redis + Celery workers, React + Vite UI, deterministic scoring, rules-based persona classifier, grounded inventory-driven resume generation, GCS/local artifact storage. No LLM dependency. Manual review and manual apply only.
+## Document purpose
 
-## 1. Executive Summary
-JobBot is an automated pipeline designed to streamline the job search process for software engineers. Instead of blindly applying to jobs, JobBot focuses on high-quality discovery, evaluation, and preparation. It ingests job listings from various sources, scores them for relevance, classifies them into targeted professional personas, and generates highly tailored resumes optimized for Applicant Tracking Systems (ATS). The user is then presented with a curated list of high-value opportunities and ready-to-use application artifacts, leaving the final manual application step to the user.
+This document describes the **current architecture** (source of truth: the real repository), implemented components, and remaining gaps.
 
-## 2. Product Scope
-The system is responsible for:
-- **Job Ingestion:** Collecting job listings from ATS APIs (Greenhouse, Lever, etc.) and scraping tools.
-- **Duplicate Detection:** Identifying and merging duplicate job postings across different sources.
-- **Job Scoring:** Evaluating roles based on title, seniority, domain, location, and tech stack relevance.
-- **Persona Classification:** Categorizing jobs into predefined professional personas (e.g., Backend Engineer, Platform/Infrastructure Engineer, Hybrid).
-- **ATS Resume Matching:** Extracting keywords and evaluating ATS compatibility.
-- **Custom Resume Generation:** Producing tailored, downloadable resumes (PDF) emphasizing persona-relevant experience.
-- **Review Interface:** Providing a UI for users to review jobs, scores, insights, and download generated artifacts.
+It should be read together with:
+- `SPEC.md` for product behavior and boundaries
+- `TODO.md` for milestones and backlog
+- `IMPLEMENTATION_PLAN.md` for PR boundaries and merge order
+- `CODING_AGENT_GUIDE.md` for coding-agent operating instructions
+- `IMPLEMENTATION_STATUS.md` for a verification audit of what is implemented vs aspirational
 
-## 3. Non-Goals
-To maintain clear system boundaries and avoid brittleness, the following are explicitly out of scope:
-- **Automated Job Application:** The system will *not* submit applications on behalf of the user.
-- **Browser Automation:** Extension-based or headless browser flows for application submission are completely out of scope.
-- **Interview Scheduling:** The system does not handle post-application communication or scheduling.
+## 1. Current system (implemented)
 
-## 4. End-to-End System Flow
-1. **Ingestion Cron:** Scheduled workers poll ATS APIs and scrapers to fetch raw job listings.
-2. **Normalization & Deduplication:** Raw data is mapped to a canonical `Job` schema. The system checks against existing records to prevent duplicates.
-3. **Scoring Pipeline:** The normalized job is passed through a deterministic scoring engine. Jobs below a configurable threshold are persisted for historical analysis and rule tuning, but are marked as `REJECTED` and hidden from the user.
-4. **Classification & Analysis:** High-scoring jobs are analyzed to determine the best-fit persona and extract ATS keywords.
-5. **Artifact Generation:** An asynchronous worker generates a tailored resume using the user's base experience inventory and the extracted job signals.
-6. **Review & Action:** The user logs into the UI, reviews the curated job feed, downloads the tailored resume, and manually applies via the provided URL.
+Source of truth: the real repository. The codebase has:
+- **Canonical ATS:** Greenhouse, Lever, Ashby ingestion
+- **Discovery:** JobSpy scrape; AGG-1 and SERP1 (feature-flagged)
+- **URL ingest:** supported ATS job URLs (Greenhouse, Lever, Ashby)
+- Deterministic scoring, rules-based classification, ATS analysis
+- Generation gate; manual and auto resume generation (auto when `ENABLE_AUTO_RESUME_GENERATION=true`)
+- Ready-to-apply feed (`GET /api/jobs/ready-to-apply`) and UI
+- React + Vite UI
+- Redis + Celery worker topology using `default`, `scrape`, and `ingestion` queues
 
-## 5. Core Domain Model
-- **Job:** The canonical representation of a job posting (Title, Company, Location, Description, Apply URL).
-- **Source:** The origin of the job data (e.g., Greenhouse, Lever, LinkedIn).
-- **Persona:** A professional profile (e.g., Backend, Platform) containing specific skills, summaries, and experience highlights.
-- **Experience Inventory:** The master database of the user's work history, achievements, and education.
-- **JobAnalysis:** The result of the scoring, persona classification, and ATS keyword extraction for a specific job.
-- **GeneratedArtifact:** A tailored resume (PDF) linked to a specific Job and Persona.
+The current end-to-end flow:
+- scrape/ingest/discovery/url -> score -> classify -> ats_match -> generation gate -> (manual or auto) generate-resume -> manual apply
 
-## 6. Job Lifecycle and State Machine
-To prevent semantic confusion, the system explicitly separates system-managed pipeline states from user-managed workflow states.
+## 2. Current end-to-end flow
 
-### System Pipeline States (Managed by Workers)
-- `INGESTED`: Raw data fetched and normalized.
-- `DEDUPED`: Checked against existing records; duplicates merged.
-- `SCORED`: Evaluated against heuristics.
-- `REJECTED`: Score fell below the threshold; processing halts. The record is persisted for auditing but hidden from the UI.
-- `CLASSIFIED`: Persona match determined.
-- `ATS_ANALYZED`: Keywords extracted and gaps identified.
-- `RESUME_READY`: Tailored artifact successfully generated.
-- `FAILED`: Pipeline encountered an unrecoverable error.
+The implemented flow:
+1. ingest from discovery and canonical source lanes (JobSpy, AGG-1, SERP1, Greenhouse, Lever, Ashby, URL ingest)
+2. normalize and deduplicate
+3. score
+4. classify
+5. run ATS analysis
+6. evaluate generation gate
+7. automatically generate artifact when eligible (or manual via `POST /api/jobs/{id}/generate-resume`)
+8. surface in ready-to-apply queue
+9. user manually applies
 
-### User Workflow States (Managed by User via UI)
-- `NEW`: Job is ready for user review (typically requires `pipeline_status = RESUME_READY`).
-- `SAVED`: User bookmarked the job for later.
-- `APPLIED`: User manually submitted the application.
-- `ARCHIVED`: User dismissed the job.
+Discovery-to-canonical resolution is implemented via `POST /api/jobs/{id}/resolve`; resolution attempts are recorded in `job_resolution_attempts`.
 
-## 7. Data Model
-The relational data model is designed for implementation precision, tracking provenance, model versions, and distinct statuses:
+## 3. Source architecture
 
-- `jobs`: `id`, `raw_company`, `raw_title`, `raw_location`, `normalized_company`, `normalized_title`, `normalized_location`, `description`, `apply_url`, `dedup_hash`, `pipeline_status` (enum), `user_status` (enum), `created_at`, `updated_at`
-  - *Constraints/Indexes:* `UNIQUE INDEX (dedup_hash)`, `INDEX (pipeline_status)`, `INDEX (user_status)`
-- `job_sources`: `job_id`, `source_name`, `external_id`, `raw_data`, `provenance_metadata` (JSON: fetch timestamp, source URL, scraper version)
-  - *Constraints/Indexes:* `UNIQUE INDEX (source_name, external_id)`
-- `job_scores`: `job_id`, `total_score`, `seniority_score`, `tech_stack_score`, `location_score`, `persona_specific_scores` (JSON), `run_id`, `model_version`
-- `job_analyses`: `job_id`, `matched_persona`, `missing_keywords`, `ats_compatibility_score`, `run_id`, `model_version`, `prompt_version`
-- `personas`: `id`, `name`, `configuration`
-- `experience_items`: `id`, `company`, `role`, `bullet_points`, `associated_personas`
-- `artifacts`: `id`, `job_id`, `persona_id`, `file_url`, `format`, `version`, `prompt_version`, `template_version`, `created_at`
+### 3.1 Source roles
 
-## 8. Ingestion Architecture
-Ingestion is handled by a set of modular **Connectors** written in Python. Each connector implements a standard interface:
-- `fetch_jobs()`: Retrieves raw data from the source.
-- `normalize(raw_job)`: Maps source-specific fields to the canonical `Job` schema.
-Connectors run on a scheduled basis via a task queue. Raw payloads are stored in a JSONB column in PostgreSQL for debugging and replayability before normalization.
+All sources must be treated as one of three roles.
 
-## 9. Deduplication Strategy
-Deduplication occurs immediately after normalization. The `dedup_hash` serves as the canonical uniqueness mechanism at the database level. The strategy relies on:
-1. **Exact URL Matching:** If the apply URL matches an existing job.
-2. **Deterministic Hashing (Canonical):** A composite hash of `lowercase(normalized_company) + lowercase(normalized_title) + normalized_location` (stored in the `dedup_hash` column with a unique constraint). This is the primary mechanism preventing duplicate inserts.
-3. **Fuzzy Matching (Secondary Assist):** For edge cases, a similarity score using PostgreSQL `pg_trgm` trigram similarity on the company and title is computed. This is not a hard constraint, but a secondary assist used for pre-insert conflict detection or to flag potential duplicates for manual operator review.
+#### Canonical sources
+High-confidence, provider-specific sources used for trusted job content and apply flow.
 
-## 10. Scoring System Design (v1)
-The scoring system uses a deterministic weighted heuristic (five factors, 0–100 each) implemented in Python. All keyword matching uses word-boundary-aware helpers in `core/matching.py` (avoids false positives like "java" in "javascript").
-- **Title Relevance (25%):** Matches against target titles (e.g., "Senior Software Engineer").
-- **Seniority Match (20%):** Penalizes roles that are too junior or excessively senior.
-- **Domain Alignment (20%):** Keyword matching for industry/vertical (fintech, startup, etc.).
-- **Location/Remote (20%):** High score for "Remote", lower for incompatible geographic locations.
-- **Tech Stack (15%):** Overlap between job description tech keywords and user's `master_skills`.
-Jobs scoring below a defined threshold (e.g., 60/100) are marked as `REJECTED` in the pipeline and skip downstream processing.
+Initial canonical set:
+- Greenhouse
+- Lever
+- Ashby
 
-## 11. Persona Classification System (v1)
-The v1 classifier is **rules-based and deterministic** (no LLM). It implements a `PersonaClassifier` interface; an optional LLM provider may be added in the future.
-- **Backend Engineer:** Triggered by title signals and keyword matches (API, databases, business logic, backend languages).
-- **Platform / Infrastructure Engineer:** Triggered by infra keywords (Kubernetes, CI/CD, AWS/GCP, observability).
-- **Hybrid:** Fallback when signals are mixed or ambiguous.
-Uses word-boundary-aware matching via `core/matching.py` for title and description keywords. The selected persona dictates which subset of the `Experience Inventory` is prioritized during resume generation.
+#### Discovery sources
+Broad, query-driven sources used for coverage.
 
-## 12. Resume Generation Architecture (v1)
-v1 has exactly one resume-generation path: experience inventory → grounded selection → deterministic HTML → Playwright PDF → artifact storage. No other path (e.g., base-resume parsing or LLM rewriting) is supported.
+Initial discovery set:
+- JobSpy
+- AGG-1
+- one optional SERP provider
 
-1. **Data Assembly:** The system gathers the `JobAnalysis`, the selected `Persona`, and the structured `Experience Inventory` (YAML).
-2. **Content Selection:** Grounded selection chooses roles, projects, and bullets from the inventory by keyword overlap and persona-tag matching. No freeform LLM output; all content is from the inventory. v1 uses a conservative/no-op rewrite—bullets are used as-is; no invented experience.
-3. **Formatting:** Selected content is injected into a deterministic HTML template.
-4. **Rendering:** Playwright (invoked from Python via `playwright.sync_api`) renders the HTML to PDF. v1 outputs PDF only; DOCX is deferred to a future iteration.
+#### Direct URL ingest
+Deterministic provider-specific ingest using a pasted job URL.
 
-## 13. Artifact Storage Strategy (v1)
-Generated resumes are stored on the local filesystem by default (`storage/artifacts/` or `ARTIFACT_DIR`).
-- Artifacts are keyed by `job_id` and timestamp.
-- The database `artifacts` table stores metadata and `path` (storage key). `file_url` is nullable and optional; GCS-backed artifacts do not persist URLs.
-- **Local:** Files served directly via `FileResponse`.
-- **GCS:** Objects remain private. Preview/download routes generate signed URLs on demand using Application Default Credentials (ADC). Local dev: `gcloud auth application-default login` or `GOOGLE_APPLICATION_CREDENTIALS`; deployed: attached service account.
-- No duplicate prefixing: producers pass relative keys; backends apply the configured prefix exactly once.
+Initial direct URL providers:
+- Greenhouse
+- Lever
+- Ashby
 
-*Future: CDN links, lifecycle policies for automated cleanup.*
+### 3.2 Source strategy rules
 
-## 14. API Design
-The backend exposes a RESTful API built with **FastAPI (Python)** for the frontend:
-- `GET /api/jobs`: List jobs with filtering (user_status, score, persona). Excludes REJECTED by default; use `include_rejected=true` for debugging.
-- `GET /api/jobs/{id}`: Retrieve full job details, analysis, and scores. Returns 404 for REJECTED jobs unless `include_rejected=true`. Use `debug=true` to include `debug_data` (source_payload_json, dedup_hash) only when `DEBUG_ENDPOINTS_ENABLED=true`; otherwise the flag is ignored and internal fields are omitted.
-- `POST /api/jobs/{id}/generate-resume`: Manually trigger or regenerate a resume. Requires `pipeline_status` ATS_ANALYZED or RESUME_READY; returns 409 if not ready.
-- `GET /api/jobs/{id}/artifacts`: List available download links for a job.
-- `PUT /api/jobs/{id}/status`: Update user workflow status. Only SAVED, APPLIED, ARCHIVED are writable; NEW is the initial state, not client-settable.
+- discovery sources are not canonical truth by default
+- canonical sources win during merge/reconciliation
+- discovery sources may still be sufficient for downstream processing if their content quality and apply URL quality are strong enough
+- SERP-derived sources must remain lower-confidence and feature-flagged
 
-## 15. Worker / Pipeline Architecture (v1)
-The system uses **Redis + Celery** for asynchronous processing. All scoring, classification, ATS, and resume logic are Python-owned.
-- **Queues:** Celery routes tasks to `default`, `scrape`, and `ingestion` queues. Classification and resume tasks run on the default queue.
-- **Task flow:** Scrape/ingest → score → classify → ats_match → (manual) generate-resume.
+## 4. Connector architecture
 
-## 16. UI Architecture (v1)
-The Review Interface is a Single Page Application (SPA) built with **React** and **Vite**.
-- **Dashboard:** A list view of jobs categorized by user status (`New`, `Saved`, `Applied`, `Archived`).
-- **Job Detail View:** Displays the original description alongside the JobBot insights (Score breakdown, Persona, Missing ATS Keywords).
-- **Action Panel:** Contains the "Download Resume" buttons and a primary "Open Application" button that opens the external ATS link in a new tab, reinforcing that the system does not apply on the user's behalf.
+The existing connector abstraction should be extended, not discarded.
 
-## 17. Observability and Logging (v1)
-- **Structured Logging:** Services output structured logs with context (`trace_id`, `job_id`) to track a job's journey through the pipeline.
-- **Metrics:** Task-level metrics (histograms, counters) are instrumented for scoring, classification, ATS, and resume generation. Datadog or similar can consume them when configured.
+### 4.1 Connector classes
 
-*Future (not v1): Alerting on elevated error rates, DLQ dashboards.*
+Target conceptual split:
+- `CanonicalConnector`
+- `DiscoveryConnector`
+- `UrlResolver` or provider detector for direct URL ingest
 
-## 18. Failure Handling (v1)
-- **Retries:** Transient errors in worker tasks use exponential backoff (Celery retry).
-- **Failure Recording:** Task failures are recorded (e.g., to Redis) for visibility; no formal DLQ in v1.
-- **Deterministic pipeline:** Classification and resume content are deterministic; no external LLM or generative service dependencies.
+The current `fetch_raw_jobs()` and `normalize(raw_job)` shape is still directionally correct.
 
-## 19. Testing Strategy (v1)
-- **Unit Tests:** Validate deduplication logic, scoring heuristics, connector normalization, rules-based classification, and ATS extraction.
-- **Integration Tests:** Ensure worker tasks correctly transition job states in the database.
-- **E2E/API Tests:** Simulate the API flow from ingestion/scrape to artifact retrieval.
-- **Golden Tests:** Labeled examples validate persona classification accuracy and ATS extraction against fixtures.
+### 4.2 Target payload types
 
-## 20. Future Extensions (not v1)
-The following are out of scope for v1 but the architecture supports:
-- **LLM Persona Classifier:** Optional provider behind the `PersonaClassifier` interface; v1 uses rules-based only.
-- **LLM Content Tailoring:** Light rephrasing to front-load ATS keywords while keeping facts intact; v1 uses selection only, no rewrite.
-- **DOCX Resume Output:** v1 produces PDF only.
-- **Editable Resumes:** Allowing users to tweak the generated markdown/HTML in the UI before final PDF compilation.
-- **Multi-User Support:** Isolating `Experience Inventories` and `Personas` by `user_id` for a SaaS offering.
-- **Additional ATS Connectors:** Pluggable architecture makes it trivial to add Workday, SmartRecruiters, or custom scrapers.
-- **Browser Extension for Discovery:** A lightweight extension to push jobs from LinkedIn directly into the JobBot ingestion queue.
+#### DiscoveredJobPayload
+Used for broad discovery sources.
+Likely fields:
+- source_name
+- external_id
+- title
+- company
+- location
+- description
+- apply_url
+- source_url
+- posted_at
+- raw_payload
+- normalized_title
+- normalized_company
+- normalized_location
+- source_confidence
+- content_quality_score
+
+#### CanonicalJobPayload
+Used for high-confidence provider sources.
+Likely fields:
+- source_name
+- external_id
+- title
+- company
+- location
+- employment_type
+- workplace_type
+- description
+- apply_url
+- source_url
+- posted_at
+- requisition_id
+- department
+- salary_min
+- salary_max
+- salary_currency
+- salary_interval
+- raw_payload
+- normalized_title
+- normalized_company
+- normalized_location
+
+## 5. Data model
+
+The current backbone remains valid:
+- `jobs`
+- `job_sources`
+- `job_analyses`
+- `scrape_runs`
+- artifacts table
+
+The next wave should extend this model instead of replacing it.
+
+### 5.1 `jobs` columns
+
+**Implemented (migration 004):** source_role, source_confidence, canonical_source_name, canonical_external_id, canonical_url, workplace_type, employment_type, department, team, requisition_id, salary_currency, salary_interval, location_structured_json, content_quality_score, generation_eligibility, generation_reason, artifact_ready_at, auto_generated_at, resolution_status, resolution_confidence, stale_flag
+
+**Target (not yet added):**
+- job_url_status
+- apply_url_verified
+- salary_text
+- source_last_seen_at
+- source_updated_at
+- closed_at
+
+### 5.2 `job_sources` columns
+
+Target (not yet added):
+- `source_role`
+- `source_priority`
+- `provider_url`
+- `resolved_from_job_source_id`
+- `last_seen_at`
+- `response_fetched_at`
+- `content_hash`
+- `discovery_query`
+- `search_metadata_json`
+- `raw_description_present`
+- `url_present`
+
+### 5.3 Tables
+
+#### Implemented (migration 004)
+
+**`job_resolution_attempts`** — Records discovery-to-canonical resolution attempts (success/failure, confidence, reason). Used by `POST /api/jobs/{id}/resolve` and `resolve_discovery_job` task.
+
+**`generation_runs`** — Records automatic and manual generation attempts; tracks status, inputs hash, failure reason, artifact linkage.
+
+#### Target (optional)
+
+**`source_configs`**
+Purpose:
+- feature-flag sources
+- manage credentials and rate-limit caps
+- keep source-specific settings out of hardcoded logic
+
+## 6. Deduplication and reconciliation
+
+The current deterministic dedup hash remains useful but is not sufficient by itself once multiple discovery and canonical lanes coexist.
+
+### 6.1 Priority order
+
+1. exact source identity: `(source_name, external_id)`
+2. canonical job URL or apply URL
+3. deterministic hash of normalized company/title/location and requisition ID when available
+4. fuzzy assist for discovery-only cases
+
+### 6.2 Merge rule
+
+Canonical records must be able to absorb weaker discovery records.
+
+Discovery records must not overwrite stronger canonical data.
+
+### 6.3 Resolution rule
+
+When a discovery job resolves to a supported ATS source later, the canonical record becomes the primary job view and the discovery record becomes provenance.
+
+## 7. Pipeline states
+
+### 7.0 Current pipeline states (implemented)
+
+The system uses these states today:
+- `INGESTED`
+- `SCORED`
+- `REJECTED`
+- `CLASSIFIED`
+- `ATS_ANALYZED`
+- `RESUME_READY`
+
+### 7.1 Target pipeline states (aspirational)
+
+Target pipeline states:
+- `DISCOVERED`
+- `NORMALIZED`
+- `DEDUPED`
+- `RESOLUTION_PENDING`
+- `RESOLVED_CANONICAL`
+- `RESOLVED_DISCOVERY_ONLY`
+- `SCORED`
+- `REJECTED`
+- `CLASSIFIED`
+- `ATS_ANALYZED`
+- `GENERATION_QUEUED`
+- `RESUME_READY`
+- `FAILED`
+- `SKIPPED`
+
+### 7.2 Skip reasons
+
+`SKIPPED` must include an explicit reason:
+- low score
+- low content quality
+- unresolved low-confidence discovery result
+- duplicate absorbed
+- missing or invalid apply URL
+- stale job
+- generation threshold not met
+
+## 8. Worker topology
+
+### 8.1 Current baseline queues
+- `default`
+- `scrape`
+- `ingestion`
+
+### 8.2 Target queues
+- `discovery`
+- `ingestion`
+- `resolution`
+- `analysis`
+- `generation`
+- `maintenance`
+
+The migration to this queue model can be incremental, but the target behavior should be clear from the beginning.
+
+## 9. Task graph
+
+### 9.1 Discovery path
+`run_discovery_task`
+-> normalize discovery results
+-> dedup/provenance
+-> `resolve_job_task`
+-> score
+-> classify
+-> ats_match
+-> generation gate
+-> generate resume when eligible
+
+### 9.2 Canonical ingest path
+`ingest_canonical_task`
+-> normalize canonical job
+-> dedup/merge
+-> score
+-> classify
+-> ats_match
+-> generation gate
+-> generate resume when eligible
+
+### 9.3 URL ingest path
+`ingest_url_task`
+-> detect provider
+-> canonical ingest using provider-specific connector
+-> same downstream pipeline
+
+## 10. Generation gate
+
+The generation gate is the throughput control for the entire system.
+
+A job is generation-eligible only when:
+- score threshold met
+- ATS analysis completed
+- description/content quality sufficient
+- apply URL present and usable
+- source confidence acceptable
+- stale flag false
+- no equivalent artifact already exists for unchanged content
+
+Recommended default behavior:
+- canonical ATS jobs: eligible at moderate threshold
+- AGG-1 discovery jobs: eligible only at stricter threshold and sufficient content quality
+- SERP-only unresolved jobs: not eligible by default
+
+## 11. API design
+
+### 11.1 Keep and generalize current routes
+The current baseline already includes jobs, artifacts, runs, and manual generate-resume routes.
+
+### 11.2 Routes (implemented unless noted)
+
+#### `POST /api/jobs/run-ingestion` — implemented
+Generalized canonical-source ingestion.
+Supported connectors: greenhouse, lever, ashby
+
+#### `POST /api/jobs/run-discovery` — implemented
+Broad discovery ingestion.
+Supported connectors: agg1, optional serp1 (feature-flagged)
+
+#### `POST /api/jobs/ingest-url` — implemented
+Deterministic ATS URL ingest.
+Supported providers: greenhouse, lever, ashby
+
+#### `POST /api/jobs/{id}/resolve` — implemented
+Force canonical enrichment attempt for a discovery record. Records attempts in `job_resolution_attempts`.
+
+#### `POST /api/jobs/{id}/generate-resume` — implemented
+Manual override and regeneration.
+
+#### `GET /api/jobs/ready-to-apply` — implemented
+Primary backend feed for the default workflow.
+
+#### expanded `GET /api/jobs`
+Should support filters for:
+- source role
+- source confidence
+- generation eligibility
+- artifact-ready
+- canonical source
+- workplace type
+- needs-resolution
+- include rejected/skipped when debugging
+
+## 12. UI architecture
+
+The UI should shift from review-centric to throughput-centric.
+
+### 12.1 Primary views
+- Ready to Apply
+- Promising / In Progress
+- Needs Resolution
+- All Jobs / Debug
+- Runs
+
+### 12.2 Job detail page
+Must show:
+- source stack / provenance
+- canonical vs discovery status
+- score breakdown
+- ATS gaps
+- generation status
+- artifact download
+- apply link
+
+### 12.3 URL ingest
+A top-level entry point should allow pasting a supported ATS job URL.
+
+## 13. Source-specific rules
+
+### 13.1 Greenhouse — implemented
+Canonical baseline. Generalizes into the broader canonical-source model.
+
+### 13.2 Lever — implemented
+Official ATS connector. Treat as canonical source.
+
+### 13.3 Ashby — implemented
+Official ATS connector. Treat as canonical source.
+
+### 13.4 AGG-1 — implemented
+Structured broad discovery lane. Treat as discovery, not canonical truth.
+Query-driven retrieval; feature-flagged (`ENABLE_AGG1_DISCOVERY`).
+
+### 13.5 SERP provider — implemented (stub)
+Optional and feature-flagged (`ENABLE_SERP1_DISCOVERY`).
+Treat as discovery-only and lower-confidence.
+Stub returns empty; full implementation optional.
+
+## 14. Observability
+
+Add explicit metrics for:
+- ingestion volume by source
+- resolution success rate
+- dedup absorption rate
+- generation eligibility rate
+- generation success/failure rate
+- stale URL rate
+- jobs ready-to-apply per day
+
+Add structured logging context for:
+- `trace_id`
+- `job_id`
+- `source_name`
+- `source_role`
+- `run_id`
+- `generation_run_id`
+
+## 15. Failure handling
+
+The system should fail explicitly and observably.
+
+Required behaviors:
+- retry transient network/provider errors with backoff
+- record resolution failures separately from generation failures
+- keep discovery-only low-confidence jobs from silently auto-generating
+- mark stale or invalid apply URLs explicitly
+
+## 16. Implementation constraints
+
+These constraints are mandatory:
+- no auto-apply
+- no browser automation
+- no generic arbitrary crawling in the first implementation wave
+- do not treat SERP/discovery-only records as equivalent to canonical ATS records
+- keep rollout incremental and feature-flagged where appropriate
+
+## 17. Rollout shape
+
+**Implementation order** (phases 2–5 implemented; see `IMPLEMENTATION_PLAN.md`):
+1. documentation refresh
+2. DB/model foundation — implemented
+3. official ATS expansion + URL ingest — implemented
+4. AGG-1 discovery lane (SERP optional, feature-flagged) — implemented
+5. generation gate + automatic artifact flow — implemented
+6. UI ready-to-apply rework — partially implemented
+
+**Do not touch:** SERP as canonical truth; auto-apply or browser automation; generic arbitrary crawling. See `IMPLEMENTATION_PLAN.md` §2.
+
+## 18. Definition of done (mostly satisfied)
+
+The following are implemented:
+- source roles are explicit in the model and APIs
+- Greenhouse, Lever, and Ashby work as canonical connectors
+- supported ATS URL ingest works
+- AGG-1 discovery works (feature-flagged)
+- generation is automated for eligible jobs when `ENABLE_AUTO_RESUME_GENERATION=true`
+- ready-to-apply feed exists
+- manual application remains the final step
+
+**Still remaining:** full target pipeline states; UI polish.

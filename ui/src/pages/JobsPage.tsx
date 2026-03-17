@@ -6,11 +6,13 @@ import {
   type Job,
 } from "../api";
 import JobTable from "../components/JobTable";
+import EmptyState from "../components/EmptyState";
+import { Link } from "react-router-dom";
 import { notifyError } from "../notify";
 
 const STATUSES = ["ALL", "NEW", "SAVED", "APPLIED", "ARCHIVED"];
 const PERSONAS = ["", "BACKEND", "PLATFORM_INFRA", "HYBRID"];
-const SOURCES = ["", "jobspy", "greenhouse", "wellfound", "builtinnyc", "yc"];
+const SOURCES = ["", "jobspy", "greenhouse", "lever", "ashby", "agg1", "serp1", "wellfound", "builtinnyc", "yc"];
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -245,6 +247,27 @@ export default function JobsPage() {
           <div className="h-4 w-full animate-pulse rounded bg-gray-200" />
           <div className="h-4 w-5/6 animate-pulse rounded bg-gray-200" />
         </div>
+      ) : jobs.length === 0 ? (
+        <EmptyState
+          title="No jobs yet"
+          description="Run a scrape, discovery, or paste a job URL from the Ready to Apply page. Jobs will appear here as they are ingested and scored."
+          action={
+            <div className="flex flex-wrap gap-3 justify-center">
+              <Link
+                to="/ready"
+                className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 no-underline"
+              >
+                Ready to Apply
+              </Link>
+              <Link
+                to="/runs"
+                className="rounded border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 no-underline"
+              >
+                Runs
+              </Link>
+            </div>
+          }
+        />
       ) : (
         <JobTable
           jobs={jobs}

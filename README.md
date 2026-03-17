@@ -2,20 +2,28 @@
 
 JobBot is a local-first job discovery and decision-support tool.
 
-Current implemented scope:
-- scrape jobs (JobSpy) and ingest via connectors (Greenhouse)
-- store, score, and rank jobs
-- run ATS keyword extraction and ATS match scoring
-- generate job-specific resume artifacts from your experience inventory and skills data
-- support manual operator review workflows
+## Implemented scope
 
-Auto-apply is intentionally **not** part of the current product scope. Users manually apply via the job URL.
+**Ingestion:**
+- **Canonical ATS:** Greenhouse, Lever, Ashby
+- **Discovery:** JobSpy (scrape), AGG-1, SERP1 (latter two feature-flagged)
+- **URL ingest:** supported ATS job URLs (Greenhouse, Lever, Ashby)
+
+**Processing:** store, score, classify, ATS analysis; generation gate (auto-generate for eligible jobs when enabled)
+
+**Output:** job-specific resume artifacts; ready-to-apply queue; manual apply via job URL
+
+**Non-goals:** auto-apply, browser automation; final application step is always manual.
 
 ## Documentation
 
 - Product behavior and boundaries: `docs/SPEC.md`
 - System components and data flow: `docs/ARCHITECTURE.md`
 - Active backlog and roadmap: `docs/TODO.md`
+- PR boundaries and implementation order: `docs/IMPLEMENTATION_PLAN.md`
+- Coding-agent operating instructions: `docs/CODING_AGENT_GUIDE.md`
+
+See `docs/README.md` for the authoritative docs index and current-system summary.
 
 ## Prerequisites
 
@@ -60,30 +68,41 @@ PYTHONPATH=. celery -A apps.worker.celery_app worker -P solo -l info -Q default,
 cd ui && npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-## Ingestion Paths
+## Ingestion paths
 
-Two ways to bring jobs into the pipeline:
+| Path | Endpoint | Role | Use case |
+|------|----------|------|----------|
+| **JobSpy scrape** | `POST /api/jobs/run-scrape` | Discovery | Scrapes job boards via JobSpy. Uses `.env` defaults or optional body params. |
+| **Canonical ATS** | `POST /api/jobs/run-ingestion` | Canonical | Greenhouse, Lever, Ashby. Requires connector-specific params (e.g. `board_token` for greenhouse, `client_name` for lever). |
+| **Broad discovery** | `POST /api/jobs/run-discovery` | Discovery | AGG-1 or SERP1. Feature-flagged (`ENABLE_AGG1_DISCOVERY`, `ENABLE_SERP1_DISCOVERY`). |
+| **URL ingest** | `POST /api/jobs/ingest-url` | Canonical | Paste supported Greenhouse/Lever/Ashby job URL. Feature-flagged (`URL_INGEST_ENABLED`). |
 
-| Path | Endpoint | Use case |
-|------|----------|----------|
-| **JobSpy scrape** | `POST /api/jobs/run-scrape` | Scrapes job boards (Glassdoor, LinkedIn, etc.) via JobSpy. Uses defaults from `.env` or optional body params. |
-| **Greenhouse connector** | `POST /api/jobs/run-ingestion` | Fetches from Greenhouse ATS API. Requires `board_token` and `company_name`. |
+All paths run score → classify → ATS analysis. Resume generation: manual via `POST /api/jobs/{id}/generate-resume`, or automatic when `ENABLE_AUTO_RESUME_GENERATION=true` and the job passes the generation gate.
 
-Both paths enqueue Celery tasks that run score → classify → ATS analysis. Resume generation is manual: `POST /api/jobs/{id}/generate-resume`.
-
-### Trigger JobSpy scrape
+### Example: JobSpy scrape
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/jobs/run-scrape
 # Optional body: {"query":"backend engineer","location":"Remote","hours_old":48,"results_wanted":50}
 ```
 
-### Trigger Greenhouse ingestion
+### Example: Canonical ATS ingestion
 
 ```bash
+# Greenhouse
 curl -X POST http://127.0.0.1:8000/api/jobs/run-ingestion \
   -H "Content-Type: application/json" \
   -d '{"connector":"greenhouse","board_token":"acme","company_name":"Acme Corp"}'
+
+# Lever (requires client_name)
+curl -X POST http://127.0.0.1:8000/api/jobs/run-ingestion \
+  -H "Content-Type: application/json" \
+  -d '{"connector":"lever","company_name":"Acme","client_name":"acme"}'
+
+# Ashby (requires job_board_name)
+curl -X POST http://127.0.0.1:8000/api/jobs/run-ingestion \
+  -H "Content-Type: application/json" \
+  -d '{"connector":"ashby","company_name":"Acme","job_board_name":"acme"}'
 ```
 
 ### Seed data (quick start)
@@ -96,17 +115,19 @@ bash scripts/seed.sh
 
 Runs `POST /api/jobs/run-scrape` and waits for completion.
 
-## Useful Endpoints
+## Useful endpoints
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/health` | Health check |
 | `GET /api/jobs` | List jobs (supports user_status, pipeline_status, persona filters) |
+| `GET /api/jobs/ready-to-apply` | Jobs with artifact ready for manual apply (default operational view) |
 | `GET /api/jobs/{id}` | Job detail with scores, persona, ATS gaps |
 | `PUT /api/jobs/{id}/status` | Update user workflow status (SAVED, APPLIED, ARCHIVED) |
-| `POST /api/jobs/{id}/generate-resume` | Trigger tailored resume generation |
+| `POST /api/jobs/{id}/resolve` | Trigger discovery-to-canonical resolution (discovery jobs only) |
+| `POST /api/jobs/{id}/generate-resume` | Trigger tailored resume generation (manual override) |
 | `GET /api/jobs/{id}/artifacts` | List artifacts for a job |
-| `GET /api/runs` | List scrape/ingest runs |
+| `GET /api/runs` | List scrape/ingest/discovery runs |
 | `GET /api/runs/{id}` | Run detail |
 | `GET /api/debug/failures` | Recent task failures (debug-only; requires `DEBUG_ENDPOINTS_ENABLED=true`) |
 | `WS /ws/logs` | WebSocket log stream (debug-only; requires `DEBUG_ENDPOINTS_ENABLED=true`) |

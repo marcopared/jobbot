@@ -11,8 +11,10 @@ from core.db.models import (
     Company,
     Job,
     JobSourceRecord,
+    ResolutionStatus,
     ScrapeRun,
     ScrapeRunStatus,
+    SourceRole,
 )
 from core.db.session import get_sync_session
 from core.dedup import normalize_company, normalize_location, normalize_title
@@ -24,9 +26,26 @@ from apps.worker.celery_app import celery_app
 from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
+from apps.worker.tasks.generation import evaluate_generation_gate
 
 settings = Settings()
 logger = logging.getLogger(__name__)
+
+
+def _compute_jobspy_source_confidence(
+    description: str | None,
+    apply_url: str | None,
+    location: str | None,
+) -> float:
+    """Heuristic for JobSpy discovery: base 0.5 + bonuses. Matches discovery lane."""
+    score = 0.5
+    if description and len(description) > 100:
+        score += 0.2
+    if apply_url:
+        score += 0.2
+    if location:
+        score += 0.1
+    return min(score, 1.0)
 
 
 def _publish_log(level: str, message: str, run_id: str | None = None) -> None:
@@ -172,6 +191,12 @@ def scrape_jobspy(
                 score_total=0.0,
                 source_payload_json=nj.raw_payload,
                 dedup_hash=dedup_hash,
+                # JobSpy is a discovery source; set provenance for generation gate
+                source_role=SourceRole.DISCOVERY.value,
+                source_confidence=_compute_jobspy_source_confidence(
+                    nj.description, nj.apply_url, nj.location
+                ),
+                resolution_status=ResolutionStatus.PENDING.value,
             )
                 .on_conflict_do_nothing(index_elements=["dedup_hash"])
                 .returning(Job.id)
@@ -289,9 +314,9 @@ def scrape_jobspy(
         f"Scrape finished fetched={result.stats.get('fetched', 0)} inserted={inserted} duplicates={duplicates}",
         run_id=run_id,
     )
-    (score_jobs.s() | classify_jobs.s() | ats_match_resume.si()).delay()
+    (score_jobs.s() | classify_jobs.s() | ats_match_resume.s() | evaluate_generation_gate.s()).delay()
     logger.debug(
-        "Queued post-scrape chain score_jobs -> classify_jobs -> ats_match_resume for run_id=%s",
+        "Queued post-scrape chain score -> classify -> ats_match -> generation_gate for run_id=%s",
         run_id,
     )
     return {

@@ -410,8 +410,241 @@ async def test_artifact_preview_404(client):
     assert resp.status_code == 404
 
 
+async def test_run_ingestion_greenhouse_success(client):
+    """POST /api/jobs/run-ingestion with connector=greenhouse returns run_id and task_id."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={
+            "connector": "greenhouse",
+            "board_token": "acme",
+            "company_name": "Acme Corp",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "run_id" in data
+    assert "task_id" in data
+    assert data.get("status") == "RUNNING"
+
+
+async def test_run_ingestion_lever_requires_client_name(client):
+    """POST /api/jobs/run-ingestion with connector=lever requires client_name."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={"connector": "lever", "company_name": "Acme"},
+    )
+    assert resp.status_code == 400
+    assert "client_name" in resp.json().get("detail", "").lower()
+
+
+async def test_run_ingestion_ashby_requires_job_board_name(client):
+    """POST /api/jobs/run-ingestion with connector=ashby requires job_board_name."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={"connector": "ashby", "company_name": "Acme"},
+    )
+    assert resp.status_code == 400
+    assert "job_board_name" in resp.json().get("detail", "").lower()
+
+
+async def test_run_ingestion_unsupported_connector(client):
+    """POST /api/jobs/run-ingestion with invalid connector returns 422 (Pydantic validation)."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={
+            "connector": "unknown",
+            "board_token": "x",
+            "company_name": "X",
+        },
+    )
+    assert resp.status_code == 422
+
+
+async def test_ingest_url_unsupported_returns_400(client):
+    """POST /api/jobs/ingest-url with unsupported URL returns 400."""
+    resp = await client.post(
+        "/api/jobs/ingest-url",
+        json={"url": "https://example.com/jobs/123"},
+    )
+    assert resp.status_code == 400
+    assert "unsupported" in resp.json().get("detail", "").lower() or "supported" in resp.json().get("detail", "").lower()
+
+
+async def test_ingest_url_supported_accepts(client):
+    """POST /api/jobs/ingest-url with supported URL returns run_id and task_id."""
+    resp = await client.post(
+        "/api/jobs/ingest-url",
+        json={"url": "https://boards.greenhouse.io/acme/jobs/127817"},
+    )
+    # 403 if URL_INGEST_ENABLED=false; 200 otherwise
+    assert resp.status_code in (200, 403)
+    if resp.status_code == 200:
+        data = resp.json()
+        assert "run_id" in data
+        assert "task_id" in data
+        assert data.get("provider") == "greenhouse"
+
+
+async def test_run_ingestion_greenhouse_requires_board_token(client):
+    """POST run-ingestion with greenhouse requires board_token."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={"connector": "greenhouse", "company_name": "Acme"},
+    )
+    assert resp.status_code == 400
+    assert "board_token" in resp.json().get("detail", "")
+
+
 async def test_health(client):
     """GET /api/health returns ok."""
     resp = await client.get("/api/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
+
+
+# --- Ingestion route tests (PR 3: ATS expansion) ---
+
+
+async def test_run_ingestion_greenhouse_accepts_body(client):
+    """POST /api/jobs/run-ingestion with connector=greenhouse enqueues task."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={
+            "connector": "greenhouse",
+            "board_token": "acme",
+            "company_name": "Acme Corp",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "run_id" in data
+    assert "task_id" in data
+    assert data.get("status") == "RUNNING"
+
+
+async def test_run_ingestion_lever_requires_client_name(client):
+    """POST /api/jobs/run-ingestion with connector=lever returns 400 when client_name missing."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={
+            "connector": "lever",
+            "company_name": "Acme",
+        },
+    )
+    assert resp.status_code == 400
+    assert "client_name" in resp.json().get("detail", "").lower()
+
+
+async def test_run_ingestion_ashby_requires_job_board_name(client):
+    """POST /api/jobs/run-ingestion with connector=ashby returns 400 when job_board_name missing."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={
+            "connector": "ashby",
+            "company_name": "Acme",
+        },
+    )
+    assert resp.status_code == 400
+    assert "job_board_name" in resp.json().get("detail", "").lower()
+
+
+async def test_run_ingestion_unsupported_connector_returns_400(client):
+    """POST /api/jobs/run-ingestion with unsupported connector returns 400 or 422."""
+    resp = await client.post(
+        "/api/jobs/run-ingestion",
+        json={
+            "connector": "unknown",
+            "company_name": "Acme",
+        },
+    )
+    assert resp.status_code in (400, 422)
+
+
+async def test_ingest_url_unsupported_returns_400(client):
+    """POST /api/jobs/ingest-url with unsupported URL returns 400."""
+    resp = await client.post(
+        "/api/jobs/ingest-url",
+        json={"url": "https://example.com/jobs/123"},
+    )
+    assert resp.status_code == 400
+    assert "unsupported" in resp.json().get("detail", "").lower() or "supported" in resp.json().get("detail", "").lower()
+
+
+async def test_ingest_url_supported_returns_200(client):
+    """POST /api/jobs/ingest-url with supported Greenhouse URL enqueues task."""
+    resp = await client.post(
+        "/api/jobs/ingest-url",
+        json={"url": "https://boards.greenhouse.io/acme/jobs/127817"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "run_id" in data
+    assert "task_id" in data
+    assert data.get("provider") == "greenhouse"
+
+
+# --- Discovery route tests (PR 4) ---
+
+
+async def test_run_discovery_agg1_returns_200_when_enabled(client, monkeypatch):
+    """POST /api/jobs/run-discovery with connector=agg1 returns run_id when enabled."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "enable_agg1_discovery", True)
+    resp = await client.post(
+        "/api/jobs/run-discovery",
+        json={"connector": "agg1", "query": "engineer", "location": "San Francisco"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "run_id" in data
+    assert "task_id" in data
+    assert data.get("status") == "RUNNING"
+    assert data.get("connector") == "agg1"
+
+
+async def test_run_discovery_agg1_returns_403_when_disabled(client):
+    """POST /api/jobs/run-discovery with connector=agg1 returns 403 when disabled."""
+    resp = await client.post(
+        "/api/jobs/run-discovery",
+        json={"connector": "agg1"},
+    )
+    # Default enable_agg1_discovery=False
+    assert resp.status_code == 403
+    assert "disabled" in resp.json().get("detail", "").lower() or "agg1" in resp.json().get("detail", "").lower()
+
+
+async def test_run_discovery_serp1_returns_403_when_disabled(client):
+    """POST /api/jobs/run-discovery with connector=serp1 returns 403 when disabled."""
+    resp = await client.post(
+        "/api/jobs/run-discovery",
+        json={"connector": "serp1"},
+    )
+    assert resp.status_code == 403
+    assert "disabled" in resp.json().get("detail", "").lower() or "serp1" in resp.json().get("detail", "").lower()
+
+
+async def test_run_discovery_serp1_returns_200_when_enabled(client, monkeypatch):
+    """POST /api/jobs/run-discovery with connector=serp1 enqueues task when enabled (stub returns empty)."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "enable_serp1_discovery", True)
+    resp = await client.post(
+        "/api/jobs/run-discovery",
+        json={"connector": "serp1", "query": "engineer", "location": "Remote"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "run_id" in data
+    assert "task_id" in data
+    assert data.get("status") == "RUNNING"
+    assert data.get("connector") == "serp1"
+
+
+async def test_run_discovery_unsupported_connector_returns_422(client):
+    """POST /api/jobs/run-discovery with invalid connector returns 422."""
+    resp = await client.post(
+        "/api/jobs/run-discovery",
+        json={"connector": "unknown"},
+    )
+    assert resp.status_code == 422

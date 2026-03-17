@@ -14,16 +14,20 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from apps.api.settings import Settings
-from core.connectors.base import CanonicalJobPayload
+from core.connectors.base import CanonicalJobPayload, FetchResult, RawJobWithProvenance
+from core.connectors.ashby import create_ashby_connector
 from core.connectors.greenhouse import create_greenhouse_connector
+from core.connectors.lever import create_lever_connector
+from core.connectors.url_provider import parse_supported_url
 from core.dedup import canonicalize_apply_url, compute_dedup_hash, format_similarity_diagnostic
-from core.db.models import Job, JobSourceRecord, ScrapeRun, ScrapeRunStatus
+from core.db.models import Job, JobSourceRecord, ScrapeRun, ScrapeRunStatus, SourceRole
 from core.db.session import get_sync_session
 
 from apps.worker.celery_app import celery_app
 from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
+from apps.worker.tasks.generation import evaluate_generation_gate
 
 from core.observability import log_context, get_metrics
 from core.observability.metrics import TaskTimer
@@ -320,9 +324,9 @@ def ingest_greenhouse(
         run_id=run_id,
     )
     if inserted_job_ids:
-        (score_jobs.s(inserted_job_ids) | classify_jobs.s() | ats_match_resume.s()).delay()
+        (score_jobs.s(inserted_job_ids) | classify_jobs.s() | ats_match_resume.s() | evaluate_generation_gate.s()).delay()
     logger.debug(
-        "Queued post-ingest chain score_jobs -> classify_jobs -> ats_match_resume for run_id=%s",
+        "Queued post-ingest chain score -> classify -> ats_match -> generation_gate for run_id=%s",
         run_id,
     )
     return {
@@ -334,3 +338,425 @@ def ingest_greenhouse(
             "duplicates": duplicates,
         },
     }
+
+
+def _run_canonical_ingest(
+    run_id: str,
+    source_name: str,
+    connector,
+    result,
+    task_name: str,
+    source_role_override: SourceRole | None = None,
+) -> dict:
+    """
+    Shared persist+chain logic for canonical connectors.
+    Returns status dict. Caller handles fetch and error paths.
+    """
+    if result.error:
+        with get_sync_session() as session:
+            run = session.get(ScrapeRun, UUID(run_id))
+            if run:
+                run.status = ScrapeRunStatus.FAILED.value
+                run.finished_at = datetime.now(timezone.utc)
+                run.error_text = result.error
+                run.stats_json = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 1}
+                run.items_json = []
+                session.commit()
+        return {"run_id": run_id, "status": "FAILED", "error": result.error}
+
+    inserted = 0
+    duplicates = 0
+    inserted_job_ids: list[str] = []
+    run_items: list[dict] = []
+
+    with get_sync_session() as session:
+        apply_url_to_job_id: dict[str, UUID] = {}
+        for row in session.execute(
+            select(Job.id, Job.apply_url).where(Job.apply_url.isnot(None))
+        ).all():
+            job_id, apply_url = row[0], row[1]
+            if apply_url:
+                canonical_url = canonicalize_apply_url(apply_url)
+                if canonical_url and canonical_url not in apply_url_to_job_id:
+                    apply_url_to_job_id[canonical_url] = job_id
+
+        for index, raw_with_prov in enumerate(result.raw_jobs, start=1):
+            raw_job = raw_with_prov.raw_payload
+            canonical = connector.normalize(raw_job)
+            if canonical is None:
+                run_items.append(
+                    {
+                        "index": index,
+                        "outcome": "skipped",
+                        "reason": "normalize_failed",
+                        "external_id": str(raw_job.get("id", raw_job.get("jobUrl", ""))),
+                    }
+                )
+                continue
+
+            url_for_dedup = canonical.apply_url or canonical.source_url or ""
+            canonical_apply_url = canonicalize_apply_url(url_for_dedup)
+            dedup_hash = compute_dedup_hash(
+                normalized_company=canonical.normalized_company,
+                normalized_title=canonical.normalized_title,
+                normalized_location=canonical.normalized_location or "",
+                apply_url=url_for_dedup or None,
+            )
+            provenance = raw_with_prov.provenance
+
+            job_id_for_source: UUID | None = None
+            inserted_job_id: UUID | None = None
+            existing_job: tuple | None = None
+            dedup_reason: str = "inserted"
+            if canonical_apply_url and canonical_apply_url in apply_url_to_job_id:
+                job_id_for_source = apply_url_to_job_id[canonical_apply_url]
+                dedup_reason = "exact_url"
+                existing_job = (job_id_for_source,)
+
+            if job_id_for_source is None:
+                stmt = (
+                    insert(Job)
+                    .values(
+                        source=source_name,
+                        source_role=(source_role_override or SourceRole.CANONICAL).value,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        raw_title=canonical.title,
+                        normalized_title=canonical.normalized_title,
+                        raw_company=canonical.company,
+                        normalized_company=canonical.normalized_company,
+                        company_name_raw=canonical.company,
+                        raw_location=canonical.location,
+                        normalized_location=canonical.normalized_location,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url or "",
+                        apply_url=canonical.apply_url,
+                        description=canonical.description,
+                        posted_at=canonical.posted_at,
+                        ats_type=source_name,
+                        status="NEW",
+                        user_status="NEW",
+                        pipeline_status="INGESTED",
+                        score_total=0.0,
+                        source_payload_json=canonical.raw_payload,
+                        dedup_hash=dedup_hash,
+                    )
+                    .on_conflict_do_nothing(index_elements=["dedup_hash"])
+                    .returning(Job.id)
+                )
+                inserted_job_id = session.execute(stmt).scalar_one_or_none()
+                job_id_for_source = inserted_job_id
+                existing_job = None
+                if inserted_job_id is None:
+                    existing_job = (
+                        session.execute(
+                            select(Job.id).where(Job.dedup_hash == dedup_hash)
+                        ).first()
+                    )
+                    if existing_job:
+                        job_id_for_source = existing_job[0]
+                        dedup_reason = "dedup_hash"
+
+            if job_id_for_source is not None:
+                provenance_meta = {
+                    "fetch_timestamp": provenance.fetch_timestamp,
+                    "source_url": provenance.source_url,
+                    "connector_version": provenance.connector_version,
+                }
+                session.execute(
+                    insert(JobSourceRecord)
+                    .values(
+                        job_id=job_id_for_source,
+                        source_name=source_name,
+                        external_id=canonical.external_id,
+                        raw_data=canonical.raw_payload,
+                        provenance_metadata=provenance_meta,
+                    )
+                    .on_conflict_do_nothing(index_elements=["source_name", "external_id"])
+                )
+
+            if inserted_job_id is not None:
+                inserted += 1
+                inserted_job_ids.append(str(inserted_job_id))
+                if canonical_apply_url and job_id_for_source:
+                    apply_url_to_job_id[canonical_apply_url] = job_id_for_source
+                run_items.append(
+                    {
+                        "index": index,
+                        "outcome": "inserted",
+                        "dedup_reason": dedup_reason,
+                        "job_id": str(inserted_job_id),
+                        "dedup_hash": dedup_hash,
+                        "external_id": canonical.external_id,
+                        "title": canonical.title,
+                        "company": canonical.company,
+                        "location": canonical.location,
+                        "apply_url": canonical.apply_url,
+                    }
+                )
+            else:
+                duplicates += 1
+                existing_job_id = str(existing_job[0]) if existing_job else None
+                run_items.append(
+                    {
+                        "index": index,
+                        "outcome": "duplicate",
+                        "dedup_reason": dedup_reason,
+                        "job_id": existing_job_id,
+                        "dedup_hash": dedup_hash,
+                        "external_id": canonical.external_id,
+                        "title": canonical.title,
+                        "company": canonical.company,
+                        "location": canonical.location,
+                        "apply_url": canonical.apply_url,
+                    }
+                )
+
+        run = session.get(ScrapeRun, UUID(run_id))
+        if run:
+            run.status = ScrapeRunStatus.SUCCESS.value
+            run.finished_at = datetime.now(timezone.utc)
+            run.stats_json = {
+                "fetched": result.stats.get("fetched", 0),
+                "inserted": inserted,
+                "duplicates": duplicates,
+                "errors": result.stats.get("errors", 0),
+            }
+            run.items_json = run_items
+            session.commit()
+
+    get_metrics().increment("jobs.ingested", value=inserted, tags=[f"source:{source_name}"])
+    get_metrics().increment("duplicates.suppressed", value=duplicates, tags=[f"source:{source_name}"])
+    if inserted_job_ids:
+        (score_jobs.s(inserted_job_ids) | classify_jobs.s() | ats_match_resume.s() | evaluate_generation_gate.s()).delay()
+    return {
+        "run_id": run_id,
+        "status": "SUCCESS",
+        "stats": {
+            "fetched": result.stats.get("fetched", 0),
+            "inserted": inserted,
+            "duplicates": duplicates,
+        },
+    }
+
+
+@celery_app.task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    acks_late=True,
+)
+def ingest_lever(self, run_id: str, client_name: str, company_name: str):
+    """Fetch Lever jobs, normalize, persist. Same pipeline as Greenhouse."""
+    with log_context(run_id=run_id, source_name="lever", task_name="ingest_lever"):
+        if not settings.lever_enabled:
+            return {"status": "skipped", "reason": "LEVER_ENABLED=false"}
+        connector = create_lever_connector(
+            client_name=client_name.strip(),
+            company_name=company_name.strip() or None,
+        )
+        _publish_log("INFO", f"Lever ingest started client={client_name}", run_id=run_id)
+        try:
+            with TaskTimer("ingestion.latency", tags=["source:lever"]):
+                result = connector.fetch_raw_jobs()
+        except Exception as e:
+            get_metrics().increment("ingestion.failure", tags=["source:lever"])
+            _publish_log("ERROR", f"Lever fetch failed: {e}", run_id=run_id)
+            try:
+                raise self.retry(exc=e)
+            except self.MaxRetriesExceededError:
+                with get_sync_session() as session:
+                    run = session.get(ScrapeRun, UUID(run_id))
+                    if run:
+                        run.status = ScrapeRunStatus.FAILED.value
+                        run.finished_at = datetime.now(timezone.utc)
+                        run.error_text = str(e)
+                        run.stats_json = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 1}
+                        run.items_json = []
+                        session.commit()
+                raise
+        return _run_canonical_ingest(
+            run_id=run_id,
+            source_name="lever",
+            connector=connector,
+            result=result,
+            task_name="ingest_lever",
+        )
+
+
+@celery_app.task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    acks_late=True,
+)
+def ingest_ashby(self, run_id: str, job_board_name: str, company_name: str):
+    """Fetch Ashby jobs, normalize, persist. Same pipeline as Greenhouse."""
+    with log_context(run_id=run_id, source_name="ashby", task_name="ingest_ashby"):
+        if not settings.ashby_enabled:
+            return {"status": "skipped", "reason": "ASHBY_ENABLED=false"}
+        connector = create_ashby_connector(
+            job_board_name=job_board_name.strip(),
+            company_name=company_name.strip() or None,
+        )
+        _publish_log("INFO", f"Ashby ingest started board={job_board_name}", run_id=run_id)
+        try:
+            with TaskTimer("ingestion.latency", tags=["source:ashby"]):
+                result = connector.fetch_raw_jobs()
+        except Exception as e:
+            get_metrics().increment("ingestion.failure", tags=["source:ashby"])
+            _publish_log("ERROR", f"Ashby fetch failed: {e}", run_id=run_id)
+            try:
+                raise self.retry(exc=e)
+            except self.MaxRetriesExceededError:
+                with get_sync_session() as session:
+                    run = session.get(ScrapeRun, UUID(run_id))
+                    if run:
+                        run.status = ScrapeRunStatus.FAILED.value
+                        run.finished_at = datetime.now(timezone.utc)
+                        run.error_text = str(e)
+                        run.stats_json = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 1}
+                        run.items_json = []
+                        session.commit()
+                raise
+        return _run_canonical_ingest(
+            run_id=run_id,
+            source_name="ashby",
+            connector=connector,
+            result=result,
+            task_name="ingest_ashby",
+        )
+
+
+@celery_app.task(
+    bind=True,
+    max_retries=3,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=600,
+    retry_jitter=True,
+    acks_late=True,
+)
+def ingest_url(self, run_id: str, url: str):
+    """Ingest single job from supported ATS URL. Fetches all, filters to match."""
+    from core.connectors.base import FetchResult, RawJobWithProvenance
+
+    with log_context(run_id=run_id, source_name="url_ingest", task_name="ingest_url"):
+        if not settings.url_ingest_enabled:
+            return {"status": "skipped", "reason": "URL_INGEST_ENABLED=false"}
+        parsed = parse_supported_url(url)
+        if parsed is None:
+            with get_sync_session() as session:
+                run = session.get(ScrapeRun, UUID(run_id))
+                if run:
+                    run.status = ScrapeRunStatus.FAILED.value
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.error_text = "Unsupported job URL"
+                    run.stats_json = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 1}
+                    run.items_json = []
+                    session.commit()
+            return {"run_id": run_id, "status": "FAILED", "error": "Unsupported job URL"}
+
+        if parsed.provider == "greenhouse":
+            connector = create_greenhouse_connector(
+                board_token=parsed.board_token or "",
+                company_name=parsed.board_token or "",
+            )
+        elif parsed.provider == "lever":
+            connector = create_lever_connector(
+                client_name=parsed.client_name or "",
+                company_name=parsed.client_name or None,
+            )
+        elif parsed.provider == "ashby":
+            connector = create_ashby_connector(
+                job_board_name=parsed.job_board_name or "",
+                company_name=parsed.job_board_name or None,
+            )
+        else:
+            with get_sync_session() as session:
+                run = session.get(ScrapeRun, UUID(run_id))
+                if run:
+                    run.status = ScrapeRunStatus.FAILED.value
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.error_text = "Unsupported provider"
+                    run.stats_json = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 1}
+                    run.items_json = []
+                    session.commit()
+            return {"run_id": run_id, "status": "FAILED", "error": "Unsupported provider"}
+
+        try:
+            with TaskTimer("ingestion.latency", tags=["source:url_ingest"]):
+                result = connector.fetch_raw_jobs()
+        except Exception as e:
+            get_metrics().increment("ingestion.failure", tags=["source:url_ingest"])
+            _publish_log("ERROR", f"URL ingest fetch failed: {e}", run_id=run_id)
+            with get_sync_session() as session:
+                run = session.get(ScrapeRun, UUID(run_id))
+                if run:
+                    run.status = ScrapeRunStatus.FAILED.value
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.error_text = str(e)
+                    run.stats_json = {"fetched": 0, "inserted": 0, "duplicates": 0, "errors": 1}
+                    run.items_json = []
+                    session.commit()
+            return {"run_id": run_id, "status": "FAILED", "error": str(e)}
+
+        if result.error:
+            return _run_canonical_ingest(
+                run_id=run_id,
+                source_name=parsed.provider,
+                connector=connector,
+                result=result,
+                task_name="ingest_url",
+                source_role_override=SourceRole.URL_INGEST,
+            )
+
+        # Filter to job matching URL
+        matching: list = []
+        for rw in result.raw_jobs:
+            raw = rw.raw_payload
+            if parsed.provider == "greenhouse":
+                if str(raw.get("id")) == parsed.job_id:
+                    matching.append(rw)
+                    break
+            elif parsed.provider == "lever":
+                if raw.get("id") == parsed.job_id or (raw.get("hostedUrl") or "").rstrip("/").endswith(f"/{parsed.job_id}"):
+                    matching.append(rw)
+                    break
+            elif parsed.provider == "ashby":
+                job_url = raw.get("jobUrl") or ""
+                if parsed.job_id in job_url or job_url.rstrip("/").endswith(f"/{parsed.job_slug}"):
+                    matching.append(rw)
+                    break
+
+        filtered = FetchResult(
+            raw_jobs=matching,
+            stats={"fetched": len(matching), "errors": 0},
+            error=None,
+        )
+        if not matching:
+            with get_sync_session() as session:
+                run = session.get(ScrapeRun, UUID(run_id))
+                if run:
+                    run.status = ScrapeRunStatus.FAILED.value
+                    run.finished_at = datetime.now(timezone.utc)
+                    run.error_text = "Job not found at URL"
+                    run.stats_json = {"fetched": result.stats.get("fetched", 0), "inserted": 0, "duplicates": 0, "errors": 0}
+                    run.items_json = [{"outcome": "not_found", "url": url}]
+                    session.commit()
+            return {"run_id": run_id, "status": "FAILED", "error": "Job not found at URL"}
+
+        return _run_canonical_ingest(
+            run_id=run_id,
+            source_name=parsed.provider,
+            connector=connector,
+            result=filtered,
+            task_name="ingest_url",
+            source_role_override=SourceRole.URL_INGEST,
+        )

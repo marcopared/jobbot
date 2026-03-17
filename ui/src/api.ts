@@ -205,3 +205,80 @@ export async function runScrapeNow(body?: {
   }
   return res.json();
 }
+
+/** Ready-to-apply feed: jobs with artifact ready, user_status=NEW */
+export async function fetchReadyToApply(params?: {
+  page?: number;
+  per_page?: number;
+  sort_by?: string;
+  sort_dir?: string;
+}): Promise<JobsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page != null) searchParams.set("page", String(params.page));
+  if (params?.per_page != null) searchParams.set("per_page", String(params.per_page));
+  if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
+  if (params?.sort_dir) searchParams.set("sort_dir", params.sort_dir);
+  const qs = searchParams.toString();
+  const url = `${BASE}/jobs/ready-to-apply${qs ? `?${qs}` : ""}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch ready-to-apply: ${res.status}`);
+  return res.json();
+}
+
+/** Ingest job from supported ATS URL (Greenhouse, Lever, Ashby) */
+export async function ingestUrl(url: string): Promise<{
+  run_id: string;
+  status: string;
+  task_id?: string;
+  provider?: string;
+}> {
+  const res = await fetch(`${BASE}/jobs/ingest-url`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `URL ingest failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Trigger discovery run (AGG-1 or SERP1) */
+export async function runDiscovery(body: {
+  connector: "agg1" | "serp1";
+  query?: string;
+  location?: string;
+  results_per_page?: number;
+}): Promise<{ run_id: string; status: string; task_id?: string; connector?: string }> {
+  const res = await fetch(`${BASE}/jobs/run-discovery`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Discovery run failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Trigger canonical ingestion (Greenhouse, Lever, Ashby) */
+export async function runIngestion(body: {
+  connector: "greenhouse" | "lever" | "ashby";
+  company_name: string;
+  board_token?: string;
+  client_name?: string;
+  job_board_name?: string;
+}): Promise<{ run_id: string; status: string; task_id?: string }> {
+  const res = await fetch(`${BASE}/jobs/run-ingestion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Ingestion run failed: ${res.status}`);
+  }
+  return res.json();
+}

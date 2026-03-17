@@ -9,6 +9,7 @@ import {
 import ArtifactViewer from "../components/ArtifactViewer";
 import ScoreBreakdown from "../components/ScoreBreakdown";
 import StatusBadge from "../components/StatusBadge";
+import SourceRoleBadge from "../components/SourceRoleBadge";
 import { notifyError } from "../notify";
 
 export default function JobDetailPage() {
@@ -84,17 +85,73 @@ export default function JobDetailPage() {
   const canGenerateResume =
     job.pipeline_status === "ATS_ANALYZED" || job.pipeline_status === "RESUME_READY";
 
+  const readyToApply = job.artifact_availability && job.apply_url;
+  const readyArtifact = job.artifacts?.find(
+    (a) => (a.generation_status || "").toLowerCase() === "success"
+  );
+
   return (
     <div className="space-y-4">
-      <Link to="/jobs" className="text-sm text-indigo-600 hover:underline">
-        ← Back to jobs
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link to="/ready" className="text-sm text-indigo-600 hover:underline">
+          ← Ready to Apply
+        </Link>
+        <span className="text-gray-400">|</span>
+        <Link to="/jobs" className="text-sm text-indigo-600 hover:underline">
+          All Jobs
+        </Link>
+      </div>
+
+      {readyToApply && (
+        <div className="rounded-lg border-2 border-indigo-200 bg-indigo-50 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-base font-semibold text-indigo-900">Ready to Apply</h2>
+            <span className="rounded bg-indigo-200 px-2 py-0.5 text-xs font-medium text-indigo-900">
+              Manual step — you apply
+            </span>
+          </div>
+          <p className="mb-3 text-sm text-indigo-800">
+            Download the tailored resume, open the application link below, and submit manually. JobBot never auto-submits.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {readyArtifact && (
+              <>
+                <a
+                  href={readyArtifact.download_url}
+                  download
+                  className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 no-underline"
+                >
+                  Download Resume
+                </a>
+                <a
+                  href={readyArtifact.preview_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border border-indigo-600 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 no-underline"
+                >
+                  Preview Resume
+                </a>
+              </>
+            )}
+            <a
+              href={job.apply_url!}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 no-underline"
+              title="Opens external application page — you apply manually"
+            >
+              Open Application ↗
+            </a>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{job.title}</h1>
           <p className="text-sm text-gray-600">{job.company}</p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2 flex flex-wrap gap-2">
             <StatusBadge status={job.user_status} />
+            <SourceRoleBadge source={job.source} />
             {job.pipeline_status && job.pipeline_status !== "SCORED" && job.pipeline_status !== "INGESTED" && (
               <span className="inline-block rounded-full px-2.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
                 Pipeline: {job.pipeline_status}
@@ -168,8 +225,8 @@ export default function JobDetailPage() {
               <dd className="text-right text-gray-900">{job.location ?? "N/A"}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-gray-500">Source</dt>
-              <dd className="text-right text-gray-900">{job.source}</dd>
+              <dt className="text-gray-500">Source / Provenance</dt>
+              <dd className="text-right"><SourceRoleBadge source={job.source} /></dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-gray-500">Score</dt>
