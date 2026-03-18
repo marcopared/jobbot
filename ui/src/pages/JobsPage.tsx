@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  fetchJobs,
-  updateJobStatus,
-  bulkUpdateStatus,
-  type Job,
-} from "../api";
+import { fetchJobs, updateJobStatus, bulkUpdateStatus, type Job } from "../api";
 import JobTable from "../components/JobTable";
 import EmptyState from "../components/EmptyState";
 import { Link } from "react-router-dom";
@@ -12,7 +7,18 @@ import { notifyError } from "../notify";
 
 const STATUSES = ["ALL", "NEW", "SAVED", "APPLIED", "ARCHIVED"];
 const PERSONAS = ["", "BACKEND", "PLATFORM_INFRA", "HYBRID"];
-const SOURCES = ["", "jobspy", "greenhouse", "lever", "ashby", "agg1", "serp1", "wellfound", "builtinnyc", "yc"];
+const SOURCES = [
+  "",
+  "jobspy",
+  "greenhouse",
+  "lever",
+  "ashby",
+  "agg1",
+  "serp1",
+  "wellfound",
+  "builtinnyc",
+  "yc",
+];
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -30,26 +36,57 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expandedList, setExpandedList] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string> = {
-        page: String(page),
-        per_page: String(perPage),
+      const baseParams: Record<string, string> = {
         sort_by: sortBy,
         sort_dir: sortDir,
       };
-      if (status !== "ALL") params.status = status;
-      if (search.trim()) params.q = search.trim();
-      if (persona) params.persona = persona;
-      if (source) params.source = source;
-      if (minScore.trim() && !Number.isNaN(Number(minScore))) params.min_score = minScore.trim();
-      if (includeRejected) params.include_rejected = "1";
-      const data = await fetchJobs(params);
-      setJobs(data.items);
-      setTotal(data.total);
+      if (status !== "ALL") baseParams.status = status;
+      if (search.trim()) baseParams.q = search.trim();
+      if (persona) baseParams.persona = persona;
+      if (source) baseParams.source = source;
+      if (minScore.trim() && !Number.isNaN(Number(minScore)))
+        baseParams.min_score = minScore.trim();
+      if (includeRejected) baseParams.include_rejected = "1";
+
+      if (!expandedList) {
+        const data = await fetchJobs({
+          ...baseParams,
+          page: String(page),
+          per_page: String(perPage),
+        });
+        setJobs(data.items);
+        setTotal(data.total);
+      } else {
+        const pageSize = 100;
+        const first = await fetchJobs({
+          ...baseParams,
+          page: "1",
+          per_page: String(pageSize),
+        });
+        const pages = Math.max(1, Math.ceil(first.total / pageSize));
+        if (pages === 1) {
+          setJobs(first.items);
+          setTotal(first.total);
+        } else {
+          const remaining = await Promise.all(
+            Array.from({ length: pages - 1 }, (_, idx) =>
+              fetchJobs({
+                ...baseParams,
+                page: String(idx + 2),
+                per_page: String(pageSize),
+              }),
+            ),
+          );
+          setJobs([...first.items, ...remaining.flatMap((resp) => resp.items)]);
+          setTotal(first.total);
+        }
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : "Unknown error";
       setError(message);
@@ -57,7 +94,19 @@ export default function JobsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, status, search, persona, source, minScore, includeRejected, sortBy, sortDir]);
+  }, [
+    page,
+    perPage,
+    status,
+    search,
+    persona,
+    source,
+    minScore,
+    includeRejected,
+    sortBy,
+    sortDir,
+    expandedList,
+  ]);
 
   useEffect(() => {
     load();
@@ -66,7 +115,16 @@ export default function JobsPage() {
   // Reset page when filters change
   useEffect(() => {
     setPage(1);
-  }, [status, search, persona, source, minScore, includeRejected, sortBy, sortDir]);
+  }, [
+    status,
+    search,
+    persona,
+    source,
+    minScore,
+    includeRejected,
+    sortBy,
+    sortDir,
+  ]);
 
   const handleAction = async (id: string, status: string) => {
     try {
@@ -124,8 +182,31 @@ export default function JobsPage() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Jobs</h1>
+        <div>
+          <h1 className="text-2xl font-bold">Jobs</h1>
+          <p className="text-sm text-gray-600">
+            Debug and triage view. Use Ready to Apply for operational
+            throughput.
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to="/ready"
+            className="rounded bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 no-underline"
+          >
+            Open Ready to Apply
+          </Link>
+          <button
+            onClick={() => {
+              setSelected(new Set());
+              setExpandedList((v) => !v);
+              setPage(1);
+            }}
+            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm"
+            title="Load all pages into one list view"
+          >
+            {expandedList ? "Set to Paginated View" : "View Full Expanded List"}
+          </button>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
@@ -250,7 +331,7 @@ export default function JobsPage() {
       ) : jobs.length === 0 ? (
         <EmptyState
           title="No jobs yet"
-          description="Run a scrape, discovery, or paste a job URL from the Ready to Apply page. Jobs will appear here as they are ingested and scored."
+          description="Run discovery (AGG-1 or SERP1), scrape, or canonical ingest. Jobs will appear here as runs complete."
           action={
             <div className="flex flex-wrap gap-3 justify-center">
               <Link
@@ -278,30 +359,36 @@ export default function JobsPage() {
         />
       )}
 
-      {/* Pagination */}
+      {/* Pagination / Expanded footer */}
       <div className="flex items-center justify-between text-sm text-gray-600">
         <span>
-          {total} job{total !== 1 ? "s" : ""} total
+          {expandedList
+            ? `Expanded list: ${jobs.length} of ${total} job${
+                total !== 1 ? "s" : ""
+              } shown`
+            : `${total} job${total !== 1 ? "s" : ""} total`}
         </span>
-        <div className="flex items-center gap-2">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="rounded border px-3 py-1 disabled:opacity-40"
-          >
-            Prev
-          </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded border px-3 py-1 disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
+        {!expandedList && (
+          <div className="flex items-center gap-2">
+            <button
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded border px-3 py-1 disabled:opacity-40"
+            >
+              Prev
+            </button>
+            <span>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded border px-3 py-1 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

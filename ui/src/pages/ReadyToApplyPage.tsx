@@ -24,7 +24,9 @@ export default function ReadyToApplyPage() {
 
   const [urlInput, setUrlInput] = useState("");
   const [ingesting, setIngesting] = useState(false);
-  const [ingestResult, setIngestResult] = useState<{ runId: string } | null>(null);
+  const [ingestResult, setIngestResult] = useState<{ runId: string } | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,14 +134,25 @@ export default function ReadyToApplyPage() {
       <div className="rounded-xl border-2 border-indigo-100 bg-indigo-50/50 px-5 py-6">
         <h1 className="text-2xl font-bold text-gray-900">Ready to Apply</h1>
         <p className="mt-1 text-sm text-gray-700">
-          Your operational home — jobs with tailored resumes ready. Download the resume, open the application link, and apply <strong>manually</strong>. JobBot never auto-submits.
+          Your operational home — jobs with tailored resumes ready. Download the
+          resume, open the application link, and apply <strong>manually</strong>
+          . JobBot never auto-submits.
         </p>
+        <div className="mt-3 rounded border border-indigo-200 bg-white px-3 py-2 text-xs text-indigo-900">
+          Operator flow: <strong>1)</strong> click <strong>Apply</strong> in the
+          table to open Job Detail, <strong>2)</strong> download artifact,{" "}
+          <strong>3)</strong> open external apply link, <strong>4)</strong> mark
+          applied.
+        </div>
 
         {/* URL Ingest form */}
         <div className="mt-6 rounded-lg border border-indigo-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Paste job URL</h2>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            Paste job URL
+          </h2>
           <p className="mb-3 text-xs text-gray-500">
-            Supported ATS: Greenhouse, Lever, Ashby. Paste a job URL to add it to the pipeline.
+            Supported ATS: Greenhouse, Lever, Ashby. Paste a job URL to add it
+            to the pipeline.
           </p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
@@ -160,11 +173,26 @@ export default function ReadyToApplyPage() {
           {ingestResult && (
             <p className="mt-2 text-sm text-green-700">
               Ingest started.{" "}
-              <Link to={`/runs/${ingestResult.runId}`} className="font-medium underline">
+              <Link
+                to={`/runs/${ingestResult.runId}`}
+                className="font-medium underline"
+              >
                 View run
               </Link>
             </p>
           )}
+          <div className="mt-3 border-t border-gray-100 pt-3">
+            <Link
+              to="/jobs/manual-intake"
+              className="inline-flex items-center rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 no-underline"
+            >
+              Or paste full description
+            </Link>
+            <p className="mt-1 text-xs text-gray-500">
+              Use this when there is no supported ATS URL and you want to enter
+              extracted fields manually.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -186,7 +214,7 @@ export default function ReadyToApplyPage() {
       ) : jobs.length === 0 ? (
         <EmptyState
           title="No jobs ready yet"
-          description="Run a scrape, paste a job URL above, or trigger discovery from the Runs page. Once jobs pass scoring and ATS analysis, tailored resumes will appear here."
+          description="Run discovery (AGG-1/SERP1) or canonical ingestion from Runs, or paste a supported ATS URL above. Once jobs pass ATS and generation gate, resumes appear here."
           action={
             <div className="flex flex-wrap gap-3 justify-center">
               <Link
@@ -205,14 +233,21 @@ export default function ReadyToApplyPage() {
           }
         />
       ) : (
-        <JobTable
-          jobs={jobs}
-          selected={selected}
-          onToggle={handleToggle}
-          onToggleAll={handleToggleAll}
-          onAction={handleAction}
-          showApplyLink
-        />
+        <>
+          <div className="rounded border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
+            Apply column opens Job Detail where <strong>Download Resume</strong>{" "}
+            and <strong>Open Application</strong> are shown together for manual
+            submission.
+          </div>
+          <JobTable
+            jobs={jobs}
+            selected={selected}
+            onToggle={handleToggle}
+            onToggleAll={handleToggleAll}
+            onAction={handleAction}
+            showApplyLink
+          />
+        </>
       )}
 
       {selected.size > 0 && (
@@ -236,7 +271,10 @@ export default function ReadyToApplyPage() {
           >
             Mark Applied
           </button>
-          <button onClick={() => setSelected(new Set())} className="ml-auto text-xs text-gray-500 hover:text-gray-700">
+          <button
+            onClick={() => setSelected(new Set())}
+            className="ml-auto text-xs text-gray-500 hover:text-gray-700"
+          >
             Clear
           </button>
         </div>
@@ -262,7 +300,11 @@ export default function ReadyToApplyPage() {
           >
             {sortDir === "desc" ? "↓" : "↑"}
           </button>
-          <button disabled={page <= 1} onClick={() => setPage((p) => p - 1)} className="rounded border px-3 py-1 disabled:opacity-40">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="rounded border px-3 py-1 disabled:opacity-40"
+          >
             Prev
           </button>
           <span>

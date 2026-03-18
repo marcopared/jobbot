@@ -16,7 +16,10 @@ function formatDate(value: string | null): string {
   return new Date(value).toLocaleString();
 }
 
-function formatDuration(startedAt: string | null, finishedAt: string | null): string {
+function formatDuration(
+  startedAt: string | null,
+  finishedAt: string | null,
+): string {
   if (!startedAt) return "N/A";
   const start = new Date(startedAt).getTime();
   const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
@@ -38,19 +41,30 @@ export default function RunsPage() {
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [discoveryConnector, setDiscoveryConnector] = useState<"agg1" | "serp1">("agg1");
+  const [discoveryConnector, setDiscoveryConnector] = useState<
+    "agg1" | "serp1"
+  >("agg1");
   const [discoveryQuery, setDiscoveryQuery] = useState("");
   const [discoveryLocation, setDiscoveryLocation] = useState("");
+  const [discoveryResultsPerPage, setDiscoveryResultsPerPage] = useState("20");
   const [discoveryTriggering, setDiscoveryTriggering] = useState(false);
+  const [lastTriggeredRunId, setLastTriggeredRunId] = useState<string | null>(
+    null,
+  );
 
-  const [ingestConnector, setIngestConnector] = useState<"greenhouse" | "lever" | "ashby">("greenhouse");
+  const [ingestConnector, setIngestConnector] = useState<
+    "greenhouse" | "lever" | "ashby"
+  >("greenhouse");
   const [ingestCompany, setIngestCompany] = useState("");
   const [ingestBoardToken, setIngestBoardToken] = useState("");
   const [ingestClientName, setIngestClientName] = useState("");
   const [ingestJobBoardName, setIngestJobBoardName] = useState("");
   const [ingestTriggering, setIngestTriggering] = useState(false);
 
-  const hasRunning = useMemo(() => runs.some((r) => r.status === "RUNNING"), [runs]);
+  const hasRunning = useMemo(
+    () => runs.some((r) => r.status === "RUNNING"),
+    [runs],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -86,7 +100,8 @@ export default function RunsPage() {
       await runScrapeNow();
       await load();
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to trigger scrape";
+      const message =
+        e instanceof Error ? e.message : "Failed to trigger scrape";
       setError(message);
       notifyError(message);
     } finally {
@@ -98,14 +113,21 @@ export default function RunsPage() {
     setDiscoveryTriggering(true);
     setError(null);
     try {
-      await runDiscovery({
+      const data = await runDiscovery({
         connector: discoveryConnector,
         query: discoveryQuery.trim() || undefined,
         location: discoveryLocation.trim() || undefined,
+        results_per_page:
+          discoveryResultsPerPage.trim() &&
+          !Number.isNaN(Number(discoveryResultsPerPage))
+            ? Number(discoveryResultsPerPage)
+            : undefined,
       });
+      setLastTriggeredRunId(data.run_id);
       await load();
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to trigger discovery";
+      const message =
+        e instanceof Error ? e.message : "Failed to trigger discovery";
       setError(message);
       notifyError(message);
     } finally {
@@ -141,7 +163,8 @@ export default function RunsPage() {
       setIngestClientName("");
       setIngestJobBoardName("");
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Failed to trigger ingestion";
+      const message =
+        e instanceof Error ? e.message : "Failed to trigger ingestion";
       setError(message);
       notifyError(message);
     } finally {
@@ -151,14 +174,27 @@ export default function RunsPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Runs</h1>
-      <p className="text-sm text-gray-600">
-        Trigger discovery, canonical ingestion, or JobSpy scrape. Runs appear below.
-      </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Runs</h1>
+          <p className="text-sm text-gray-600">
+            Trigger discovery, canonical ingestion, or JobSpy scrape. Runs
+            appear below.
+          </p>
+        </div>
+        <Link
+          to="/ready"
+          className="inline-flex items-center rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 no-underline"
+        >
+          Open Ready to Apply
+        </Link>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">JobSpy Scrape</h2>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            JobSpy Scrape
+          </h2>
           <p className="mb-3 text-xs text-gray-500">Broad scrape via JobSpy.</p>
           <button
             onClick={() => void onRunScrape()}
@@ -170,16 +206,22 @@ export default function RunsPage() {
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Discovery</h2>
-          <p className="mb-3 text-xs text-gray-500">AGG-1 or SERP1 (feature-flagged).</p>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            Discovery
+          </h2>
+          <p className="mb-3 text-xs text-gray-500">
+            AGG-1 (Adzuna) or SERP1 (DataForSEO Google Jobs), feature-flagged.
+          </p>
           <div className="space-y-2">
             <select
               value={discoveryConnector}
-              onChange={(e) => setDiscoveryConnector(e.target.value as "agg1" | "serp1")}
+              onChange={(e) =>
+                setDiscoveryConnector(e.target.value as "agg1" | "serp1")
+              }
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             >
-              <option value="agg1">AGG-1</option>
-              <option value="serp1">SERP1</option>
+              <option value="agg1">AGG-1 (Adzuna)</option>
+              <option value="serp1">SERP1 (DataForSEO)</option>
             </select>
             <input
               type="text"
@@ -195,6 +237,20 @@ export default function RunsPage() {
               onChange={(e) => setDiscoveryLocation(e.target.value)}
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
+            <input
+              type="number"
+              min={1}
+              max={50}
+              placeholder="Results per page (default 20)"
+              value={discoveryResultsPerPage}
+              onChange={(e) => setDiscoveryResultsPerPage(e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+            <p className="text-xs text-gray-500">
+              {discoveryConnector === "agg1"
+                ? "AGG-1 is medium-confidence discovery. Use focused query/location for cleaner candidates."
+                : "SERP1 is lower-confidence discovery. Expect stricter generation gate and occasional provider timeouts."}
+            </p>
             <button
               onClick={() => void onRunDiscovery()}
               disabled={discoveryTriggering}
@@ -202,16 +258,32 @@ export default function RunsPage() {
             >
               {discoveryTriggering ? "Triggering…" : "Run Discovery"}
             </button>
+            {lastTriggeredRunId && (
+              <p className="text-xs text-green-700">
+                Discovery started.{" "}
+                <Link to={`/runs/${lastTriggeredRunId}`} className="underline">
+                  View run
+                </Link>
+              </p>
+            )}
           </div>
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">Canonical Ingestion</h2>
-          <p className="mb-3 text-xs text-gray-500">Greenhouse, Lever, or Ashby.</p>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            Canonical Ingestion
+          </h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Greenhouse, Lever, or Ashby.
+          </p>
           <div className="space-y-2">
             <select
               value={ingestConnector}
-              onChange={(e) => setIngestConnector(e.target.value as "greenhouse" | "lever" | "ashby")}
+              onChange={(e) =>
+                setIngestConnector(
+                  e.target.value as "greenhouse" | "lever" | "ashby",
+                )
+              }
               className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
             >
               <option value="greenhouse">Greenhouse</option>
@@ -285,12 +357,27 @@ export default function RunsPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-3 text-left font-semibold text-gray-600">Source</th>
-                <th className="px-3 py-3 text-left font-semibold text-gray-600">Status</th>
-                <th className="px-3 py-3 text-left font-semibold text-gray-600">Started</th>
-                <th className="px-3 py-3 text-left font-semibold text-gray-600">Duration</th>
-                <th className="px-3 py-3 text-left font-semibold text-gray-600">Stats</th>
-                <th className="px-3 py-3 text-left font-semibold text-gray-600">Details</th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Source
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Status
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Started
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Duration
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Stats
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Provider
+                </th>
+                <th className="px-3 py-3 text-left font-semibold text-gray-600">
+                  Details
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -311,10 +398,31 @@ export default function RunsPage() {
                     </span>
                   </td>
                   <td className="px-3 py-2">{formatDate(run.started_at)}</td>
-                  <td className="px-3 py-2">{formatDuration(run.started_at, run.finished_at)}</td>
+                  <td className="px-3 py-2">
+                    {formatDuration(run.started_at, run.finished_at)}
+                  </td>
                   <td className="px-3 py-2 text-gray-600">{statsText(run)}</td>
                   <td className="px-3 py-2">
-                    <Link to={`/runs/${run.id}`} className="text-indigo-700 underline">
+                    {run.error_text ? (
+                      <span
+                        className="text-xs text-red-700"
+                        title={run.error_text}
+                      >
+                        {run.error_text.length > 80
+                          ? `${run.error_text.slice(0, 80)}…`
+                          : run.error_text}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">
+                        No provider error
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <Link
+                      to={`/runs/${run.id}`}
+                      className="text-indigo-700 underline"
+                    >
                       View listings
                     </Link>
                   </td>

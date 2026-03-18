@@ -6,224 +6,228 @@ This document translates the product spec and architecture into reviewable engin
 
 It is intentionally written to support small PRs and coding-agent delegation.
 
-## 1. Implementation order
+## 1. Current execution order
 
-**Stabilization first. No new product scope in docs-only PRs.**
+The immediate goal is to finish the alpha tonight with real discovery providers and artifact-ready verification.
 
-1. **Documentation refresh** — docs-only; no code changes
-2. DB and model foundation — **implemented**
-3. Official ATS expansion (Lever, Ashby, URL ingest) — **implemented**
-4. Broad discovery lane (AGG-1 first; SERP optional, feature-flagged) — **implemented**
-5. Automation funnel and generation gate — **implemented**
-6. UI throughput mode — **partially implemented**
+The stale documentation-refresh step is complete. The implementation execution order now starts here:
 
-The real repository is the source of truth for current state. Do not reorder; each phase depends on the previous.
+1. **Adzuna hardening**
+2. **DataForSEO real implementation**
+3. **discovery E2E verification**
+4. **optional UI polish**
 
-## 2. Do not touch yet
+The real repository remains the source of truth for current behavior until code lands.
 
-- **SERP lane** — feature-flag only; implement after AGG-1 and core automation are stable.
-- **Auto-apply / browser automation** — out of scope; manual application is the final step.
-- **Generic arbitrary crawling** — not a first-wave requirement.
-- **UI** — do not start with UI; stabilize model and connectors first.
-- **Treating discovery as canonical** — discovery sources are not canonical truth; do not auto-generate for low-confidence discovery-only jobs without explicit eligibility rules.
+## 2. Alpha discovery provider implementation wave
 
-## 3. Delivery philosophy
+This wave brings the two named discovery providers into scope now:
+
+- `AGG-1 = Adzuna`
+- `SERP1 = DataForSEO Google Jobs`
+
+Execution rules for this wave:
+- SERP is now in scope for this implementation wave.
+- Implement exactly one real SERP provider: DataForSEO Google Jobs.
+- Keep SERP1 lower-confidence than Adzuna and feature-flagged.
+- Finish provider work before any optional UI polish.
+
+## 3. Story order for tonight
+
+### Story 1 — Adzuna hardening
+
+Scope:
+- real Adzuna credential path
+- bounded page-based fetching
+- query/filter normalization needed for alpha
+- clean provider errors and provenance preservation
+
+Acceptance criteria:
+- `AGG-1 = Adzuna` runs successfully with real credentials
+- page-based search is bounded by explicit per-run limits
+- discovered jobs normalize into the existing downstream pipeline
+- provider failures are recorded cleanly without fabricating jobs
+- targeted provider tests pass
+
+Out of scope:
+- queue-model changes
+- generic crawler work
+- UI polish beyond what is required for verification
+
+### Story 2 — DataForSEO real implementation
+
+Scope:
+- `SERP1 = DataForSEO Google Jobs`
+- Google Jobs endpoints only
+- basic auth credential handling
+- bounded synchronous wrapper over task post -> readiness poll -> advanced get
+- lower-confidence discovery normalization and feature-flag enforcement
+
+Acceptance criteria:
+- `SERP1 = DataForSEO Google Jobs` runs successfully with real credentials
+- implementation uses Google Jobs endpoints only
+- implementation uses basic auth
+- polling is bounded by attempts and/or wall-clock timeout
+- normalized jobs enter the existing downstream pipeline as lower-confidence discovery records
+- targeted provider tests pass
+
+Out of scope:
+- generic web SERP support
+- postback/pingback infrastructure
+- HTML endpoint integration
+- canonical treatment of SERP jobs
+
+### Story 3 — Discovery E2E verification
+
+Scope:
+- end-to-end verification for Adzuna and DataForSEO through the current pipeline
+- targeted fixes required for artifact-ready throughput
+- ready-to-apply and manual apply verification for discovery-originated jobs
+
+Acceptance criteria:
+- both providers chain into `score -> classify -> ATS -> generation gate`
+- at least one discovery-originated job reaches artifact-ready
+- `GET /api/jobs/ready-to-apply` is usable for the verified jobs
+- manual apply link works for the verified jobs
+- targeted E2E or integration tests pass
+
+Out of scope:
+- full state-machine redesign
+- broad UI redesign
+- speculative new provider abstractions beyond what the two providers need
+
+### Story 4 — Optional UI polish
+
+Scope:
+- minimal UX polish after backend verification is green
+- presentation or operator-flow tweaks for ready-to-apply throughput
+
+Acceptance criteria:
+- backend verification from Stories 1-3 is already green
+- UI changes are limited to ready-to-apply usability and operator clarity
+- no UI change alters the product boundary that manual apply is the final step
+
+Out of scope:
+- starting UI work before backend is green
+- major navigation/layout redesign
+- any UI claim that Adzuna/DataForSEO are fully implemented before backend verification passes
+
+## 4. Delivery philosophy
 
 Constraints:
 - do not implement the whole roadmap in one PR
 - do not treat discovery and canonical sources as equivalent
-- do not enable high-risk lanes before the core system is stable
+- do not enable high-risk lanes without a feature flag
 - do not start with UI
 
-Working principle:
-- stabilize the model first
-- stabilize canonical sources second
-- add discovery third
-- add automation fourth
-- update UI last
+Working principle for tonight:
+- harden Adzuna first
+- implement DataForSEO second
+- verify discovery end to end third
+- polish UI last, only if backend is green
 
-## 4. Recommended PR order
+## 5. PR order and boundaries
 
-### PR 1 — documentation refresh (docs-only stabilization)
+### PR 1 — documentation refresh (docs-only, completed before implementation PRs)
 
-**Scope:** Documentation only. No code changes. No new product scope.
-
-Files:
-- `docs/SPEC.md`
-- `docs/ARCHITECTURE.md`
+Scope:
 - `docs/TODO.md`
 - `docs/IMPLEMENTATION_PLAN.md`
 - `docs/CODING_AGENT_GUIDE.md`
-- `docs/README.md`
-- root `README.md`
+- optional small note in root `README.md`
 
 Outcome:
-- docs describe the current system accurately (real repo is source of truth)
-- implemented vs partially implemented vs remaining clearly distinguished
-- source roles (canonical ATS, discovery, URL ingest) explicit
-- implementation order and do-not-touch sections present for agents
+- tonight's implementation order is explicit
+- stop conditions are explicit
+- provider-specific guardrails are explicit
+- no status/history docs are changed in this PR
 
-### PR 2 — DB and model foundation
+### PR 2 — Story 1: Adzuna hardening
+
 Scope:
-- SQLAlchemy models
-- Alembic migrations
-- enums/constants required for model state
+- Adzuna connector/runtime hardening only
+- bounded page-based retrieval and normalization fixes
+- tests directly related to Adzuna behavior
 
-Goals:
-- source role support
-- resolution support
-- generation eligibility tracking
-- provenance extensions
-- generation run tracking
+Boundary:
+- one provider only
+- no DataForSEO work in this PR
 
-Out of scope:
-- connectors
-- worker flow changes beyond what is strictly required for model integrity
-- UI
+### PR 3 — Story 2: DataForSEO real implementation
 
-### PR 3 — official ATS expansion
 Scope:
-- generalized canonical ingestion route/schema
-- Lever connector
-- Ashby connector
-- supported ATS URL ingest
+- DataForSEO Google Jobs only
+- bounded synchronous task wrapper
+- tests directly related to DataForSEO behavior
 
-Goals:
-- Greenhouse, Lever, and Ashby share a common canonical ingestion contract
-- user can ingest via supported ATS URL
+Boundary:
+- one provider only
+- no Adzuna refactors beyond shared code strictly required for correctness
 
-Out of scope:
-- AGG-1
-- SERP
-- broad discovery logic
-- auto-generation redesign
+### PR 4 — Story 3: discovery E2E verification
 
-### PR 4 — discovery lane
 Scope:
-- AGG-1 connector
-- optional SERP connector behind feature flag
-- discovery route/schema
-- minimal provenance wiring for discovery records
+- provider-to-pipeline verification
+- targeted fixes required for artifact-ready discovery flow
+- targeted tests and runbook-level verification notes if needed
 
-Goals:
-- add broad multi-company discovery without pretending it is canonical truth
-- discovery records remain explicitly lower-confidence unless resolved
+Boundary:
+- no broad schema redesign
+- no queue-model redesign
 
-Out of scope:
-- UI
-- full automation funnel redesign if not already prepared
+### PR 5 — Story 4: optional UI polish
 
-### PR 5 — automation funnel
 Scope:
-- generation gate
-- explicit state transitions
-- generation run tracking
-- ready-to-apply backend feed
-- worker flow hardening
+- only after backend is green
+- limited ready-to-apply polish
 
-Goals:
-- automate everything up to artifact-ready for eligible jobs
-- keep manual apply boundary intact
+Boundary:
+- no backend feature expansion disguised as UI work
 
-Out of scope:
-- UI redesign beyond what is required for contract testing
+## 6. Stop conditions
 
-### PR 6 — UI throughput mode
-Scope:
-- ready-to-apply default view
-- URL ingest entry point
-- source/provenance visibility
-- generation status visibility
+Do not expand tonight's wave into these items:
+- no full state-machine rewrite
+- no queue-model rewrite
+- no generic crawler work
+- no auto-apply
+- no browser automation
 
-Goals:
-- ready-to-apply queue as primary operational view; no manual review checkpoint required
+## 7. Feature flags and runtime verification
 
-## 5. Merge rules
+Verify these before runtime sign-off:
 
-- PR 2 must land before PR 3 and PR 4
-- PR 3 should land before PR 5
-- PR 4 can begin after PR 2, but should merge before finalizing PR 5 if automation depends on discovery source metadata
-- PR 6 should land last
+- **Env vars required for Adzuna:** `ENABLE_AGG1_DISCOVERY=true`, `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`, and `ADZUNA_COUNTRY`.
+- **Env vars required for DataForSEO:** `ENABLE_SERP1_DISCOVERY=true` plus the DataForSEO login/password or equivalent basic-auth credentials used by the implementation.
+- **Auto-generation flag:** `ENABLE_AUTO_RESUME_GENERATION` must be intentionally set based on whether discovery jobs should auto-generate during verification.
+- **Worker queues:** keep the current queue model unless code changes later. Current expectation remains `default`, `scrape`, and `ingestion`.
+- **Feature flags:** AGG-1, SERP1, and auto-generation remain independently controllable.
+- **Playwright:** `playwright install chromium` remains required for PDF generation.
 
-## 6. Feature-flag guidance
+## 8. Runtime verification expectations
 
-Recommended flags:
-- `ENABLE_LEVER_CONNECTOR`
-- `ENABLE_ASHBY_CONNECTOR`
-- `ENABLE_URL_INGEST`
-- `ENABLE_AGG1_DISCOVERY`
-- `ENABLE_SERP1_DISCOVERY`
-- `ENABLE_AUTO_RESUME_GENERATION`
+The wave is operationally verified only when:
+- Adzuna works with real credentials
+- DataForSEO works with real credentials
+- both providers flow through the current worker topology without requiring a queue rewrite
+- feature flags can independently enable or disable `AGG-1`, `SERP1`, and auto-generation behavior
+- at least one discovery-originated job reaches artifact-ready and appears in ready-to-apply
+- the manual apply link is usable for the verified job
 
-Recommended enable order:
-1. Lever
-2. Ashby
-3. URL ingest
-4. AGG-1
-5. auto-generation
-6. SERP
-
-## 7. Test expectations by PR
-
-### PR 2
-- migration tests
-- model integrity tests
-- backfill safety
-
-### PR 3
-- connector normalization tests
-- ingestion route tests
-- URL-provider detection tests
-
-### PR 4
-- discovery route tests
-- discovery connector normalization tests
-- provenance/state assertions
-
-### PR 5
-- task-chain tests
-- generation-gate tests
-- ready-to-apply endpoint tests
-
-### PR 6
-- frontend API contract tests where present
-- basic interaction tests if available
-
-## 8. Explicit anti-patterns
+## 9. Explicit anti-patterns
 
 Do not do these:
-- one mega-PR with schema, connectors, workers, discovery, and UI mixed together
-- SERP as canonical truth
-- auto-generating resumes for every ingested job
-- generic arbitrary crawling as a first pass
-- touching browser automation/apply flows
+- one mega-PR mixing both providers, E2E fixes, and UI polish
+- treating SERP as canonical truth
+- introducing a generic crawler while implementing DataForSEO
+- rewriting queue topology or pipeline states as part of tonight's wave
+- touching auto-apply or browser automation
 
-## 9. Acceptance criteria per phase
+## 10. Done criteria for tonight
 
-| Phase | Acceptance criteria |
-|-------|---------------------|
-| **PR 1 (docs)** | Docs describe current system accurately; implemented vs remaining distinguished; implementation order and do-not-touch sections present |
-| **PR 2 (DB/model)** | Source role, resolution, generation eligibility in model; migrations safe; backfill tests pass |
-| **PR 3 (ATS expansion)** | Lever, Ashby, URL ingest work; shared canonical contract; provider detection for supported URLs |
-| **PR 4 (discovery)** | AGG-1 connector works; discovery records marked distinctly; provenance wired |
-| **PR 5 (automation)** | Generation gate runs; eligible jobs auto-generate; ready-to-apply feed exists; manual apply unchanged |
-| **PR 6 (UI)** | Ready-to-apply default view; URL ingest entry point; source/provenance visible |
-
-## 10. Done criteria for the implementation plan
-
-This implementation plan has been executed successfully when:
-- official ATS expansion is stable
-- AGG-1 discovery is stable
-- generation is automatic for eligible jobs
-- ready-to-apply backend and UI exist
+Tonight's implementation wave is done when:
+- Story 1 acceptance criteria pass
+- Story 2 acceptance criteria pass
+- Story 3 acceptance criteria pass
+- Story 4 is either completed safely or intentionally skipped because backend consumed the available time
 - manual apply remains the final step
-
-## 11. Runtime assumptions to verify
-
-When running locally or deploying, verify:
-
-- **Worker queues:** Celery worker must consume `default`, `scrape`, and `ingestion`. Scrape → `scrape`, ingest → `ingestion`; discovery, classify, ats_match, generation_gate → `default`. Confirm `-Q default,scrape,ingestion` is sufficient (as in `scripts/dev.sh`).
-- **Seed script:** `scripts/seed.sh` exercises only the JobSpy scrape path; discovery, URL ingest, and canonical ATS are not exercised by seed. Manual curl or UI required for those paths.
-- **Feature flags:** Defaults: `ENABLE_AGG1_DISCOVERY=false`, `ENABLE_SERP1_DISCOVERY=false`, `URL_INGEST_ENABLED=true`, `ENABLE_AUTO_RESUME_GENERATION=false`. Discovery and auto-generation are off unless explicitly enabled.
-- **Playwright:** `playwright install chromium` is required for PDF resume generation; omit and generation fails.
-- **GCS signed URLs:** Preview/download for GCS-backed artifacts requires a service account with private key; `gcloud auth application-default login` credentials cannot sign URLs.

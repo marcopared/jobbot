@@ -2,6 +2,8 @@
 
 JobBot is a local-first job discovery and decision-support tool.
 
+Alpha discovery implementation wave note: the current system still reflects the implemented scope below. Tonight's target implementation wave maps `AGG-1` to Adzuna and `SERP1` to DataForSEO Google Jobs once those code PRs land.
+
 ## Implemented scope
 
 **Ingestion:**
@@ -14,6 +16,10 @@ JobBot is a local-first job discovery and decision-support tool.
 **Output:** job-specific resume artifacts; ready-to-apply queue; manual apply via job URL
 
 **Non-goals:** auto-apply, browser automation; final application step is always manual.
+
+## Planned next alpha wave
+
+Planned implementation order for the next code PRs: `AGG-1` Adzuna hardening, `SERP1` DataForSEO Google Jobs implementation, discovery end-to-end verification, then optional UI polish. For this wave, `AGG-1` maps to Adzuna and `SERP1` maps to DataForSEO Google Jobs. This is planned work only; the implemented scope above remains the current truth until those PRs land.
 
 ## Documentation
 
