@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/jobbot"
-    database_url_sync: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/jobbot"
+    database_url_sync: str = (
+        "postgresql+psycopg2://postgres:postgres@localhost:5432/jobbot"
+    )
     redis_url: str = "redis://localhost:6379/0"
     artifact_dir: str = "./storage/artifacts"
     profile_dir: str = "./storage/profiles"
@@ -23,8 +25,16 @@ class Settings(BaseSettings):
     # Discovery lane (ARCH §11.2, IMPLEMENTATION_PLAN §6)
     enable_agg1_discovery: bool = False
     # SERP1: explicit stub. When enabled, returns empty results; never raises.
-    # Keeps route/task wiring. Real provider integration is optional (FOLLOWUP_DISCOVERY.md).
+    # DataForSEO Google Jobs discovery lane (lower-confidence than AGG-1).
     enable_serp1_discovery: bool = False
+    dataforseo_login: str = ""
+    dataforseo_password: str = ""
+    dataforseo_base_url: str = "https://api.dataforseo.com"
+    dataforseo_location_name: str = "United States"
+    dataforseo_language_name: str = "English"
+    dataforseo_poll_max_attempts: int = 8
+    dataforseo_poll_interval_seconds: float = 1.5
+    dataforseo_poll_timeout_seconds: float = 20.0
     # Automation funnel (PR5, ARCH §10): auto-generate resumes for eligible jobs
     enable_auto_resume_generation: bool = False
     # Generation gate thresholds

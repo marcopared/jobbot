@@ -161,7 +161,11 @@ async def test_get_job_rejected_404_without_include_rejected(client):
 
     from core.db.models import Company, Job, PipelineStatus
     from core.db.session import get_sync_session
-    from core.dedup import compute_dedup_hash_from_raw, normalize_company, normalize_title
+    from core.dedup import (
+        compute_dedup_hash_from_raw,
+        normalize_company,
+        normalize_title,
+    )
 
     # Create a REJECTED job directly
     unique = str(uuid.uuid4())[:8]
@@ -220,7 +224,11 @@ def _make_job_in_pipeline_state(
     """Create a Job + optional JobAnalysis in the given pipeline_state. Returns job_id."""
     from core.db.models import Company, Job, JobAnalysis, PipelineStatus
     from core.db.session import get_sync_session
-    from core.dedup import compute_dedup_hash_from_raw, normalize_company, normalize_title
+    from core.dedup import (
+        compute_dedup_hash_from_raw,
+        normalize_company,
+        normalize_title,
+    )
 
     unique = str(uuid.uuid4())[:8]
     company_name = f"TestResume_{unique}"
@@ -341,7 +349,11 @@ async def test_post_generate_resume_409_when_not_analyzed(client):
     """POST /api/jobs/{id}/generate-resume returns 409 when job lacks analysis and pipeline state."""
     from core.db.models import Company, Job, PipelineStatus
     from core.db.session import get_sync_session
-    from core.dedup import compute_dedup_hash_from_raw, normalize_company, normalize_title
+    from core.dedup import (
+        compute_dedup_hash_from_raw,
+        normalize_company,
+        normalize_title,
+    )
 
     unique = str(uuid.uuid4())[:8]
     company_name = f"TestNotAnalyzed_{unique}"
@@ -386,7 +398,10 @@ async def test_post_generate_resume_409_when_not_analyzed(client):
     assert resp.status_code == 409
     data = resp.json()
     assert "detail" in data
-    assert "Resume generation requires" in data["detail"] or "classification" in data["detail"]
+    assert (
+        "Resume generation requires" in data["detail"]
+        or "classification" in data["detail"]
+    )
 
 
 async def test_get_artifacts_404(client):
@@ -467,7 +482,10 @@ async def test_ingest_url_unsupported_returns_400(client):
         json={"url": "https://example.com/jobs/123"},
     )
     assert resp.status_code == 400
-    assert "unsupported" in resp.json().get("detail", "").lower() or "supported" in resp.json().get("detail", "").lower()
+    assert (
+        "unsupported" in resp.json().get("detail", "").lower()
+        or "supported" in resp.json().get("detail", "").lower()
+    )
 
 
 async def test_ingest_url_supported_accepts(client):
@@ -567,7 +585,10 @@ async def test_ingest_url_unsupported_returns_400(client):
         json={"url": "https://example.com/jobs/123"},
     )
     assert resp.status_code == 400
-    assert "unsupported" in resp.json().get("detail", "").lower() or "supported" in resp.json().get("detail", "").lower()
+    assert (
+        "unsupported" in resp.json().get("detail", "").lower()
+        or "supported" in resp.json().get("detail", "").lower()
+    )
 
 
 async def test_ingest_url_supported_returns_200(client):
@@ -603,25 +624,36 @@ async def test_run_discovery_agg1_returns_200_when_enabled(client, monkeypatch):
     assert data.get("connector") == "agg1"
 
 
-async def test_run_discovery_agg1_returns_403_when_disabled(client):
+async def test_run_discovery_agg1_returns_403_when_disabled(client, monkeypatch):
     """POST /api/jobs/run-discovery with connector=agg1 returns 403 when disabled."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "enable_agg1_discovery", False)
     resp = await client.post(
         "/api/jobs/run-discovery",
         json={"connector": "agg1"},
     )
-    # Default enable_agg1_discovery=False
     assert resp.status_code == 403
-    assert "disabled" in resp.json().get("detail", "").lower() or "agg1" in resp.json().get("detail", "").lower()
+    assert (
+        "disabled" in resp.json().get("detail", "").lower()
+        or "agg1" in resp.json().get("detail", "").lower()
+    )
 
 
-async def test_run_discovery_serp1_returns_403_when_disabled(client):
+async def test_run_discovery_serp1_returns_403_when_disabled(client, monkeypatch):
     """POST /api/jobs/run-discovery with connector=serp1 returns 403 when disabled."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "enable_serp1_discovery", False)
     resp = await client.post(
         "/api/jobs/run-discovery",
         json={"connector": "serp1"},
     )
     assert resp.status_code == 403
-    assert "disabled" in resp.json().get("detail", "").lower() or "serp1" in resp.json().get("detail", "").lower()
+    assert (
+        "disabled" in resp.json().get("detail", "").lower()
+        or "serp1" in resp.json().get("detail", "").lower()
+    )
 
 
 async def test_run_discovery_serp1_returns_200_when_enabled(client, monkeypatch):

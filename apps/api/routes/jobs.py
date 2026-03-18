@@ -3,7 +3,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -24,16 +23,16 @@ from apps.api.schemas import (
     UpdateStatusResponse,
 )
 from apps.api.settings import Settings
-from apps.worker.tasks.scrape import scrape_jobspy
+from apps.worker.tasks.discovery import run_discovery
 from apps.worker.tasks.ingest import (
     ingest_ashby,
     ingest_greenhouse,
     ingest_lever,
     ingest_url,
 )
-from apps.worker.tasks.discovery import run_discovery
 from apps.worker.tasks.resolution import resolve_discovery_job
 from apps.worker.tasks.resume import generate_grounded_resume_task
+from apps.worker.tasks.scrape import scrape_jobspy
 from core.connectors.url_provider import parse_supported_url
 from core.db.models import (
     Artifact,
@@ -51,7 +50,9 @@ from core.job_status import legacy_status_from_canonical
 settings = Settings()
 
 # User workflow: NEW is the initial state; clients may only set SAVED, APPLIED, ARCHIVED.
-WRITABLE_USER_STATUSES = frozenset({UserStatus.SAVED.value, UserStatus.APPLIED.value, UserStatus.ARCHIVED.value})
+WRITABLE_USER_STATUSES = frozenset(
+    {UserStatus.SAVED.value, UserStatus.APPLIED.value, UserStatus.ARCHIVED.value}
+)
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -100,7 +101,9 @@ def _build_ats_gaps(j: Job, analysis: JobAnalysis | None) -> ATSGaps | None:
             missing_keywords=analysis.missing_keywords or [],
             found_keywords=analysis.found_keywords,
             ats_compatibility_score=analysis.ats_compatibility_score,
-            raw=analysis.ats_categories if isinstance(analysis.ats_categories, dict) else None,
+            raw=analysis.ats_categories
+            if isinstance(analysis.ats_categories, dict)
+            else None,
         )
     b = j.ats_match_breakdown_json or {}
     if not b and not (j.ats_match_score or j.ats_match_score == 0):
@@ -108,7 +111,9 @@ def _build_ats_gaps(j: Job, analysis: JobAnalysis | None) -> ATSGaps | None:
     return ATSGaps(
         missing_keywords=[],
         found_keywords=None,
-        ats_compatibility_score=float(j.ats_match_score) if j.ats_match_score is not None else None,
+        ats_compatibility_score=float(j.ats_match_score)
+        if j.ats_match_score is not None
+        else None,
         raw=b if isinstance(b, dict) else None,
     )
 
@@ -179,6 +184,7 @@ class RunScrapeBody(BaseModel):
 
 class RunIngestionBody(BaseModel):
     """Generalized canonical ingestion. Fields vary by connector."""
+
     connector: Literal["greenhouse", "lever", "ashby"]
     company_name: str
     # Greenhouse
@@ -195,10 +201,23 @@ class IngestUrlBody(BaseModel):
 
 class RunDiscoveryBody(BaseModel):
     """Discovery run. Connector agg1 (primary) or serp1 (optional, feature-flagged)."""
+
     connector: Literal["agg1", "serp1"]
     query: Optional[str] = None
     location: Optional[str] = None
     results_per_page: Optional[int] = None
+    distance: Optional[int] = None
+    max_days_old: Optional[int] = None
+    sort_by: Optional[str] = "date"
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
+    full_time: Optional[bool] = None
+    part_time: Optional[bool] = None
+    contract: Optional[bool] = None
+    permanent: Optional[bool] = None
+    category: Optional[str] = None
+    max_pages: Optional[int] = None
+    max_results: Optional[int] = None
 
 
 class BulkJobIds(BaseModel):
@@ -243,7 +262,10 @@ async def run_ingestion(
                 status_code=400,
                 detail="job_board_name required for ashby connector.",
             )
-        params = {"job_board_name": body.job_board_name, "company_name": body.company_name}
+        params = {
+            "job_board_name": body.job_board_name,
+            "company_name": body.company_name,
+        }
         task_fn = ingest_ashby.delay
         task_kwargs = {
             "run_id": None,
@@ -299,6 +321,18 @@ async def run_discovery_route(
         "query": body.query,
         "location": body.location,
         "results_per_page": body.results_per_page or 20,
+        "distance": body.distance,
+        "max_days_old": body.max_days_old,
+        "sort_by": body.sort_by or "date",
+        "salary_min": body.salary_min,
+        "salary_max": body.salary_max,
+        "full_time": body.full_time,
+        "part_time": body.part_time,
+        "contract": body.contract,
+        "permanent": body.permanent,
+        "category": body.category,
+        "max_pages": body.max_pages,
+        "max_results": body.max_results,
     }
     scrape_run = ScrapeRun(
         source=connector,
@@ -315,8 +349,25 @@ async def run_discovery_route(
         query=body.query,
         location=body.location,
         results_per_page=body.results_per_page or 20,
+        distance=body.distance,
+        max_days_old=body.max_days_old,
+        sort_by=body.sort_by or "date",
+        salary_min=body.salary_min,
+        salary_max=body.salary_max,
+        full_time=body.full_time,
+        part_time=body.part_time,
+        contract=body.contract,
+        permanent=body.permanent,
+        category=body.category,
+        max_pages=body.max_pages,
+        max_results=body.max_results,
     )
-    return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id), "connector": connector}
+    return {
+        "run_id": run_id,
+        "status": "RUNNING",
+        "task_id": str(task.id),
+        "connector": connector,
+    }
 
 
 @router.post("/ingest-url")
@@ -346,7 +397,12 @@ async def ingest_url_route(
     await db.refresh(scrape_run)
     run_id = str(scrape_run.id)
     task = ingest_url.delay(run_id=run_id, url=body.url)
-    return {"run_id": run_id, "status": "RUNNING", "task_id": str(task.id), "provider": parsed.provider}
+    return {
+        "run_id": run_id,
+        "status": "RUNNING",
+        "task_id": str(task.id),
+        "provider": parsed.provider,
+    }
 
 
 @router.post("/run-scrape")
@@ -384,7 +440,10 @@ async def list_ready_to_apply(
     db: AsyncSession = Depends(get_db),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    sort_by: str = Query("artifact_ready_at", description="Sort column (artifact_ready_at, score_total, scraped_at)"),
+    sort_by: str = Query(
+        "artifact_ready_at",
+        description="Sort column (artifact_ready_at, score_total, scraped_at)",
+    ),
     sort_dir: str = Query("desc"),
 ):
     """
@@ -420,13 +479,15 @@ async def list_ready_to_apply(
 
 
 @router.post("/bulk-status")
-async def bulk_status(body: BulkJobIds, status: str = Query(...), db: AsyncSession = Depends(get_db)):
+async def bulk_status(
+    body: BulkJobIds, status: str = Query(...), db: AsyncSession = Depends(get_db)
+):
     if status not in WRITABLE_USER_STATUSES:
         raise HTTPException(
             status_code=400,
             detail=f"user_status must be one of {sorted(WRITABLE_USER_STATUSES)}; NEW is not client-settable",
         )
-        
+
     updated = 0
     for jid in body.job_ids:
         result = await db.execute(select(Job).where(Job.id == jid))
@@ -444,16 +505,22 @@ async def bulk_status(body: BulkJobIds, status: str = Query(...), db: AsyncSessi
 async def list_jobs(
     db: AsyncSession = Depends(get_db),
     user_status: Optional[str] = Query(None, description="Filter by user_status"),
-    status: Optional[str] = Query(None, description="Alias for user_status (backward compat)"),
+    status: Optional[str] = Query(
+        None, description="Alias for user_status (backward compat)"
+    ),
     pipeline_status: Optional[str] = None,
     source: Optional[str] = None,
     persona: Optional[str] = Query(None, description="Filter by matched persona"),
     q: Optional[str] = Query(None, description="Search title/company"),
     min_score: Optional[float] = None,
-    include_rejected: bool = Query(False, description="Include REJECTED jobs for debugging"),
+    include_rejected: bool = Query(
+        False, description="Include REJECTED jobs for debugging"
+    ),
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
-    sort_by: str = Query("score_total", description="Sort column (score_total, scraped_at, title)"),
+    sort_by: str = Query(
+        "score_total", description="Sort column (score_total, scraped_at, title)"
+    ),
     sort_dir: str = Query("desc"),
 ):
     """List jobs with pagination. Supports v1 manual-review workflow."""
@@ -471,7 +538,9 @@ async def list_jobs(
         count_stmt = count_stmt.where(Job.pipeline_status == pipeline_status)
     elif not include_rejected:
         stmt = stmt.where(Job.pipeline_status != PipelineStatus.REJECTED.value)
-        count_stmt = count_stmt.where(Job.pipeline_status != PipelineStatus.REJECTED.value)
+        count_stmt = count_stmt.where(
+            Job.pipeline_status != PipelineStatus.REJECTED.value
+        )
     if source:
         stmt = stmt.where(Job.source == source)
         count_stmt = count_stmt.where(Job.source == source)
@@ -479,9 +548,9 @@ async def list_jobs(
         stmt = stmt.join(JobAnalysis, Job.id == JobAnalysis.job_id).where(
             JobAnalysis.matched_persona == persona
         )
-        count_stmt = count_stmt.join(
-            JobAnalysis, Job.id == JobAnalysis.job_id
-        ).where(JobAnalysis.matched_persona == persona)
+        count_stmt = count_stmt.join(JobAnalysis, Job.id == JobAnalysis.job_id).where(
+            JobAnalysis.matched_persona == persona
+        )
     if q:
         q_lower = f"%{q.lower()}%"
         filter_clause = (func.lower(Job.title).like(q_lower)) | (
@@ -510,8 +579,13 @@ async def list_jobs(
 async def get_job(
     job_id: UUID,
     db: AsyncSession = Depends(get_db),
-    include_rejected: bool = Query(False, description="Allow viewing REJECTED jobs (debug)"),
-    debug: bool = Query(False, description="Include internal debug data (source_payload_json, dedup_hash); requires DEBUG_ENDPOINTS_ENABLED=true"),
+    include_rejected: bool = Query(
+        False, description="Allow viewing REJECTED jobs (debug)"
+    ),
+    debug: bool = Query(
+        False,
+        description="Include internal debug data (source_payload_json, dedup_hash); requires DEBUG_ENDPOINTS_ENABLED=true",
+    ),
 ):
     """Retrieve full job details, analysis, scores, and artifact metadata.
     When debug=true, internal debug_data is included only if DEBUG_ENDPOINTS_ENABLED is set."""
@@ -615,7 +689,9 @@ async def trigger_generate_resume(job_id: UUID, db: AsyncSession = Depends(get_d
             f"Current: {job.pipeline_status}.",
         )
     task = generate_grounded_resume_task.delay(str(job_id))
-    return GenerateResumeResponse(job_id=str(job_id), status="queued", task_id=str(task.id))
+    return GenerateResumeResponse(
+        job_id=str(job_id), status="queued", task_id=str(task.id)
+    )
 
 
 @router.get("/{job_id}/artifacts", response_model=ArtifactsResponse)
@@ -625,7 +701,9 @@ async def list_job_artifacts(job_id: UUID, db: AsyncSession = Depends(get_db)):
     if not job_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Job not found")
     result = await db.execute(
-        select(Artifact).where(Artifact.job_id == job_id).order_by(Artifact.created_at.desc())
+        select(Artifact)
+        .where(Artifact.job_id == job_id)
+        .order_by(Artifact.created_at.desc())
     )
     artifacts = result.scalars().all()
     items = [

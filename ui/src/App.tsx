@@ -5,6 +5,7 @@ import JobsPage from "./pages/JobsPage";
 import JobDetailPage from "./pages/JobDetailPage";
 import RunsPage from "./pages/RunsPage";
 import RunDetailPage from "./pages/RunDetailPage";
+import ManualJobIntakePage from "./pages/ManualJobIntakePage";
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/ready" replace />} />
         <Route path="/ready" element={<ReadyToApplyPage />} />
         <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/jobs/manual-intake" element={<ManualJobIntakePage />} />
         <Route path="/jobs/:id" element={<JobDetailPage />} />
         <Route path="/runs" element={<RunsPage />} />
         <Route path="/runs/:id" element={<RunDetailPage />} />

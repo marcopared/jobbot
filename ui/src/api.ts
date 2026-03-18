@@ -27,10 +27,35 @@ export interface JobDetail extends Omit<Job, "persona"> {
   url: string | null;
   apply_url: string | null;
   source: string | null;
-  score_breakdown: { title_relevance?: number; seniority_fit?: number; tech_stack?: number; location_remote?: number; weights?: Record<string, number>; raw?: Record<string, unknown> } | null;
-  ats_gaps: { missing_keywords: string[]; found_keywords?: string[]; ats_compatibility_score?: number; raw?: Record<string, unknown> } | null;
-  persona: { matched_persona?: string; persona_confidence?: number; persona_rationale?: string } | null;
-  artifacts: { id: string; kind: string; filename: string; persona_name: string | null; generation_status: string | null; created_at: string | null; download_url: string; preview_url: string }[];
+  score_breakdown: {
+    title_relevance?: number;
+    seniority_fit?: number;
+    tech_stack?: number;
+    location_remote?: number;
+    weights?: Record<string, number>;
+    raw?: Record<string, unknown>;
+  } | null;
+  ats_gaps: {
+    missing_keywords: string[];
+    found_keywords?: string[];
+    ats_compatibility_score?: number;
+    raw?: Record<string, unknown>;
+  } | null;
+  persona: {
+    matched_persona?: string;
+    persona_confidence?: number;
+    persona_rationale?: string;
+  } | null;
+  artifacts: {
+    id: string;
+    kind: string;
+    filename: string;
+    persona_name: string | null;
+    generation_status: string | null;
+    created_at: string | null;
+    download_url: string;
+    preview_url: string;
+  }[];
   salary_min: number | null;
   salary_max: number | null;
   posted_at: string | null;
@@ -47,13 +72,11 @@ export interface Run {
   status: string;
   params_json: Record<string, unknown> | null;
   stats_json: Record<string, number> | null;
-  item_counts:
-    | {
-        all: number;
-        inserted: number;
-        duplicates: number;
-      }
-    | null;
+  item_counts: {
+    all: number;
+    inserted: number;
+    duplicates: number;
+  } | null;
   error_text: string | null;
   created_at: string | null;
 }
@@ -94,7 +117,9 @@ export interface RunItemsResponse {
   };
 }
 
-export async function fetchJobs(params: Record<string, string>): Promise<JobsResponse> {
+export async function fetchJobs(
+  params: Record<string, string>,
+): Promise<JobsResponse> {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`${BASE}/jobs?${qs}`);
   if (!res.ok) throw new Error(`Failed to fetch jobs: ${res.status}`);
@@ -107,7 +132,10 @@ export async function fetchJob(id: string): Promise<JobDetail> {
   return res.json();
 }
 
-export async function updateJobStatus(id: string, status: string): Promise<{ id: string; user_status: string }> {
+export async function updateJobStatus(
+  id: string,
+  status: string,
+): Promise<{ id: string; user_status: string }> {
   const res = await fetch(`${BASE}/jobs/${id}/status`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -120,17 +148,25 @@ export async function updateJobStatus(id: string, status: string): Promise<{ id:
   return res.json();
 }
 
-export async function bulkUpdateStatus(jobIds: string[], status: string): Promise<{ updated: number }> {
-  const res = await fetch(`${BASE}/jobs/bulk-status?status=${encodeURIComponent(status)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ job_ids: jobIds }),
-  });
+export async function bulkUpdateStatus(
+  jobIds: string[],
+  status: string,
+): Promise<{ updated: number }> {
+  const res = await fetch(
+    `${BASE}/jobs/bulk-status?status=${encodeURIComponent(status)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_ids: jobIds }),
+    },
+  );
   if (!res.ok) throw new Error(`Bulk status update failed: ${res.status}`);
   return res.json();
 }
 
-export async function fetchRuns(params: Record<string, string>): Promise<RunsResponse> {
+export async function fetchRuns(
+  params: Record<string, string>,
+): Promise<RunsResponse> {
   const qs = new URLSearchParams(params).toString();
   const res = await fetch(`${BASE}/runs?${qs}`);
   if (!res.ok) throw new Error(`Failed to fetch runs: ${res.status}`);
@@ -169,7 +205,9 @@ export interface JobArtifactsResponse {
   items: JobArtifact[];
 }
 
-export async function fetchJobArtifacts(jobId: string): Promise<JobArtifactsResponse> {
+export async function fetchJobArtifacts(
+  jobId: string,
+): Promise<JobArtifactsResponse> {
   const res = await fetch(`${BASE}/jobs/${jobId}/artifacts`);
   if (!res.ok) throw new Error(`Failed to fetch artifacts: ${res.status}`);
   return res.json();
@@ -180,7 +218,9 @@ export async function triggerGenerateResume(jobId: string): Promise<{
   status: string;
   task_id?: string;
 }> {
-  const res = await fetch(`${BASE}/jobs/${jobId}/generate-resume`, { method: "POST" });
+  const res = await fetch(`${BASE}/jobs/${jobId}/generate-resume`, {
+    method: "POST",
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Resume generation failed: ${res.status}`);
@@ -215,7 +255,8 @@ export async function fetchReadyToApply(params?: {
 }): Promise<JobsResponse> {
   const searchParams = new URLSearchParams();
   if (params?.page != null) searchParams.set("page", String(params.page));
-  if (params?.per_page != null) searchParams.set("per_page", String(params.per_page));
+  if (params?.per_page != null)
+    searchParams.set("per_page", String(params.per_page));
   if (params?.sort_by) searchParams.set("sort_by", params.sort_by);
   if (params?.sort_dir) searchParams.set("sort_dir", params.sort_dir);
   const qs = searchParams.toString();
@@ -250,7 +291,14 @@ export async function runDiscovery(body: {
   query?: string;
   location?: string;
   results_per_page?: number;
-}): Promise<{ run_id: string; status: string; task_id?: string; connector?: string }> {
+  max_days_old?: number;
+  max_results?: number;
+}): Promise<{
+  run_id: string;
+  status: string;
+  task_id?: string;
+  connector?: string;
+}> {
   const res = await fetch(`${BASE}/jobs/run-discovery`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
