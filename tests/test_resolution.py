@@ -19,14 +19,19 @@ from core.connectors.base import ProvenanceMetadata
 from core.db.models import (
     Company,
     Job,
+    JobAnalysis,
     JobResolutionAttempt,
     JobSourceRecord,
+    PipelineStatus,
     ResolutionStatus,
     SourceRole,
 )
 from core.db.session import get_sync_session
 from core.dedup import compute_dedup_hash_from_raw, normalize_company, normalize_title
 from apps.worker.tasks.resolution import resolve_discovery_job
+from apps.worker.tasks.score import score_jobs
+from apps.worker.tasks.classify import classify_jobs
+from apps.worker.tasks.ats_match import ats_match_resume
 
 
 @pytest.fixture
@@ -247,3 +252,114 @@ def test_resolve_task_success_mocked(mock_create_connector):
         sources = result.scalars().all()
         source_names = {s.source_name for s in sources}
         assert "greenhouse" in source_names
+
+
+@patch("apps.worker.tasks.resolution.create_greenhouse_connector")
+def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector):
+    """Regression: a discovery job already past INGESTED (e.g. ATS_ANALYZED)
+    is resolved to canonical data and then rescored/reclassified/re-ATS-analyzed
+    with the enriched content."""
+    import random
+
+    unique_id = str(900000000 + random.randint(0, 99999999))
+
+    # 1. Create a discovery job and push it through scoring/classify/ATS so it's
+    #    past INGESTED (simulates a job that was already processed as discovery).
+    job_id = _make_discovery_job(
+        f"https://boards.greenhouse.io/acme/jobs/{unique_id}",
+    )
+
+    # Run the pipeline so the job reaches ATS_ANALYZED with its weak discovery data
+    jids = [str(job_id)]
+    score_jobs.apply(kwargs={"job_ids": jids})
+    classify_jobs.apply(kwargs={"job_ids": jids})
+    ats_match_resume.apply(kwargs={"job_ids": jids})
+
+    with get_sync_session() as session:
+        job = session.get(Job, job_id)
+        assert job.pipeline_status == PipelineStatus.ATS_ANALYZED.value
+        old_score = job.score_total
+        old_description = job.description
+        old_ats_score = job.ats_match_score
+
+    # 2. Mock the canonical connector to return richer data
+    canonical_description = (
+        "We are hiring a Senior Backend Engineer to build scalable APIs. "
+        "Python, FastAPI, AWS, PostgreSQL, Kubernetes, Docker, Redis, CI/CD. "
+        "Remote-first fintech company."
+    )
+    mock_connector = MagicMock()
+    mock_connector.normalize.return_value = CanonicalJobPayload(
+        source_name="greenhouse",
+        external_id=unique_id,
+        title="Senior Backend Engineer",
+        company="Acme Corp",
+        location="Remote",
+        employment_type=None,
+        description=canonical_description,
+        apply_url=f"https://boards.greenhouse.io/acme/jobs/{unique_id}",
+        source_url=f"https://boards.greenhouse.io/acme/jobs/{unique_id}",
+        posted_at=None,
+        raw_payload={"id": int(unique_id), "title": "Senior Backend Engineer"},
+        normalized_title="senior backend engineer",
+        normalized_company="acme corp",
+        normalized_location="remote",
+    )
+    mock_connector.fetch_raw_jobs.return_value = FetchResult(
+        raw_jobs=[
+            RawJobWithProvenance(
+                raw_payload={"id": int(unique_id), "title": "Senior Backend Engineer"},
+                provenance=ProvenanceMetadata(
+                    fetch_timestamp="2024-01-01T00:00:00Z",
+                    source_url="https://boards.greenhouse.io/acme/jobs",
+                    connector_version="v1",
+                ),
+            )
+        ],
+        stats={"fetched": 1, "errors": 0},
+        error=None,
+    )
+    mock_create_connector.return_value = mock_connector
+
+    # 3. Resolve — this should reset pipeline_status to INGESTED
+    result = resolve_discovery_job(str(job_id))
+    assert result["status"] == "resolved"
+
+    with get_sync_session() as session:
+        job = session.get(Job, job_id)
+        assert job.pipeline_status == PipelineStatus.INGESTED.value, (
+            f"Expected INGESTED after resolution reset, got {job.pipeline_status}"
+        )
+        assert job.description == canonical_description
+
+    # 4. Re-run the downstream chain (simulates what the Celery chain does)
+    score_out = score_jobs.apply(kwargs={"job_ids": jids}).get()
+    assert str(job_id) in score_out["job_ids"], (
+        "Resolved job should be rescored (pipeline_status was reset to INGESTED)"
+    )
+
+    classify_out = classify_jobs.apply(kwargs={"job_ids": jids}).get()
+    assert str(job_id) in classify_out["job_ids"], (
+        "Resolved job should be reclassified"
+    )
+
+    ats_out = ats_match_resume.apply(kwargs={"job_ids": jids}).get()
+    assert str(job_id) in ats_out["job_ids"], (
+        "Resolved job should be re-ATS-analyzed"
+    )
+
+    # 5. Verify the job reached ATS_ANALYZED with updated canonical data
+    with get_sync_session() as session:
+        job = session.get(Job, job_id)
+        assert job.pipeline_status == PipelineStatus.ATS_ANALYZED.value
+        assert job.description == canonical_description
+        assert job.resolution_status == ResolutionStatus.RESOLVED_CANONICAL.value
+        assert job.source_confidence == 1.0
+
+        # Score and ATS analysis should reflect the richer canonical description
+        analysis = session.execute(
+            select(JobAnalysis).where(JobAnalysis.job_id == job_id)
+        ).scalar_one_or_none()
+        assert analysis is not None
+        assert analysis.ats_compatibility_score is not None
+        assert analysis.matched_persona is not None

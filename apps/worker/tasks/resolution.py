@@ -18,6 +18,7 @@ from core.db.models import (
     Job,
     JobResolutionAttempt,
     JobSourceRecord,
+    PipelineStatus,
     ResolutionStatus,
 )
 from core.db.session import get_sync_session
@@ -227,6 +228,12 @@ def resolve_discovery_job(self, job_id: str):
             job.resolution_status = ResolutionStatus.RESOLVED_CANONICAL.value
             job.resolution_confidence = 1.0
             job.source_confidence = 1.0
+
+            # Reset pipeline_status so the downstream chain (score -> classify
+            # -> ats_match -> gate) reprocesses this job with its new canonical
+            # data.  Without this, score_jobs filters on INGESTED and silently
+            # skips jobs that were already scored/classified/analyzed.
+            job.pipeline_status = PipelineStatus.INGESTED.value
 
             provenance = raw_with_prov.provenance
             provenance_meta = {

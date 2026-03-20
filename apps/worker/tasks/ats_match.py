@@ -51,7 +51,10 @@ def ats_match_resume(self, job_ids: list[str] | dict | None = None):
         with get_sync_session() as session:
             if ids:
                 uuids = [UUID(jid) for jid in ids]
-                stmt = select(Job).where(Job.id.in_(uuids))
+                stmt = select(Job).where(
+                    Job.id.in_(uuids),
+                    Job.pipeline_status == PipelineStatus.CLASSIFIED.value,
+                )
             else:
                 stmt = select(Job).where(Job.pipeline_status == PipelineStatus.CLASSIFIED.value)
             result = session.execute(stmt)
