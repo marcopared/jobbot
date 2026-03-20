@@ -512,9 +512,15 @@ async def manual_ingest(
             "outcome": "inserted",
             "job_id": str(job_id),
             "dedup_hash": dedup_hash,
+            "source": "manual_intake",
+            "source_job_id": None,
             "title": body.title,
-            "company": body.company,
+            "company_name": body.company,
+            "location": body.location,
+            "url": body.source_url or body.apply_url or "",
             "apply_url": body.apply_url,
+            "ats_type": "manual_intake",
+            "raw_payload_json": None,
         }
     ]
     await db.commit()

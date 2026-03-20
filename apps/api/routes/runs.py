@@ -90,7 +90,7 @@ async def get_run_items(
             haystack = " ".join(
                 [
                     str(item.get("title", "")),
-                    str(item.get("company_name", "")),
+                    str(item.get("company_name", "") or item.get("company", "")),
                     str(item.get("source", "")),
                 ]
             ).lower()

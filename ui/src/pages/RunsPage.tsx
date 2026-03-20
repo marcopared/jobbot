@@ -391,7 +391,9 @@ export default function RunsPage() {
                           ? "bg-yellow-100 text-yellow-800"
                           : run.status === "SUCCESS"
                             ? "bg-green-100 text-green-800"
-                            : "bg-red-100 text-red-800"
+                            : run.status === "SKIPPED"
+                              ? "bg-gray-100 text-gray-800"
+                              : "bg-red-100 text-red-800"
                       }`}
                     >
                       {run.status}

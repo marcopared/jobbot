@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from apps.api.settings import Settings
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.run_helpers import mark_run_skipped
 from apps.worker.tasks.ats_match import ats_match_resume
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.generation import evaluate_generation_gate
@@ -222,11 +223,15 @@ def _run_discovery_persist(
                         "dedup_reason": dedup_reason,
                         "job_id": str(inserted_job_id),
                         "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
+                        "source": source_name,
+                        "source_job_id": canonical.external_id,
                         "title": canonical.title,
-                        "company": canonical.company,
+                        "company_name": canonical.company,
                         "location": canonical.location,
+                        "url": canonical.source_url or canonical.apply_url or "",
                         "apply_url": canonical.apply_url,
+                        "ats_type": source_name,
+                        "raw_payload_json": canonical.raw_payload,
                         "source_confidence": source_confidence,
                     }
                 )
@@ -240,11 +245,15 @@ def _run_discovery_persist(
                         "dedup_reason": dedup_reason,
                         "job_id": existing_job_id,
                         "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
+                        "source": source_name,
+                        "source_job_id": canonical.external_id,
                         "title": canonical.title,
-                        "company": canonical.company,
+                        "company_name": canonical.company,
                         "location": canonical.location,
+                        "url": canonical.source_url or canonical.apply_url or "",
                         "apply_url": canonical.apply_url,
+                        "ats_type": source_name,
+                        "raw_payload_json": canonical.raw_payload,
                     }
                 )
 
@@ -327,6 +336,7 @@ def run_discovery(
                     "Skipping AGG-1 discovery run_id=%s (ENABLE_AGG1_DISCOVERY=false)",
                     run_id,
                 )
+                mark_run_skipped(run_id, "ENABLE_AGG1_DISCOVERY=false")
                 return {"status": "skipped", "reason": "ENABLE_AGG1_DISCOVERY=false"}
             conn = create_agg1_connector(
                 app_id=settings.adzuna_app_id or "",
@@ -339,6 +349,7 @@ def run_discovery(
                     "Skipping SERP1 discovery run_id=%s (ENABLE_SERP1_DISCOVERY=false)",
                     run_id,
                 )
+                mark_run_skipped(run_id, "ENABLE_SERP1_DISCOVERY=false")
                 return {"status": "skipped", "reason": "ENABLE_SERP1_DISCOVERY=false"}
             conn = create_serp1_connector()
         else:

@@ -23,6 +23,7 @@ from core.scraping.jobspy_scraper import JobSpyScraper
 from core.scraping.base import ScrapeParams
 
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.run_helpers import mark_run_skipped
 from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
@@ -88,6 +89,7 @@ def scrape_jobspy(
     )
     if not settings.jobspy_enabled:
         logger.info("Skipping scrape run_id=%s because jobspy is disabled", run_id)
+        mark_run_skipped(run_id, "JOBSPY_ENABLED=false")
         return {"status": "skipped", "reason": "JOBSPY_ENABLED=false"}
     scraper = JobSpyScraper()
     logger.info(

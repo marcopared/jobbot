@@ -90,7 +90,7 @@ export interface RunsResponse {
 
 export interface RunItem {
   index: number;
-  outcome: "inserted" | "duplicate";
+  outcome: "inserted" | "duplicate" | "skipped";
   job_id: string | null;
   dedup_hash: string;
   source: string;
@@ -102,6 +102,8 @@ export interface RunItem {
   apply_url: string | null;
   ats_type: string;
   backfilled_payload?: boolean;
+  backfilled_apply_url?: boolean;
+  source_confidence?: number;
   raw_payload_json: Record<string, unknown> | null;
 }
 
