@@ -285,6 +285,37 @@ export async function ingestUrl(url: string): Promise<{
   return res.json();
 }
 
+/** Manual job intake — persist a user-entered job and start pipeline */
+export async function manualIngest(body: {
+  title: string;
+  company: string;
+  location: string;
+  apply_url: string;
+  description: string;
+  source_url?: string;
+  posted_at?: string;
+  salary_min?: number;
+  salary_max?: number;
+  workplace_type?: string;
+  employment_type?: string;
+}): Promise<{
+  run_id: string;
+  job_id: string | null;
+  status: string;
+  task_id?: string;
+}> {
+  const res = await fetch(`${BASE}/jobs/manual-ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Manual ingest failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Trigger discovery run (AGG-1 or SERP1) */
 export async function runDiscovery(body: {
   connector: "agg1" | "serp1";

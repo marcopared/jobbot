@@ -680,3 +680,120 @@ async def test_run_discovery_unsupported_connector_returns_422(client):
         json={"connector": "unknown"},
     )
     assert resp.status_code == 422
+
+
+# --- Manual ingest route tests ---
+
+
+MANUAL_INGEST_PAYLOAD = {
+    "title": "Senior Backend Engineer",
+    "company": "Acme Corp",
+    "location": "Remote",
+    "apply_url": "https://example.com/apply/unique-test-job",
+    "description": "Build scalable APIs in Python.",
+}
+
+
+async def test_manual_ingest_missing_required_fields(client):
+    """POST /api/jobs/manual-ingest returns 422 when required fields are missing."""
+    resp = await client.post("/api/jobs/manual-ingest", json={})
+    assert resp.status_code == 422
+
+
+async def test_manual_ingest_missing_title(client):
+    """POST /api/jobs/manual-ingest returns 422 when title is missing."""
+    payload = {**MANUAL_INGEST_PAYLOAD}
+    del payload["title"]
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_manual_ingest_success(client):
+    """POST /api/jobs/manual-ingest persists job, returns run_id and job_id."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/{unique}",
+        "title": f"Senior Backend Engineer {unique}",
+    }
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "SUCCESS"
+    assert data["run_id"]
+    assert data["job_id"]
+    assert data.get("task_id")
+
+    # Verify job exists and is INGESTED
+    job_resp = await client.get(f"/api/jobs/{data['job_id']}")
+    assert job_resp.status_code == 200
+    job_data = job_resp.json()
+    assert job_data["title"].startswith("Senior Backend Engineer")
+    assert job_data["company"] == "Acme Corp"
+    assert job_data["pipeline_status"] == "INGESTED"
+    assert job_data["source"] == "manual_intake"
+
+
+async def test_manual_ingest_duplicate(client):
+    """POST /api/jobs/manual-ingest returns DUPLICATE for identical job."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/dup-{unique}",
+        "title": f"Dup Test Engineer {unique}",
+    }
+    resp1 = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp1.status_code == 200
+    assert resp1.json()["status"] == "SUCCESS"
+
+    resp2 = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["status"] == "DUPLICATE"
+    assert data2["job_id"] is None
+    assert data2["run_id"]
+
+
+async def test_manual_ingest_with_optional_fields(client):
+    """POST /api/jobs/manual-ingest accepts optional fields."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/opt-{unique}",
+        "title": f"Full Stack {unique}",
+        "source_url": "https://example.com/listing",
+        "posted_at": "2026-03-15T10:00:00",
+        "salary_min": 120000,
+        "salary_max": 180000,
+        "workplace_type": "remote",
+        "employment_type": "full_time",
+    }
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "SUCCESS"
+    assert data["job_id"]
+
+    job_resp = await client.get(f"/api/jobs/{data['job_id']}")
+    assert job_resp.status_code == 200
+    job_data = job_resp.json()
+    assert job_data["salary_min"] == 120000
+    assert job_data["salary_max"] == 180000
+
+
+async def test_manual_ingest_run_visible(client):
+    """Manual ingest creates a ScrapeRun that is visible in /api/runs."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/run-{unique}",
+        "title": f"Run Vis Test {unique}",
+    }
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 200
+    run_id = resp.json()["run_id"]
+
+    runs_resp = await client.get("/api/runs")
+    assert runs_resp.status_code == 200
+    run_ids = [r["id"] for r in runs_resp.json()["items"]]
+    assert run_id in run_ids

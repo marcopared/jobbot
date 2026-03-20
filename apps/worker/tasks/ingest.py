@@ -760,3 +760,12 @@ def ingest_url(self, run_id: str, url: str):
             task_name="ingest_url",
             source_role_override=SourceRole.URL_INGEST,
         )
+
+
+@celery_app.task(acks_late=True)
+def manual_ingest_pipeline(job_ids: list[str]):
+    """Kick off downstream pipeline for manually-ingested jobs."""
+    if not job_ids:
+        return {"status": "no_jobs"}
+    (score_jobs.s(job_ids) | classify_jobs.s() | ats_match_resume.s() | evaluate_generation_gate.s()).delay()
+    return {"status": "chained", "job_ids": job_ids}
