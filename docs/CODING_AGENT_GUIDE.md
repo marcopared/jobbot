@@ -15,12 +15,14 @@ It defines:
 Use these in order:
 1. `docs/SPEC.md`
 2. `docs/ARCHITECTURE.md`
-3. `docs/TODO.md`
-4. `docs/IMPLEMENTATION_PLAN.md`
-5. the real repo for current baseline implementation
-6. the provider specs committed in the repo for the current wave (Adzuna swagger spec and DataForSEO OpenAPI spec)
+3. `docs/KNOWN_ISSUES.md`
+4. `docs/TODO.md`
+5. `docs/IMPLEMENTATION_PLAN.md`
+6. the real repo for current baseline implementation
+7. the provider specs committed in the repo for the current wave (Adzuna swagger spec and DataForSEO OpenAPI spec)
 
 Do **not** infer product scope from older comments, scaffold, patches, or synthetic repo summaries.
+Do **not** treat `ACCEPTANCE_REPORT.md` or `CLOSEOUT_AUDIT.md` as proof that the current branch is fully verified.
 
 ## 2. Product constraints
 
@@ -103,6 +105,17 @@ Do not assume:
 - any SERP/provider integration can be treated as canonical truth
 - generic crawling should be introduced while implementing DataForSEO
 - UI polish should start before backend verification is green
+- historical "GO"/"PASS"/"merge recommendation YES" docs still apply to the current branch
+
+## 7.1 Mandatory invariants
+
+When touching pipeline or worker code, preserve these invariants and rerun the matching regression suites:
+
+- batch scoring must create/update `JobAnalysis` for every job in the batch
+- run-item payloads must keep the canonical UI schema and backward-compatible normalization
+- discovery resolution must reprocess jobs that were already past `INGESTED`
+- disabled-feature worker exits must persist terminal skipped runs
+- manual and auto generation must both persist durable `GenerationRun` lifecycle state
 
 ## 8. Provider-specific implementation guardrails
 

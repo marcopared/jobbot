@@ -69,6 +69,7 @@ cd ui && npm run build
 | Product behavior, goals, non-goals | `docs/SPEC.md` |
 | System design, data flow, queues, APIs | `docs/ARCHITECTURE.md` |
 | Current implemented vs aspirational | `docs/README.md` + `docs/IMPLEMENTATION_STATUS.md` |
+| Current reliability gaps / mandatory regressions | `docs/KNOWN_ISSUES.md` |
 | PR boundaries, merge order, sequencing | `docs/IMPLEMENTATION_PLAN.md` |
 | Agent operating rules and escalation | `docs/CODING_AGENT_GUIDE.md` |
 | Backlog and milestones | `docs/TODO.md` *(load only when needed)* |
@@ -127,9 +128,20 @@ Preferred sequencing for provider/discovery work:
 
 Before marking work done, confirm:
 - [ ] `pytest` passes (or focused paths for touched areas)
+- [ ] If pipeline / contracts / run tracking changed, rerun the invariant suites listed in `docs/KNOWN_ISSUES.md`
 - [ ] `cd ui && npm run build` passes (if UI was touched)
 - [ ] No new browser automation or auto-apply code introduced
 - [ ] Source roles remain distinct; no discovery-as-canonical leakage
 - [ ] SERP1 remains feature-flagged
 - [ ] Migration added only if truly required for correctness (not convenience)
 - [ ] PR has explicit out-of-scope statement
+
+## Mandatory backend invariants
+
+Future coding agents must preserve these invariants unless the user explicitly asks for a contract change:
+
+- Persisted `ScrapeRun` rows must not remain stuck in `RUNNING` after worker completion, skip, or failure.
+- Persisted `GenerationRun` rows must exist for queued generation work and must reach a terminal state.
+- Discovery resolution must reset and re-run downstream processing when canonical enrichment changes the job content.
+- Run-item payloads stored in `items_json` must remain compatible with the canonical UI schema.
+- Batch scoring must write a `JobAnalysis` row for every job in the batch, not just the final item.

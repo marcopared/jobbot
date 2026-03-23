@@ -4,6 +4,12 @@ JobBot is a personal job discovery, ranking, and resume-tailoring system.
 
 This documentation set describes the **current system** (source of truth: the real repository) and remaining gaps.
 
+## Current branch caveat
+
+- Treat `KNOWN_ISSUES.md` as required reading before making readiness or stability claims.
+- Treat `ACCEPTANCE_REPORT.md` and `CLOSEOUT_AUDIT.md` as historical snapshots, not current-branch proof.
+- Do not describe the system as fully verified unless the focused regression suites relevant to your change have been rerun successfully.
+
 ## Current system (implemented)
 
 - **Canonical ATS:** Greenhouse, Lever, Ashby via `POST /api/jobs/run-ingestion`
@@ -30,6 +36,12 @@ This documentation set describes the **current system** (source of truth: the re
 - Full target pipeline states (DISCOVERED, NORMALIZED, DEDUPED, etc.) — not yet implemented
 - Target queue model (discovery, resolution, analysis queues) — not yet implemented
 - UI throughput mode: ready-to-apply default view and URL ingest entry point are partially implemented
+- Closeout/readiness claims must be checked against the current branch, not older audit notes
+- Provider-backed end-to-end verification still requires manual/local verification beyond unit tests
+
+## Known issues / reliability gaps
+
+See `KNOWN_ISSUES.md` for the short current-branch reliability summary and the mandatory regression suites.
 
 ## Authoritative docs
 
@@ -39,6 +51,7 @@ This documentation set describes the **current system** (source of truth: the re
 - `IMPLEMENTATION_PLAN.md` — PR boundaries, merge order, and delivery plan
 - `CODING_AGENT_GUIDE.md` — operating instructions and constraints for coding agents
 - `IMPLEMENTATION_STATUS.md` — backend verification audit (what is implemented vs aspirational)
+- `KNOWN_ISSUES.md` — current branch reliability gaps and mandatory invariant suites
 
 ## Hard non-goals
 

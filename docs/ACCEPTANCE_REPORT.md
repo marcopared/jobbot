@@ -4,6 +4,10 @@
 **Scope:** Prove whether the repo is stable enough to resume feature work.  
 **Source of truth:** Real repository only (ignored scaffold, patches, synthetic summaries).
 
+> Historical verification snapshot only. The pass/fail statements below describe the repo state
+> that was verified on 2026-03-16. They are not a blanket claim about later branches.
+> For current-branch reliability gaps, use `KNOWN_ISSUES.md`.
+
 ---
 
 ## 1. Summary
@@ -23,7 +27,7 @@
 | **Runs list/detail** | PASS |
 | **pytest suite** | PASS (230 passed, 1 deprecation warning) |
 
-**Merge recommendation: YES.** The repo is stable enough to resume feature work.
+**Historical recommendation: YES for the audited snapshot only.**
 
 ---
 
@@ -126,7 +130,7 @@ Runs `POST /api/jobs/run-scrape` and waits for run completion.
 | Pydantic deprecation warning (`class Config`) | Info | Non-blocking; can be addressed in a follow-up PR |
 | Playwright required for resume PDF | Known | Documented in README; omit and generation fails as expected |
 
-**No blockers that prevent resuming feature work.**
+No blockers were identified for the audited snapshot. Re-verify current code before repeating this claim.
 
 ---
 
@@ -145,12 +149,10 @@ Runs `POST /api/jobs/run-scrape` and waits for run completion.
 
 ## 7. Merge Recommendation
 
-**YES.** The repository is stable enough to resume feature work.
+**Historical YES only.** Do not reuse this section as current-branch proof without rerunning verification.
 
-- Core flows (health, jobs, ready-to-apply, resolve, runs, artifacts, ingestion) work as documented.
-- Test suite passes and aligns with IMPLEMENTATION_PLAN acceptance criteria.
-- No critical drift between docs and runtime.
-- Documented prerequisites and runtime assumptions are correct.
+- This was true for the audited snapshot.
+- Current branches must be evaluated against current regression suites and known issues.
 
 ---
 
