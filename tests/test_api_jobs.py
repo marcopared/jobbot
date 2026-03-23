@@ -828,6 +828,39 @@ async def test_manual_generate_resume_creates_generation_run(client):
         assert run.triggered_by == "manual"
 
 
+async def test_manual_generate_resume_passes_generation_run_id_to_task(
+    client, monkeypatch
+):
+    """Manual generate queues the worker with the persisted GenerationRun id."""
+    from apps.api.routes import jobs as jobs_route
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="ATS_ANALYZED",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+    captured: dict[str, str] = {}
+
+    class DummyTask:
+        id = "manual-generation-task"
+
+    def _fake_delay(job_id_arg, generation_run_id=None, triggered_by="manual"):
+        captured["job_id"] = job_id_arg
+        captured["generation_run_id"] = generation_run_id
+        captured["triggered_by"] = triggered_by
+        return DummyTask()
+
+    monkeypatch.setattr(jobs_route.generate_grounded_resume_task, "delay", _fake_delay)
+
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert captured["job_id"] == str(job_id)
+    assert captured["generation_run_id"] == data["generation_run_id"]
+    assert captured["triggered_by"] == "manual"
+
+
 async def test_manual_generate_resume_run_id_returned_for_resume_ready(client):
     """POST /api/jobs/{id}/generate-resume on RESUME_READY job also creates a GenerationRun."""
     from core.db.models import GenerationRun

@@ -12,8 +12,9 @@ from sqlalchemy import select
 
 from apps.api.settings import Settings
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.generation_runs import build_generation_run
 from core.automation.generation_gate import evaluate_generation_eligibility, gate_config_from_settings
-from core.db.models import GenerationRun, GenerationRunStatus, Job
+from core.db.models import Job
 from core.db.session import get_sync_session
 from core.observability import log_context, get_metrics
 
@@ -68,11 +69,7 @@ def evaluate_generation_gate(self, chain_output: dict | None = None):
                     )
                     continue
 
-                run = GenerationRun(
-                    job_id=job.id,
-                    status=GenerationRunStatus.QUEUED.value,
-                    triggered_by="auto",
-                )
+                run = build_generation_run(job.id, "auto")
                 session.add(run)
                 session.flush()
                 runs_to_queue.append((str(job.id), str(run.id), reason))

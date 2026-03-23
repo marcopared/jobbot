@@ -213,3 +213,26 @@ def test_manual_run_failure_updates_generation_run():
         assert run.status == GenerationRunStatus.FAILED.value
         assert run.failure_reason == "Experience inventory not found"
         assert run.finished_at is not None
+
+
+def test_manual_run_exception_updates_generation_run_failed():
+    """Raised generator exceptions still finalize the GenerationRun as failed."""
+    job_id = _create_ats_analyzed_job()
+    run_id = _create_generation_run(job_id, "manual")
+
+    with patch("apps.worker.tasks.resume.generate_grounded_resume") as mock_gen:
+        mock_gen.side_effect = RuntimeError("Template render exploded")
+        from apps.worker.tasks.resume import generate_grounded_resume_task
+
+        with pytest.raises(RuntimeError, match="Template render exploded"):
+            generate_grounded_resume_task(
+                str(job_id),
+                generation_run_id=str(run_id),
+                triggered_by="manual",
+            )
+
+    with get_sync_session() as session:
+        run = session.get(GenerationRun, run_id)
+        assert run.status == GenerationRunStatus.FAILED.value
+        assert run.failure_reason == "Template render exploded"
+        assert run.finished_at is not None

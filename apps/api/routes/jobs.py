@@ -27,6 +27,7 @@ from apps.api.schemas import (
 )
 from apps.api.settings import Settings
 from apps.worker.tasks.discovery import run_discovery
+from apps.worker.tasks.generation_runs import build_generation_run
 from apps.worker.tasks.ingest import (
     ingest_ashby,
     ingest_greenhouse,
@@ -41,8 +42,6 @@ from core.connectors.url_provider import parse_supported_url
 from core.dedup import compute_dedup_hash, normalize_company, normalize_location, normalize_title
 from core.db.models import (
     Artifact,
-    GenerationRun,
-    GenerationRunStatus,
     Job,
     JobAnalysis,
     PipelineStatus,
@@ -846,11 +845,7 @@ async def trigger_generate_resume(job_id: UUID, db: AsyncSession = Depends(get_d
             "Job pipeline_status must be ATS_ANALYZED or RESUME_READY. "
             f"Current: {job.pipeline_status}.",
         )
-    run = GenerationRun(
-        job_id=job_id,
-        status=GenerationRunStatus.QUEUED.value,
-        triggered_by="manual",
-    )
+    run = build_generation_run(job_id, "manual")
     db.add(run)
     await db.flush()
     generation_run_id = str(run.id)
