@@ -38,6 +38,27 @@ settings = Settings()
 logger = logging.getLogger(__name__)
 
 
+def _provider_disabled_reason(provider: str) -> str | None:
+    """Return the feature-flag reason when a provider is disabled."""
+    if provider == "greenhouse" and not settings.greenhouse_enabled:
+        return "GREENHOUSE_ENABLED=false"
+    if provider == "lever" and not settings.lever_enabled:
+        return "LEVER_ENABLED=false"
+    if provider == "ashby" and not settings.ashby_enabled:
+        return "ASHBY_ENABLED=false"
+    return None
+
+
+def _skip_run_for_disabled_provider(run_id: str, provider: str) -> dict | None:
+    """Persist a terminal SKIPPED run when the provider is disabled."""
+    reason = _provider_disabled_reason(provider)
+    if reason is None:
+        return None
+    logger.info("Skipping %s ingest run_id=%s (%s)", provider, run_id, reason)
+    mark_run_skipped(run_id, reason)
+    return {"status": "skipped", "reason": reason}
+
+
 def _provider_slug_metadata(parsed) -> dict[str, str]:
     """Preserve provider-specific URL identifiers as metadata, not company."""
     metadata: dict[str, str] = {}
@@ -92,10 +113,9 @@ def ingest_greenhouse(
     with log_context(run_id=run_id, source_name="greenhouse", task_name="ingest_greenhouse"):
         metrics = get_metrics()
 
-        if not settings.greenhouse_enabled:
-            logger.info("Skipping Greenhouse ingest run_id=%s (greenhouse disabled)", run_id)
-            mark_run_skipped(run_id, "GREENHOUSE_ENABLED=false")
-            return {"status": "skipped", "reason": "GREENHOUSE_ENABLED=false"}
+        skip_result = _skip_run_for_disabled_provider(run_id, "greenhouse")
+        if skip_result is not None:
+            return skip_result
 
         connector = create_greenhouse_connector(
             board_token=board_token.strip(),
@@ -606,9 +626,9 @@ def _run_canonical_ingest(
 def ingest_lever(self, run_id: str, client_name: str, company_name: str):
     """Fetch Lever jobs, normalize, persist. Same pipeline as Greenhouse."""
     with log_context(run_id=run_id, source_name="lever", task_name="ingest_lever"):
-        if not settings.lever_enabled:
-            mark_run_skipped(run_id, "LEVER_ENABLED=false")
-            return {"status": "skipped", "reason": "LEVER_ENABLED=false"}
+        skip_result = _skip_run_for_disabled_provider(run_id, "lever")
+        if skip_result is not None:
+            return skip_result
         connector = create_lever_connector(
             client_name=client_name.strip(),
             company_name=company_name.strip() or None,
@@ -654,9 +674,9 @@ def ingest_lever(self, run_id: str, client_name: str, company_name: str):
 def ingest_ashby(self, run_id: str, job_board_name: str, company_name: str):
     """Fetch Ashby jobs, normalize, persist. Same pipeline as Greenhouse."""
     with log_context(run_id=run_id, source_name="ashby", task_name="ingest_ashby"):
-        if not settings.ashby_enabled:
-            mark_run_skipped(run_id, "ASHBY_ENABLED=false")
-            return {"status": "skipped", "reason": "ASHBY_ENABLED=false"}
+        skip_result = _skip_run_for_disabled_provider(run_id, "ashby")
+        if skip_result is not None:
+            return skip_result
         connector = create_ashby_connector(
             job_board_name=job_board_name.strip(),
             company_name=company_name.strip() or None,
@@ -719,6 +739,10 @@ def ingest_url(self, run_id: str, url: str):
                     run.items_json = []
                     session.commit()
             return {"run_id": run_id, "status": "FAILED", "error": "Unsupported job URL"}
+
+        skip_result = _skip_run_for_disabled_provider(run_id, parsed.provider)
+        if skip_result is not None:
+            return skip_result
 
         if parsed.provider == "greenhouse":
             connector = create_greenhouse_connector(

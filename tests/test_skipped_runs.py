@@ -174,3 +174,70 @@ class TestSkippedIngest:
         assert run["status"] == ScrapeRunStatus.SKIPPED.value
         assert run["finished_at"] is not None
         assert run["error_text"] == "URL_INGEST_ENABLED=false"
+
+    def test_url_ingest_greenhouse_disabled_marks_run_skipped(self):
+        """ingest_url honors GREENHOUSE_ENABLED=false for Greenhouse URLs."""
+        from apps.worker.tasks.ingest import ingest_url
+
+        run_id = _create_running_run("url_ingest")
+
+        with patch("apps.worker.tasks.ingest.settings") as mock_settings:
+            mock_settings.url_ingest_enabled = True
+            mock_settings.greenhouse_enabled = False
+            mock_settings.lever_enabled = True
+            mock_settings.ashby_enabled = True
+            result = ingest_url(
+                run_id=run_id, url="https://boards.greenhouse.io/test/jobs/123"
+            )
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "GREENHOUSE_ENABLED=false"
+
+        run = _get_run(run_id)
+        assert run["status"] == ScrapeRunStatus.SKIPPED.value
+        assert run["finished_at"] is not None
+        assert run["error_text"] == "GREENHOUSE_ENABLED=false"
+
+    def test_url_ingest_lever_disabled_marks_run_skipped(self):
+        """ingest_url honors LEVER_ENABLED=false for Lever URLs."""
+        from apps.worker.tasks.ingest import ingest_url
+
+        run_id = _create_running_run("url_ingest")
+
+        with patch("apps.worker.tasks.ingest.settings") as mock_settings:
+            mock_settings.url_ingest_enabled = True
+            mock_settings.greenhouse_enabled = True
+            mock_settings.lever_enabled = False
+            mock_settings.ashby_enabled = True
+            result = ingest_url(run_id=run_id, url="https://jobs.lever.co/test/123")
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "LEVER_ENABLED=false"
+
+        run = _get_run(run_id)
+        assert run["status"] == ScrapeRunStatus.SKIPPED.value
+        assert run["finished_at"] is not None
+        assert run["error_text"] == "LEVER_ENABLED=false"
+
+    def test_url_ingest_ashby_disabled_marks_run_skipped(self):
+        """ingest_url honors ASHBY_ENABLED=false for Ashby URLs."""
+        from apps.worker.tasks.ingest import ingest_url
+
+        run_id = _create_running_run("url_ingest")
+
+        with patch("apps.worker.tasks.ingest.settings") as mock_settings:
+            mock_settings.url_ingest_enabled = True
+            mock_settings.greenhouse_enabled = True
+            mock_settings.lever_enabled = True
+            mock_settings.ashby_enabled = False
+            result = ingest_url(
+                run_id=run_id, url="https://jobs.ashbyhq.com/test/slug-123"
+            )
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "ASHBY_ENABLED=false"
+
+        run = _get_run(run_id)
+        assert run["status"] == ScrapeRunStatus.SKIPPED.value
+        assert run["finished_at"] is not None
+        assert run["error_text"] == "ASHBY_ENABLED=false"
