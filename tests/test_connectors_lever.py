@@ -74,6 +74,22 @@ def test_normalize_missing_title_returns_none(connector):
     assert connector.normalize(raw) is None
 
 
+def test_normalize_prefers_payload_company_over_client_slug():
+    """Payload employer name wins over the URL client slug."""
+    conn = create_lever_connector(client_name="acme", company_name=None)
+    raw = {
+        "id": "abc-123",
+        "text": "Engineer",
+        "company": "Acme Corporation",
+        "hostedUrl": "https://jobs.lever.co/acme/abc-123",
+        "applyUrl": "https://jobs.lever.co/acme/abc-123/apply",
+    }
+    canonical = conn.normalize(raw)
+    assert canonical is not None
+    assert canonical.company == "Acme Corporation"
+    assert canonical.company != "acme"
+
+
 def test_fetch_raw_jobs_mocked(connector):
     """Fetch returns FetchResult with raw_jobs wrapped in provenance."""
     mock_resp = MagicMock()

@@ -22,6 +22,7 @@ from core.db.models import (
     ResolutionStatus,
 )
 from core.db.session import get_sync_session
+from core.job_status import legacy_status_from_canonical
 
 from apps.api.settings import Settings
 from apps.worker.celery_app import celery_app
@@ -36,22 +37,34 @@ settings = Settings()
 logger = logging.getLogger(__name__)
 
 
+def _provider_slug_metadata(parsed) -> dict[str, str]:
+    """Preserve provider-specific URL identifiers as metadata, not company."""
+    metadata: dict[str, str] = {}
+    if parsed.provider == "greenhouse" and parsed.board_token:
+        metadata["board_token"] = parsed.board_token
+    elif parsed.provider == "lever" and parsed.client_name:
+        metadata["client_name"] = parsed.client_name
+    elif parsed.provider == "ashby" and parsed.job_board_name:
+        metadata["job_board_name"] = parsed.job_board_name
+    return metadata
+
+
 def _create_connector_for_provider(parsed):
     """Create connector for parsed URL. Caller ensures parsed is not None."""
     if parsed.provider == "greenhouse":
         return create_greenhouse_connector(
             board_token=parsed.board_token or "",
-            company_name=parsed.board_token or "",
+            company_name=None,
         )
     if parsed.provider == "lever":
         return create_lever_connector(
             client_name=parsed.client_name or "",
-            company_name=parsed.client_name or None,
+            company_name=None,
         )
     if parsed.provider == "ashby":
         return create_ashby_connector(
             job_board_name=parsed.job_board_name or "",
-            company_name=parsed.job_board_name or None,
+            company_name=None,
         )
     return None
 
@@ -79,6 +92,12 @@ def _filter_matching_job(raw_jobs, parsed):
                 matching.append(rw)
                 break
     return matching
+
+
+def _reset_for_reprocessing(job: Job) -> None:
+    """Rewind a resolved discovery job so the standard downstream chain will rerun it."""
+    job.pipeline_status = PipelineStatus.INGESTED.value
+    job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
 
 
 @celery_app.task(bind=True, acks_late=True)
@@ -229,11 +248,10 @@ def resolve_discovery_job(self, job_id: str):
             job.resolution_confidence = 1.0
             job.source_confidence = 1.0
 
-            # Reset pipeline_status so the downstream chain (score -> classify
-            # -> ats_match -> gate) reprocesses this job with its new canonical
-            # data.  Without this, score_jobs filters on INGESTED and silently
-            # skips jobs that were already scored/classified/analyzed.
-            job.pipeline_status = PipelineStatus.INGESTED.value
+            # Rewind the job to INGESTED so the standard downstream chain
+            # (score -> classify -> ats_match -> gate) performs a real
+            # recomputation against the newly enriched canonical fields.
+            _reset_for_reprocessing(job)
 
             provenance = raw_with_prov.provenance
             provenance_meta = {
@@ -242,6 +260,9 @@ def resolve_discovery_job(self, job_id: str):
                 "connector_version": provenance.connector_version,
                 "resolved_from_discovery_job_id": str(job.id),
             }
+            provider_metadata = _provider_slug_metadata(parsed)
+            if provider_metadata:
+                provenance_meta["provider_metadata"] = provider_metadata
             session.execute(
                 insert(JobSourceRecord)
                 .values(

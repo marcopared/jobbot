@@ -53,6 +53,7 @@ from core.db.models import (
     UserStatus,
 )
 from core.job_status import legacy_status_from_canonical
+from core.run_items import make_run_item
 
 settings = Settings()
 
@@ -492,12 +493,36 @@ async def manual_ingest(
     )
     result = await db.execute(stmt)
     job_id = result.scalar_one_or_none()
+    raw_payload = {
+        "intake_source": "manual_intake",
+        "run_id": run_id,
+    }
 
     if job_id is None:
         # Duplicate
+        existing_job_id = (
+            await db.execute(select(Job.id).where(Job.dedup_hash == dedup_hash))
+        ).scalar_one_or_none()
         scrape_run.status = ScrapeRunStatus.SUCCESS.value
         scrape_run.finished_at = datetime.now(timezone.utc)
         scrape_run.stats_json = {"fetched": 1, "inserted": 0, "duplicates": 1, "errors": 0}
+        scrape_run.items_json = [
+            make_run_item(
+                index=1,
+                outcome="duplicate",
+                job_id=str(existing_job_id) if existing_job_id is not None else None,
+                dedup_hash=dedup_hash,
+                source="manual_intake",
+                source_job_id=None,
+                title=body.title,
+                company_name=body.company,
+                location=body.location,
+                url=body.source_url or body.apply_url,
+                apply_url=body.apply_url,
+                ats_type="manual_intake",
+                raw_payload_json=raw_payload,
+            )
+        ]
         await db.commit()
         return ManualIngestResponse(
             run_id=run_id,
@@ -509,21 +534,21 @@ async def manual_ingest(
     scrape_run.finished_at = datetime.now(timezone.utc)
     scrape_run.stats_json = {"fetched": 1, "inserted": 1, "duplicates": 0, "errors": 0}
     scrape_run.items_json = [
-        {
-            "index": 1,
-            "outcome": "inserted",
-            "job_id": str(job_id),
-            "dedup_hash": dedup_hash,
-            "source": "manual_intake",
-            "source_job_id": None,
-            "title": body.title,
-            "company_name": body.company,
-            "location": body.location,
-            "url": body.source_url or body.apply_url or "",
-            "apply_url": body.apply_url,
-            "ats_type": "manual_intake",
-            "raw_payload_json": None,
-        }
+        make_run_item(
+            index=1,
+            outcome="inserted",
+            job_id=str(job_id),
+            dedup_hash=dedup_hash,
+            source="manual_intake",
+            source_job_id=None,
+            title=body.title,
+            company_name=body.company,
+            location=body.location,
+            url=body.source_url or body.apply_url,
+            apply_url=body.apply_url,
+            ats_type="manual_intake",
+            raw_payload_json=raw_payload,
+        )
     ]
     await db.commit()
 

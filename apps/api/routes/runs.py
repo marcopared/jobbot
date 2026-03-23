@@ -6,12 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.deps import get_db
 from core.db.models import ScrapeRun
+from core.run_items import normalize_run_items
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
 
 def _run_to_dict(run: ScrapeRun) -> dict:
-    items = run.items_json if isinstance(run.items_json, list) else []
+    items = normalize_run_items(run.items_json, run_source=run.source)
     inserted = sum(1 for item in items if item.get("outcome") == "inserted")
     duplicates = sum(1 for item in items if item.get("outcome") == "duplicate")
     return {
@@ -78,20 +79,22 @@ async def get_run_items(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    all_items = run.items_json if isinstance(run.items_json, list) else []
+    all_items = normalize_run_items(run.items_json, run_source=run.source)
     filtered: list[dict] = []
     q_lower = q.lower() if q else None
     for item in all_items:
-        if not isinstance(item, dict):
-            continue
         if outcome and item.get("outcome") != outcome:
             continue
         if q_lower:
             haystack = " ".join(
                 [
                     str(item.get("title", "")),
-                    str(item.get("company_name", "") or item.get("company", "")),
+                    str(item.get("company_name", "")),
                     str(item.get("source", "")),
+                    str(item.get("source_job_id", "") or ""),
+                    str(item.get("url", "")),
+                    str(item.get("apply_url", "") or ""),
+                    str(item.get("ats_type", "")),
                 ]
             ).lower()
             if q_lower not in haystack:
@@ -103,10 +106,8 @@ async def get_run_items(
     start = (page - 1) * per_page
     end = start + per_page
     page_items = filtered[start:end]
-    inserted = sum(1 for item in all_items if isinstance(item, dict) and item.get("outcome") == "inserted")
-    duplicates = sum(
-        1 for item in all_items if isinstance(item, dict) and item.get("outcome") == "duplicate"
-    )
+    inserted = sum(1 for item in all_items if item.get("outcome") == "inserted")
+    duplicates = sum(1 for item in all_items if item.get("outcome") == "duplicate")
     return {
         "items": page_items,
         "total": total,

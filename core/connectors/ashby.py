@@ -16,6 +16,7 @@ from core.connectors.base import (
     ProvenanceMetadata,
     RawJobWithProvenance,
 )
+from core.connectors.company_names import derive_company_name
 from core.dedup.normalization import (
     normalize_company,
     normalize_location,
@@ -30,15 +31,16 @@ class AshbyConnectorConfig:
 
     def __init__(self, job_board_name: str, company_name: str | None = None):
         self.job_board_name = job_board_name.strip()
-        self.company_name = (company_name or job_board_name).strip()
+        self.company_name = (company_name or "").strip()
 
 
 class AshbyConnector:
     """
     Connector for the Ashby Public Job Postings API.
 
-    Fetches jobs from a company's Ashby job board. Company name defaults
-    to job_board_name if not provided.
+    Fetches jobs from a company's Ashby job board. Company name may be
+    supplied for canonical runs, but normalization prefers payload-derived
+    employer names when present.
     """
 
     def __init__(self, config: AshbyConnectorConfig):
@@ -118,9 +120,10 @@ class AshbyConnector:
         if not title:
             return None
 
-        company = self.config.company_name
-        if not company:
-            return None
+        company = derive_company_name(
+            raw_job,
+            configured_company_name=self.config.company_name,
+        )
 
         location = (raw_job.get("location") or "").strip() or None
         if raw_job.get("isRemote") and not location:

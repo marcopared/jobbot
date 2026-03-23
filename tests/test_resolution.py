@@ -11,7 +11,7 @@ import pytest
 from httpx import ASGITransport
 from unittest.mock import patch, MagicMock
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from apps.api.main import app
 from core.connectors.base import CanonicalJobPayload, FetchResult, RawJobWithProvenance
@@ -32,6 +32,7 @@ from apps.worker.tasks.resolution import resolve_discovery_job
 from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
+from apps.worker.tasks.generation import evaluate_generation_gate
 
 
 @pytest.fixture
@@ -255,7 +256,7 @@ def test_resolve_task_success_mocked(mock_create_connector):
 
 
 @patch("apps.worker.tasks.resolution.create_greenhouse_connector")
-def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector):
+def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector, monkeypatch):
     """Regression: a discovery job already past INGESTED (e.g. ATS_ANALYZED)
     is resolved to canonical data and then rescored/reclassified/re-ATS-analyzed
     with the enriched content."""
@@ -278,9 +279,15 @@ def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector):
     with get_sync_session() as session:
         job = session.get(Job, job_id)
         assert job.pipeline_status == PipelineStatus.ATS_ANALYZED.value
+        assert job.score_breakdown_json is not None
         old_score = job.score_total
         old_description = job.description
         old_ats_score = job.ats_match_score
+        old_analysis = session.execute(
+            select(JobAnalysis).where(JobAnalysis.job_id == job_id)
+        ).scalar_one()
+        old_persona = old_analysis.matched_persona
+        old_found_keywords = list(old_analysis.found_keywords or [])
 
     # 2. Mock the canonical connector to return richer data
     canonical_description = (
@@ -330,7 +337,12 @@ def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector):
         assert job.pipeline_status == PipelineStatus.INGESTED.value, (
             f"Expected INGESTED after resolution reset, got {job.pipeline_status}"
         )
+        assert job.status == "NEW"
         assert job.description == canonical_description
+        canonical_job_count = session.execute(
+            select(func.count()).select_from(Job).where(Job.canonical_external_id == unique_id)
+        ).scalar_one()
+        assert canonical_job_count == 1
 
     # 4. Re-run the downstream chain (simulates what the Celery chain does)
     score_out = score_jobs.apply(kwargs={"job_ids": jids}).get()
@@ -348,6 +360,18 @@ def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector):
         "Resolved job should be re-ATS-analyzed"
     )
 
+    monkeypatch.setattr(
+        "apps.worker.tasks.generation.settings.enable_auto_resume_generation",
+        True,
+    )
+    monkeypatch.setattr(
+        "apps.worker.tasks.generation.generate_grounded_resume_task.delay",
+        MagicMock(return_value=MagicMock(id="fake-generation-task")),
+    )
+    gate_out = evaluate_generation_gate.apply(kwargs={"chain_output": ats_out}).get()
+    assert gate_out["evaluated"] == 1
+    assert gate_out["queued"] == 1, "Generation gate should use refreshed post-resolution analysis"
+
     # 5. Verify the job reached ATS_ANALYZED with updated canonical data
     with get_sync_session() as session:
         job = session.get(Job, job_id)
@@ -363,3 +387,10 @@ def test_resolved_job_past_ingested_gets_reprocessed(mock_create_connector):
         assert analysis is not None
         assert analysis.ats_compatibility_score is not None
         assert analysis.matched_persona is not None
+        assert analysis.total_score == job.score_total
+        assert analysis.ats_compatibility_score == job.ats_match_score
+        assert job.description != old_description
+        assert job.score_total != old_score
+        assert job.ats_match_score != old_ats_score
+        assert analysis.matched_persona != old_persona or list(analysis.found_keywords or []) != old_found_keywords
+        assert {"python", "aws", "postgresql"}.issubset(set(analysis.found_keywords or []))

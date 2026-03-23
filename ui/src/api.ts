@@ -104,7 +104,7 @@ export interface RunItem {
   backfilled_payload?: boolean;
   backfilled_apply_url?: boolean;
   source_confidence?: number;
-  raw_payload_json: Record<string, unknown> | null;
+  raw_payload_json: unknown | null;
 }
 
 export interface RunItemsResponse {

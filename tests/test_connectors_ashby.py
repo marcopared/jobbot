@@ -71,6 +71,21 @@ def test_normalize_missing_title_returns_none(connector):
     assert connector.normalize(raw) is None
 
 
+def test_normalize_prefers_payload_company_over_board_slug():
+    """Payload employer name wins over the URL board slug."""
+    conn = create_ashby_connector(job_board_name="acme", company_name=None)
+    raw = {
+        "title": "Engineer",
+        "companyName": "Acme Corporation",
+        "jobUrl": "https://jobs.ashbyhq.com/acme/engineer",
+        "applyUrl": "https://jobs.ashbyhq.com/acme/apply",
+    }
+    canonical = conn.normalize(raw)
+    assert canonical is not None
+    assert canonical.company == "Acme Corporation"
+    assert canonical.company != "acme"
+
+
 def test_fetch_raw_jobs_mocked(connector):
     """Fetch returns FetchResult with raw_jobs wrapped in provenance."""
     mock_resp = MagicMock()

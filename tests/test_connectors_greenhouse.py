@@ -86,10 +86,32 @@ def test_normalize_missing_title_returns_none(connector):
 
 
 def test_normalize_empty_company_returns_none():
-    """Job with empty company_name in config cannot be normalized."""
+    """Job with empty configured company falls back to payload company."""
     conn = create_greenhouse_connector(board_token="x", company_name="")
-    raw = {"id": 1, "title": "Test", "absolute_url": "https://x.com/job/1"}
-    assert conn.normalize(raw) is None
+    raw = {
+        "id": 1,
+        "title": "Test",
+        "company_name": "Payload Co",
+        "absolute_url": "https://x.com/job/1",
+    }
+    canonical = conn.normalize(raw)
+    assert canonical is not None
+    assert canonical.company == "Payload Co"
+
+
+def test_normalize_prefers_payload_company_over_board_slug():
+    """Payload employer name wins over the URL board slug."""
+    conn = create_greenhouse_connector(board_token="acme", company_name=None)
+    raw = {
+        "id": 2,
+        "title": "Platform Engineer",
+        "company_name": "Acme Corporation",
+        "absolute_url": "https://boards.greenhouse.io/acme/jobs/2",
+    }
+    canonical = conn.normalize(raw)
+    assert canonical is not None
+    assert canonical.company == "Acme Corporation"
+    assert canonical.company != "acme"
 
 
 def test_fetch_raw_jobs_mocked(connector):

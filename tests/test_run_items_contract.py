@@ -206,6 +206,60 @@ async def test_backward_compat_old_company_field_searchable(client):
     assert data["total"] == 1
 
 
+async def test_legacy_thin_items_are_normalized_for_canonical_and_discovery_runs(client):
+    """Legacy/thin run items are expanded to the full UI schema on read."""
+    canonical_run_id = _make_run(
+        "greenhouse",
+        [
+            {
+                "index": 1,
+                "outcome": "inserted",
+                "job_id": str(uuid.uuid4()),
+                "dedup_hash": "legacy-canonical",
+                "company": "Thin Canonical Co",
+                "title": "Thin Canonical Engineer",
+                "apply_url": "https://boards.greenhouse.io/thin/jobs/1#app",
+                "raw_payload_json": {"id": "gh-thin-1"},
+            }
+        ],
+    )
+    discovery_run_id = _make_run(
+        "agg1",
+        [
+            {
+                "index": 1,
+                "outcome": "inserted",
+                "job_id": str(uuid.uuid4()),
+                "dedup_hash": "legacy-discovery",
+                "company": "Thin Discovery Co",
+                "title": "Thin Discovery Engineer",
+                "apply_url": "https://agg1.example/apply/2",
+                "source_job_id": "agg1-thin-2",
+                "raw_payload_json": {"id": "agg1-thin-2"},
+            }
+        ],
+    )
+
+    canonical_resp = await client.get(f"/api/runs/{canonical_run_id}/items")
+    discovery_resp = await client.get(f"/api/runs/{discovery_run_id}/items")
+    assert canonical_resp.status_code == 200
+    assert discovery_resp.status_code == 200
+
+    canonical_item = canonical_resp.json()["items"][0]
+    discovery_item = discovery_resp.json()["items"][0]
+
+    assert canonical_item["company_name"] == "Thin Canonical Co"
+    assert canonical_item["source"] == "greenhouse"
+    assert canonical_item["url"] == "https://boards.greenhouse.io/thin/jobs/1#app"
+    assert canonical_item["ats_type"] == "greenhouse"
+
+    assert discovery_item["company_name"] == "Thin Discovery Co"
+    assert discovery_item["source"] == "agg1"
+    assert discovery_item["source_job_id"] == "agg1-thin-2"
+    assert discovery_item["url"] == "https://agg1.example/apply/2"
+    assert discovery_item["ats_type"] == "agg1"
+
+
 async def test_outcome_filter_works(client):
     """GET /api/runs/{id}/items?outcome=inserted filters correctly."""
     items = [

@@ -16,6 +16,7 @@ from core.connectors.base import (
     ProvenanceMetadata,
     RawJobWithProvenance,
 )
+from core.connectors.company_names import derive_company_name
 from core.dedup.normalization import (
     normalize_company,
     normalize_location,
@@ -30,15 +31,16 @@ class LeverConnectorConfig:
 
     def __init__(self, client_name: str, company_name: str | None = None):
         self.client_name = client_name.strip().lower()
-        self.company_name = (company_name or client_name).strip()
+        self.company_name = (company_name or "").strip()
 
 
 class LeverConnector:
     """
     Connector for the Lever Postings API (v0).
 
-    Fetches jobs from a company's Lever board. Company name defaults to
-    client_name (slug) if not provided.
+    Fetches jobs from a company's Lever board. Company name may be supplied
+    for canonical runs, but normalization prefers payload-derived employer
+    names when present.
     """
 
     def __init__(self, config: LeverConnectorConfig):
@@ -116,9 +118,10 @@ class LeverConnector:
         if not title:
             return None
 
-        company = self.config.company_name
-        if not company:
-            return None
+        company = derive_company_name(
+            raw_job,
+            configured_company_name=self.config.company_name,
+        )
 
         # Location from categories.location or allLocations
         location: Optional[str] = None
