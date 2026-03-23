@@ -55,9 +55,10 @@ def generate_grounded_resume_task(
                         run.status = GenerationRunStatus.SUCCESS.value
                         run.artifact_id = result.artifact.id
                         run.finished_at = datetime.now(timezone.utc)
-                    job = session.get(Job, UUID(job_id))
-                    if job:
-                        job.auto_generated_at = datetime.now(timezone.utc)
+                    if triggered_by == "auto":
+                        job = session.get(Job, UUID(job_id))
+                        if job:
+                            job.auto_generated_at = datetime.now(timezone.utc)
                 return out
             if generation_run_id:
                 run = session.get(GenerationRun, UUID(generation_run_id))

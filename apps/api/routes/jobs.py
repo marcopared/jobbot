@@ -41,6 +41,8 @@ from core.connectors.url_provider import parse_supported_url
 from core.dedup import compute_dedup_hash, normalize_company, normalize_location, normalize_title
 from core.db.models import (
     Artifact,
+    GenerationRun,
+    GenerationRunStatus,
     Job,
     JobAnalysis,
     PipelineStatus,
@@ -819,9 +821,23 @@ async def trigger_generate_resume(job_id: UUID, db: AsyncSession = Depends(get_d
             "Job pipeline_status must be ATS_ANALYZED or RESUME_READY. "
             f"Current: {job.pipeline_status}.",
         )
-    task = generate_grounded_resume_task.delay(str(job_id))
+    run = GenerationRun(
+        job_id=job_id,
+        status=GenerationRunStatus.QUEUED.value,
+        triggered_by="manual",
+    )
+    db.add(run)
+    await db.flush()
+    generation_run_id = str(run.id)
+    await db.commit()
+    task = generate_grounded_resume_task.delay(
+        str(job_id), generation_run_id=generation_run_id, triggered_by="manual"
+    )
     return GenerateResumeResponse(
-        job_id=str(job_id), status="queued", task_id=str(task.id)
+        job_id=str(job_id),
+        status="queued",
+        task_id=str(task.id),
+        generation_run_id=generation_run_id,
     )
 
 

@@ -797,3 +797,77 @@ async def test_manual_ingest_run_visible(client):
     assert runs_resp.status_code == 200
     run_ids = [r["id"] for r in runs_resp.json()["items"]]
     assert run_id in run_ids
+
+
+# --- GenerationRun tracking for manual resume generation ---
+
+
+async def test_manual_generate_resume_creates_generation_run(client):
+    """POST /api/jobs/{id}/generate-resume creates a GenerationRun with triggered_by=manual."""
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="ATS_ANALYZED",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "queued"
+    assert data["generation_run_id"] is not None
+
+    # Verify GenerationRun was persisted
+    run_id = uuid.UUID(data["generation_run_id"])
+    with get_sync_session() as session:
+        run = session.get(GenerationRun, run_id)
+        assert run is not None
+        assert run.job_id == job_id
+        assert run.status == "queued"
+        assert run.triggered_by == "manual"
+
+
+async def test_manual_generate_resume_run_id_returned_for_resume_ready(client):
+    """POST /api/jobs/{id}/generate-resume on RESUME_READY job also creates a GenerationRun."""
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="RESUME_READY",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["generation_run_id"] is not None
+
+    run_id = uuid.UUID(data["generation_run_id"])
+    with get_sync_session() as session:
+        run = session.get(GenerationRun, run_id)
+        assert run is not None
+        assert run.triggered_by == "manual"
+
+
+async def test_manual_generate_resume_409_no_generation_run(client):
+    """POST /api/jobs/{id}/generate-resume with ineligible status does not create a GenerationRun."""
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+    from sqlalchemy import select
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="SCORED",
+        has_persona=False,
+        has_ats_keywords=False,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 409
+
+    # No GenerationRun should exist for this job
+    with get_sync_session() as session:
+        result = session.execute(
+            select(GenerationRun).where(GenerationRun.job_id == job_id)
+        )
+        runs = result.scalars().all()
+        assert len(runs) == 0

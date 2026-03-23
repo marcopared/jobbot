@@ -136,6 +136,7 @@ class GenerateResumeResponse(BaseModel):
     job_id: str
     status: str = "queued"
     task_id: str | None = None
+    generation_run_id: str | None = None
 
 
 class ResolveJobResponse(BaseModel):
