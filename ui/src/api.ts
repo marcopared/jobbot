@@ -219,6 +219,7 @@ export async function triggerGenerateResume(jobId: string): Promise<{
   job_id: string;
   status: string;
   task_id?: string;
+  generation_run_id: string;
 }> {
   const res = await fetch(`${BASE}/jobs/${jobId}/generate-resume`, {
     method: "POST",

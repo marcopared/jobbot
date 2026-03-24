@@ -16,6 +16,10 @@ known gaps that should block overconfident documentation or closeout claims.
   - queues: `default`, `scrape`, `ingestion`
   - pipeline states: `INGESTED`, `SCORED`, `REJECTED`, `CLASSIFIED`, `ATS_ANALYZED`, `RESUME_READY`
 - Manual resume generation and auto generation both persist `GenerationRun` state.
+- `POST /api/jobs/{id}/generate-resume` now has a documented, tested contract:
+  it creates `GenerationRun(triggered_by="manual")`, commits it before queueing,
+  passes that `generation_run_id` into `generate_grounded_resume_task`, and returns
+  the same `generation_run_id` in the response body.
 - Feature-flag-disabled scrape/ingest/discovery paths now persist terminal `ScrapeRun` state.
 
 ## Reliability gaps that still matter
@@ -37,6 +41,9 @@ known gaps that should block overconfident documentation or closeout claims.
 
 - Every persisted `ScrapeRun` or `GenerationRun` created before queueing work must reach a durable
   terminal state on success, skip, or failure.
+- Canonical manual-generation invariant for developers:
+  `POST /api/jobs/{id}/generate-resume` must create a manual `GenerationRun`, persist it before
+  queueing, pass the same `generation_run_id` to the worker, and return that id to the caller.
 - Discovery, canonical ATS, and URL ingest roles must remain distinct.
 - Discovery sources must never be documented or treated as canonical truth by default.
 - Run-item payloads must stay backward-compatible with the UI contract.

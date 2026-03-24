@@ -12,6 +12,7 @@ from apps.worker.tasks.ingest import (
     ingest_lever,
     ingest_url,
 )
+from apps.worker.tasks.resolution import resolve_discovery_job
 
 __all__ = [
     "scrape_jobspy",
@@ -22,6 +23,7 @@ __all__ = [
     "send_notification",
     "run_discovery",
     "evaluate_generation_gate",
+    "resolve_discovery_job",
     "ingest_ashby",
     "ingest_greenhouse",
     "ingest_lever",

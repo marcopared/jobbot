@@ -22,7 +22,7 @@ see `KNOWN_ISSUES.md`.
 | **Pipeline status** | ✓ INGESTED→SCORED/REJECTED→CLASSIFIED→ATS_ANALYZED→RESUME_READY | GENERATION_QUEUED not persisted | Target states (DISCOVERED, NORMALIZED, etc.) |
 | **Queues** | ✓ default, scrape, ingestion | | Target: discovery, resolution, analysis queues |
 | **Skip reasons** | ✓ Disabled-feature worker exits persist terminal `ScrapeRun` state | | Full target state machine still aspirational |
-| **Manual generation tracking** | ✓ Manual and auto generation persist `GenerationRun` lifecycle | | |
+| **Manual generation tracking** | ✓ Manual and auto generation persist `GenerationRun` lifecycle; manual route returns `generation_run_id` | | |
 
 ---
 
@@ -47,7 +47,7 @@ see `KNOWN_ISSUES.md`.
 | **Post-ingestion chain** | score → classify → ats_match → evaluate_generation_gate (all four paths) |
 | **State transitions** | `pipeline_status` updated: INGESTED → SCORED/REJECTED → CLASSIFIED → ATS_ANALYZED |
 | **Generation gate** | Eligibility rules for canonical, URL ingest, AGG-1, SERP; queued=0 when `ENABLE_AUTO_RESUME_GENERATION=false` |
-| **Manual generation** | `POST /api/jobs/{id}/generate-resume` enforces ATS_ANALYZED prerequisite |
+| **Manual generation** | `POST /api/jobs/{id}/generate-resume` accepts `ATS_ANALYZED` or `RESUME_READY`, creates `GenerationRun(triggered_by="manual")`, commits before queueing, and returns `generation_run_id` |
 | **Artifact retrieval** | `GET /api/artifacts/{id}/download`, `GET /api/artifacts/{id}/preview`; local + GCS providers |
 | **Ready-to-apply feed** | `GET /api/jobs/ready-to-apply` returns artifact-ready jobs with apply URLs |
 | **Runs** | `ScrapeRun` for ingestion; `GenerationRun` for resume generation |
@@ -103,10 +103,13 @@ Generation gate does not write pipeline_status; it queues generation. GENERATION
 
 ## Resume Generation: Manual vs Automated
 
-- **Manual:** `POST /api/jobs/{id}/generate-resume`; available when job is ATS_ANALYZED or RESUME_READY; persists a `GenerationRun`.
+- **Manual:** `POST /api/jobs/{id}/generate-resume`; available when job is `ATS_ANALYZED` or `RESUME_READY`; creates `GenerationRun(triggered_by="manual")`, persists it before queueing, passes `generation_run_id` to the worker, and returns that id in the response.
 - **Automated:** When `ENABLE_AUTO_RESUME_GENERATION=true`, `evaluate_generation_gate` queues `generate_grounded_resume_task` for eligible jobs.
 - **Default:** `ENABLE_AUTO_RESUME_GENERATION=false` → manual only.
 - **Eligibility:** Canonical/URL ingest at score ≥ threshold; AGG-1 at stricter threshold + content quality; SERP not eligible by default.
+
+Developer note:
+The canonical manual-generation invariant is backed by `tests/test_api_jobs.py -k manual_generate_resume` for route behavior and `tests/test_generation_run_tracking.py` for success/failure lifecycle updates inside the worker.
 
 ---
 

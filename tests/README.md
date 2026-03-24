@@ -18,7 +18,7 @@ When touching pipeline, contracts, or worker lifecycle code, rerun these suites:
 - `tests/test_skipped_runs.py`
   - invariant: disabled-feature runs do not stay `RUNNING`
 - `tests/test_api_jobs.py -k manual_generate_resume`
-  - invariant: manual resume generation creates and returns a persisted `GenerationRun`
+  - invariant: manual resume generation creates `GenerationRun(triggered_by="manual")`, persists it before queueing, returns `generation_run_id`, and passes the same id to the worker
 - `tests/test_generation_run_tracking.py`
   - invariant: manual and auto generation update `GenerationRun` on success and failure
 
@@ -33,3 +33,6 @@ bash scripts/run_regression_invariants.sh
 - Many of these tests require local Postgres with migrations applied.
 - Some route tests also expect Redis/Celery broker availability for enqueue paths.
 - Focused suites catch specific regressions; they are not proof that the full product is reliable end to end.
+
+Developer note:
+Treat the manual-generation invariant above as canonical when changing the route, response schema, or worker task signature.

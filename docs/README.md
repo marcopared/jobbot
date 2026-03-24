@@ -16,6 +16,7 @@ This documentation set describes the **current system** (source of truth: the re
 - **Discovery:** JobSpy (scrape); AGG-1 and SERP1 (feature-flagged: `ENABLE_AGG1_DISCOVERY`, `ENABLE_SERP1_DISCOVERY`)
 - **URL ingest:** supported ATS job URLs via `POST /api/jobs/ingest-url` (feature-flagged: `URL_INGEST_ENABLED`)
 - **Processing:** score → classify → ATS analysis → generation gate; auto-generation when `ENABLE_AUTO_RESUME_GENERATION=true`
+- **Manual generation contract:** `POST /api/jobs/{id}/generate-resume` is available only for `ATS_ANALYZED` or `RESUME_READY` jobs and returns a persisted `generation_run_id`
 - **Resolution:** `POST /api/jobs/{id}/resolve` for discovery-to-canonical enrichment (discovery jobs only); attempts recorded in `job_resolution_attempts`
 - **Ready-to-apply:** `GET /api/jobs/ready-to-apply` feed; UI has ReadyToApplyPage
 - **Manual apply:** user downloads artifact and opens job URL externally; no browser automation
@@ -38,6 +39,7 @@ This documentation set describes the **current system** (source of truth: the re
 - UI throughput mode: ready-to-apply default view and URL ingest entry point are partially implemented
 - Closeout/readiness claims must be checked against the current branch, not older audit notes
 - Provider-backed end-to-end verification still requires manual/local verification beyond unit tests
+- Manual generation tracking is proven by focused route and worker tests, not by docs alone: see `tests/test_api_jobs.py -k manual_generate_resume` and `tests/test_generation_run_tracking.py`
 
 ## Known issues / reliability gaps
 
@@ -102,3 +104,6 @@ See `IMPLEMENTATION_PLAN.md` for PR boundaries, merge rules, and acceptance crit
 ## Notes for contributors
 
 Use this documentation set and the real repo as the planning baseline. Ignore scaffold, patches, and synthetic repo summaries.
+
+Developer note:
+The canonical invariant for manual generation is: the route creates `GenerationRun(triggered_by="manual")`, commits it before queueing, passes the same `generation_run_id` to the worker, and returns that id in the API response.

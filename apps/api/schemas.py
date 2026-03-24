@@ -134,9 +134,17 @@ class GenerateResumeResponse(BaseModel):
     """Response for POST /api/jobs/{id}/generate-resume."""
 
     job_id: str
-    status: str = "queued"
-    task_id: str | None = None
-    generation_run_id: str | None = None
+    status: str = Field(
+        default="queued",
+        description="Queue acceptance status for the manual resume generation request.",
+    )
+    task_id: str | None = Field(
+        default=None,
+        description="Celery task identifier for the queued resume generation worker.",
+    )
+    generation_run_id: str = Field(
+        description="Persisted GenerationRun id created before queueing the worker.",
+    )
 
 
 class ResolveJobResponse(BaseModel):

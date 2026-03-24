@@ -802,37 +802,13 @@ async def test_manual_ingest_run_visible(client):
 # --- GenerationRun tracking for manual resume generation ---
 
 
-async def test_manual_generate_resume_creates_generation_run(client):
-    """POST /api/jobs/{id}/generate-resume creates a GenerationRun with triggered_by=manual."""
-    from core.db.models import GenerationRun
-    from core.db.session import get_sync_session
-
-    job_id = _make_job_in_pipeline_state(
-        pipeline_status="ATS_ANALYZED",
-        has_persona=True,
-        has_ats_keywords=True,
-    )
-    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "queued"
-    assert data["generation_run_id"] is not None
-
-    # Verify GenerationRun was persisted
-    run_id = uuid.UUID(data["generation_run_id"])
-    with get_sync_session() as session:
-        run = session.get(GenerationRun, run_id)
-        assert run is not None
-        assert run.job_id == job_id
-        assert run.status == "queued"
-        assert run.triggered_by == "manual"
-
-
-async def test_manual_generate_resume_passes_generation_run_id_to_task(
+async def test_manual_generate_resume_persists_and_returns_generation_run_id(
     client, monkeypatch
 ):
-    """Manual generate queues the worker with the persisted GenerationRun id."""
+    """Manual generate persists a GenerationRun, returns its id, and queues the worker with it."""
     from apps.api.routes import jobs as jobs_route
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
 
     job_id = _make_job_in_pipeline_state(
         pipeline_status="ATS_ANALYZED",
@@ -855,6 +831,19 @@ async def test_manual_generate_resume_passes_generation_run_id_to_task(
     resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["status"] == "queued"
+    assert data["generation_run_id"] is not None
+    assert data["job_id"] == str(job_id)
+    assert data["task_id"] == "manual-generation-task"
+
+    # Verify GenerationRun was persisted
+    run_id = uuid.UUID(data["generation_run_id"])
+    with get_sync_session() as session:
+        run = session.get(GenerationRun, run_id)
+        assert run is not None
+        assert run.job_id == job_id
+        assert run.status == "queued"
+        assert run.triggered_by == "manual"
 
     assert captured["job_id"] == str(job_id)
     assert captured["generation_run_id"] == data["generation_run_id"]

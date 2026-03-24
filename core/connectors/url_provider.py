@@ -11,21 +11,22 @@ from typing import Literal
 
 SUPPORTED_PROVIDERS = frozenset({"greenhouse", "lever", "ashby"})
 
-# Greenhouse: boards.greenhouse.io/{board}/jobs/{id} or jobs.greenhouse.io
+# Greenhouse: boards.greenhouse.io/{board}/jobs/{id},
+# job-boards.greenhouse.io/{board}/jobs/{id}, or jobs.greenhouse.io
 _GREENHOUSE_PATTERN = re.compile(
-    r"https?://(?:boards\.greenhouse\.io|jobs\.greenhouse\.io)/([a-zA-Z0-9_-]+)/jobs/(\d+)",
+    r"https?://(?:boards\.greenhouse\.io|job-boards\.greenhouse\.io|jobs\.greenhouse\.io)/([a-zA-Z0-9_-]+)/jobs/(\d+)(?:[?#].*)?$",
     re.IGNORECASE,
 )
 
 # Lever: jobs.lever.co/{company}/{id} or jobs.lever.co/{company}/{id}/apply
 _LEVER_PATTERN = re.compile(
-    r"https?://jobs\.lever\.co/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)(?:/apply)?/?$",
+    r"https?://jobs\.lever\.co/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)(?:/apply)?/?(?:[?#].*)?$",
     re.IGNORECASE,
 )
 
 # Ashby: jobs.ashbyhq.com/{board}/{slug} - slug can be UUID or custom
 _ASHBY_PATTERN = re.compile(
-    r"https?://jobs\.ashbyhq\.com/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)/?$",
+    r"https?://jobs\.ashbyhq\.com/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)/?(?:[?#].*)?$",
     re.IGNORECASE,
 )
 
