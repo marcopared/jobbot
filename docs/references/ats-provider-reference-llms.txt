@@ -1,0 +1,43 @@
+JobBot reference summary for canonical ATS providers
+Last reviewed: 2026-03-24
+
+Providers
+- Greenhouse
+- Lever
+- Ashby
+
+Purpose
+- These are the canonical ATS lanes.
+- They supply the highest-confidence content and apply flows in the current system.
+
+Code entry points
+- core/connectors/greenhouse.py
+- core/connectors/lever.py
+- core/connectors/ashby.py
+- core/connectors/url_provider.py
+- apps/worker/tasks/ingest.py
+
+Provider-specific notes
+
+Greenhouse
+- Fetches board jobs from boards-api.greenhouse.io
+- Uses board_token
+- absolute_url is both source_url and apply_url
+
+Lever
+- Fetches postings from api.lever.co/v0/postings/{client_name}
+- Uses client_name
+- hostedUrl is source_url, applyUrl is preferred apply entry
+
+Ashby
+- Fetches public jobs from api.ashbyhq.com/posting-api/job-board/{job_board_name}
+- Uses job_board_name
+- jobUrl/applyUrl provide outbound links
+
+URL ingest
+- Supports only Greenhouse, Lever, and Ashby URLs
+- Parses provider-specific identifiers and fetches the matching canonical posting
+
+Design rules
+- canonical ATS beats discovery during trust decisions
+- URL ingest remains distinct from canonical scheduled ingestion in source-role terms

@@ -1,0 +1,41 @@
+JobBot reference summary for SERP1 (DataForSEO Google Jobs)
+Last reviewed: 2026-03-24
+
+Purpose
+- SERP1 is the implemented lower-confidence discovery lane backed by DataForSEO Google Jobs.
+- It remains feature-flagged and lower-confidence than AGG-1.
+
+Code entry points
+- core/connectors/serp.py
+- apps/worker/tasks/discovery.py
+- tests/test_connectors_serp.py
+
+Runtime rules
+- Requires ENABLE_SERP1_DISCOVERY=true
+- Requires DATAFORSEO_LOGIN and DATAFORSEO_PASSWORD
+- Requires location_name or location_code
+- Requires language_name or language_code
+
+Flow in current code
+1. POST task to /v3/serp/google/jobs/task_post
+2. Poll /v3/serp/google/jobs/tasks_ready with bounded attempts and timeout
+3. Fetch results from /v3/serp/google/jobs/task_get/advanced/{task_id}
+
+Important behavior
+- Uses basic auth
+- Uses Google Jobs endpoints only
+- Returns a clean error on readiness timeout
+- Preserves _task_id and optional _check_url in raw payload
+- Should never be treated as canonical truth
+
+Normalization notes
+- company prefers employer_name, then company
+- description prefers snippet, then description
+- apply_url prefers apply_url, then source_url
+- external_id prefers provider job_id, otherwise a derived hash-based id
+
+Testing notes
+- Targeted tests cover task submission, readiness polling, advanced get, normalization, and error cases.
+
+Raw spec location
+- docs/swagger-specs/dataforseo openapi spec.yaml

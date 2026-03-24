@@ -1,0 +1,51 @@
+JobBot reference summary for AGG-1 (Adzuna)
+Last reviewed: 2026-03-24
+
+Purpose
+- AGG-1 is the implemented discovery lane backed by Adzuna.
+- It is query-driven, page-based, multi-company discovery.
+- It is discovery only, never canonical truth.
+
+Code entry points
+- core/connectors/agg1.py
+- apps/worker/tasks/discovery.py
+- tests/test_connectors_agg1.py
+
+Runtime rules
+- Requires ENABLE_AGG1_DISCOVERY=true
+- Requires ADZUNA_APP_ID and ADZUNA_APP_KEY
+- Country defaults to "us"
+- Results are bounded by:
+  - results_per_page
+  - max_pages
+  - max_results
+
+Supported filters in current code
+- query
+- location
+- results_per_page
+- distance
+- max_days_old
+- sort_by
+- salary_min
+- salary_max
+- full_time
+- part_time
+- contract
+- permanent
+- category
+- max_pages
+- max_results
+
+Normalization notes
+- apply_url and source_url both come from redirect_url
+- company comes from company.display_name
+- location prefers location.display_name, then location.area[0]
+- employment_type combines contract_time and contract_type
+- raw provider fields stay in raw_payload
+
+Testing notes
+- The connector has targeted tests for pagination, normalization, caps, HTTP errors, and provider payload errors.
+
+Raw spec location
+- docs/swagger-specs/adzuna swagger spec.json

@@ -1,0 +1,40 @@
+JobBot REST API summary
+Last reviewed: 2026-03-24
+
+Core routes
+
+Jobs
+- POST /api/jobs/run-scrape
+- POST /api/jobs/run-ingestion
+- POST /api/jobs/run-discovery
+- POST /api/jobs/ingest-url
+- POST /api/jobs/manual-ingest
+- GET /api/jobs
+- GET /api/jobs/ready-to-apply
+- GET /api/jobs/{id}
+- PUT /api/jobs/{id}/status
+- POST /api/jobs/{id}/resolve
+- POST /api/jobs/{id}/generate-resume
+- GET /api/jobs/{id}/artifacts
+
+Runs
+- GET /api/runs
+- GET /api/runs/{id}
+- GET /api/runs/{id}/items
+
+Artifacts
+- GET /api/artifacts/{id}/download
+- GET /api/artifacts/{id}/preview
+
+Debug
+- GET /api/debug/failures
+- WS /ws/logs
+
+Health
+- GET /api/health
+
+Important contract notes
+- manual generation returns generation_run_id
+- ready-to-apply returns only artifact-ready NEW jobs
+- run items are normalized through core/run_items.py
+- debug data in job detail is gated behind DEBUG_ENDPOINTS_ENABLED

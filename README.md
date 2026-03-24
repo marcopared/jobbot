@@ -23,14 +23,16 @@ Planned implementation order for the next code PRs: `AGG-1` Adzuna hardening, `S
 
 ## Documentation
 
-- Product behavior and boundaries: `docs/SPEC.md`
-- System components and data flow: `docs/ARCHITECTURE.md`
-- Active backlog and roadmap: `docs/TODO.md`
-- PR boundaries and implementation order: `docs/IMPLEMENTATION_PLAN.md`
-- Coding-agent operating instructions: `docs/CODING_AGENT_GUIDE.md`
+- Agent entry point: [AGENTS.md](/Users/marcoparedes/dev/jobbot/AGENTS.md)
+- Runtime topology and subsystem map: [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md)
+- Product intent and operating boundaries: [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
+- System design baseline: [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md)
+- Reliability invariants and verification limits: [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
+- Product spec index: [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md)
+- Plan index and tracked follow-ups: [docs/PLANS.md](/Users/marcoparedes/dev/jobbot/docs/PLANS.md)
 
-See `docs/README.md` for the authoritative docs index and current-system summary.
-See `docs/KNOWN_ISSUES.md` before making any claim that the current branch is fully verified or ready for unrestricted feature work.
+Use the harness-style docs tree under [`docs/`](/Users/marcoparedes/dev/jobbot/docs) as the
+repo-local system of record. Historical PR/audit notes were removed in favor of fewer living docs.
 
 ## Prerequisites
 
@@ -89,9 +91,8 @@ All paths run score → classify → ATS analysis. Resume generation: manual via
 ## Known Issues / Verification Reality
 
 - The repo has focused regression coverage for several high-risk invariants, but that is not the same as full end-to-end provider verification.
-- Historical docs such as `docs/ACCEPTANCE_REPORT.md` and `docs/CLOSEOUT_AUDIT.md` are point-in-time snapshots, not blanket proof for the current branch.
 - Real provider credentials, ready-to-apply throughput, and PDF generation still need local/manual verification when those areas are touched.
-- Use `docs/KNOWN_ISSUES.md` and the listed focused suites as the baseline closeout checklist for backend changes.
+- Use [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md) and the listed focused suites as the baseline closeout checklist for backend changes.
 
 ### Example: JobSpy scrape
 
