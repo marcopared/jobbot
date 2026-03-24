@@ -4,6 +4,12 @@
 **Scope:** Core pipeline, state transitions, generation trigger, runs tracking.  
 **Note:** Aligns with docs truthfulness cleanup; SPEC, ARCHITECTURE, TODO, docs/README distinguish implemented vs remaining.
 
+## Current-branch caution
+
+This document is useful as a status map, but it is not by itself proof that the current branch is
+fully verified. For branch-specific reliability gaps and the minimum regression suites to rerun,
+see `KNOWN_ISSUES.md`.
+
 ## Implemented / Partial / Aspirational Matrix
 
 | Item | Implemented | Partial | Aspirational |
@@ -15,7 +21,8 @@
 | **Ready-to-apply** | ✓ `GET /api/jobs/ready-to-apply`; RESUME_READY + artifact_ready_at + user_status=NEW | | |
 | **Pipeline status** | ✓ INGESTED→SCORED/REJECTED→CLASSIFIED→ATS_ANALYZED→RESUME_READY | GENERATION_QUEUED not persisted | Target states (DISCOVERED, NORMALIZED, etc.) |
 | **Queues** | ✓ default, scrape, ingestion | | Target: discovery, resolution, analysis queues |
-| **Skip reasons** | | | SKIPPED with explicit reason (SPEC §11) |
+| **Skip reasons** | ✓ Disabled-feature worker exits persist terminal `ScrapeRun` state | | Full target state machine still aspirational |
+| **Manual generation tracking** | ✓ Manual and auto generation persist `GenerationRun` lifecycle; manual route returns `generation_run_id` | | |
 
 ---
 
@@ -40,7 +47,7 @@
 | **Post-ingestion chain** | score → classify → ats_match → evaluate_generation_gate (all four paths) |
 | **State transitions** | `pipeline_status` updated: INGESTED → SCORED/REJECTED → CLASSIFIED → ATS_ANALYZED |
 | **Generation gate** | Eligibility rules for canonical, URL ingest, AGG-1, SERP; queued=0 when `ENABLE_AUTO_RESUME_GENERATION=false` |
-| **Manual generation** | `POST /api/jobs/{id}/generate-resume` enforces ATS_ANALYZED prerequisite |
+| **Manual generation** | `POST /api/jobs/{id}/generate-resume` accepts `ATS_ANALYZED` or `RESUME_READY`, creates `GenerationRun(triggered_by="manual")`, commits before queueing, and returns `generation_run_id` |
 | **Artifact retrieval** | `GET /api/artifacts/{id}/download`, `GET /api/artifacts/{id}/preview`; local + GCS providers |
 | **Ready-to-apply feed** | `GET /api/jobs/ready-to-apply` returns artifact-ready jobs with apply URLs |
 | **Runs** | `ScrapeRun` for ingestion; `GenerationRun` for resume generation |
@@ -71,6 +78,7 @@ Generation gate does not write pipeline_status; it queues generation. GENERATION
 | **Pipeline status** | `RESUME_READY` set when artifact is ready; `GENERATION_QUEUED` not persisted as explicit status |
 | **Target pipeline states (SPEC §11)** | Full set (DISCOVERED, NORMALIZED, DEDUPED, RESOLUTION_PENDING, etc.) not implemented; current model uses INGESTED, SCORED, REJECTED, CLASSIFIED, ATS_ANALYZED, RESUME_READY |
 | **Seed script** | Exercises only JobSpy path; discovery and URL ingest require manual verification |
+| **Readiness confidence** | Focused regression suites exist, but provider-backed end-to-end verification is still partly manual |
 
 ---
 
@@ -80,16 +88,28 @@ Generation gate does not write pipeline_status; it queues generation. GENERATION
 |------|-----------|
 | **Target pipeline states** | SPEC §11, ARCH §7 |
 | **Target queue model** | discovery, resolution, analysis, generation queues (ARCH §8.2) — current: default, scrape, ingestion |
-| **Skip reasons** | SKIPPED with explicit reason (SPEC §11) — not implemented |
+| **Expanded persisted state machine** | SPEC §11 target states like GENERATION_QUEUED / FAILED / SKIPPED as first-class pipeline states |
+
+---
+
+## Known issues / reliability gaps
+
+- Historical acceptance/closeout docs should not be used as the sole basis for current-branch readiness claims.
+- The regression suites cover specific correctness invariants, not full provider/runtime reliability.
+- Real-provider verification, ready-to-apply throughput, and PDF generation still require local/manual checks when those systems change.
+- There is still no expanded persisted pipeline state machine beyond the implemented statuses listed above.
 
 ---
 
 ## Resume Generation: Manual vs Automated
 
-- **Manual:** `POST /api/jobs/{id}/generate-resume`; always available when job is ATS_ANALYZED.
+- **Manual:** `POST /api/jobs/{id}/generate-resume`; available when job is `ATS_ANALYZED` or `RESUME_READY`; creates `GenerationRun(triggered_by="manual")`, persists it before queueing, passes `generation_run_id` to the worker, and returns that id in the response.
 - **Automated:** When `ENABLE_AUTO_RESUME_GENERATION=true`, `evaluate_generation_gate` queues `generate_grounded_resume_task` for eligible jobs.
 - **Default:** `ENABLE_AUTO_RESUME_GENERATION=false` → manual only.
 - **Eligibility:** Canonical/URL ingest at score ≥ threshold; AGG-1 at stricter threshold + content quality; SERP not eligible by default.
+
+Developer note:
+The canonical manual-generation invariant is backed by `tests/test_api_jobs.py -k manual_generate_resume` for route behavior and `tests/test_generation_run_tracking.py` for success/failure lifecycle updates inside the worker.
 
 ---
 

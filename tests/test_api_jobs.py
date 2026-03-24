@@ -680,3 +680,216 @@ async def test_run_discovery_unsupported_connector_returns_422(client):
         json={"connector": "unknown"},
     )
     assert resp.status_code == 422
+
+
+# --- Manual ingest route tests ---
+
+
+MANUAL_INGEST_PAYLOAD = {
+    "title": "Senior Backend Engineer",
+    "company": "Acme Corp",
+    "location": "Remote",
+    "apply_url": "https://example.com/apply/unique-test-job",
+    "description": "Build scalable APIs in Python.",
+}
+
+
+async def test_manual_ingest_missing_required_fields(client):
+    """POST /api/jobs/manual-ingest returns 422 when required fields are missing."""
+    resp = await client.post("/api/jobs/manual-ingest", json={})
+    assert resp.status_code == 422
+
+
+async def test_manual_ingest_missing_title(client):
+    """POST /api/jobs/manual-ingest returns 422 when title is missing."""
+    payload = {**MANUAL_INGEST_PAYLOAD}
+    del payload["title"]
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_manual_ingest_success(client):
+    """POST /api/jobs/manual-ingest persists job, returns run_id and job_id."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/{unique}",
+        "title": f"Senior Backend Engineer {unique}",
+    }
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "SUCCESS"
+    assert data["run_id"]
+    assert data["job_id"]
+    assert data.get("task_id")
+
+    # Verify job exists and is INGESTED
+    job_resp = await client.get(f"/api/jobs/{data['job_id']}")
+    assert job_resp.status_code == 200
+    job_data = job_resp.json()
+    assert job_data["title"].startswith("Senior Backend Engineer")
+    assert job_data["company"] == "Acme Corp"
+    assert job_data["pipeline_status"] == "INGESTED"
+    assert job_data["source"] == "manual_intake"
+
+
+async def test_manual_ingest_duplicate(client):
+    """POST /api/jobs/manual-ingest returns DUPLICATE for identical job."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/dup-{unique}",
+        "title": f"Dup Test Engineer {unique}",
+    }
+    resp1 = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp1.status_code == 200
+    assert resp1.json()["status"] == "SUCCESS"
+
+    resp2 = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2["status"] == "DUPLICATE"
+    assert data2["job_id"] is None
+    assert data2["run_id"]
+
+
+async def test_manual_ingest_with_optional_fields(client):
+    """POST /api/jobs/manual-ingest accepts optional fields."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/opt-{unique}",
+        "title": f"Full Stack {unique}",
+        "source_url": "https://example.com/listing",
+        "posted_at": "2026-03-15T10:00:00",
+        "salary_min": 120000,
+        "salary_max": 180000,
+        "workplace_type": "remote",
+        "employment_type": "full_time",
+    }
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "SUCCESS"
+    assert data["job_id"]
+
+    job_resp = await client.get(f"/api/jobs/{data['job_id']}")
+    assert job_resp.status_code == 200
+    job_data = job_resp.json()
+    assert job_data["salary_min"] == 120000
+    assert job_data["salary_max"] == 180000
+
+
+async def test_manual_ingest_run_visible(client):
+    """Manual ingest creates a ScrapeRun that is visible in /api/runs."""
+    unique = str(uuid.uuid4())[:8]
+    payload = {
+        **MANUAL_INGEST_PAYLOAD,
+        "apply_url": f"https://example.com/apply/run-{unique}",
+        "title": f"Run Vis Test {unique}",
+    }
+    resp = await client.post("/api/jobs/manual-ingest", json=payload)
+    assert resp.status_code == 200
+    run_id = resp.json()["run_id"]
+
+    runs_resp = await client.get("/api/runs")
+    assert runs_resp.status_code == 200
+    run_ids = [r["id"] for r in runs_resp.json()["items"]]
+    assert run_id in run_ids
+
+
+# --- GenerationRun tracking for manual resume generation ---
+
+
+async def test_manual_generate_resume_persists_and_returns_generation_run_id(
+    client, monkeypatch
+):
+    """Manual generate persists a GenerationRun, returns its id, and queues the worker with it."""
+    from apps.api.routes import jobs as jobs_route
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="ATS_ANALYZED",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+    captured: dict[str, str] = {}
+
+    class DummyTask:
+        id = "manual-generation-task"
+
+    def _fake_delay(job_id_arg, generation_run_id=None, triggered_by="manual"):
+        captured["job_id"] = job_id_arg
+        captured["generation_run_id"] = generation_run_id
+        captured["triggered_by"] = triggered_by
+        return DummyTask()
+
+    monkeypatch.setattr(jobs_route.generate_grounded_resume_task, "delay", _fake_delay)
+
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "queued"
+    assert data["generation_run_id"] is not None
+    assert data["job_id"] == str(job_id)
+    assert data["task_id"] == "manual-generation-task"
+
+    # Verify GenerationRun was persisted
+    run_id = uuid.UUID(data["generation_run_id"])
+    with get_sync_session() as session:
+        run = session.get(GenerationRun, run_id)
+        assert run is not None
+        assert run.job_id == job_id
+        assert run.status == "queued"
+        assert run.triggered_by == "manual"
+
+    assert captured["job_id"] == str(job_id)
+    assert captured["generation_run_id"] == data["generation_run_id"]
+    assert captured["triggered_by"] == "manual"
+
+
+async def test_manual_generate_resume_run_id_returned_for_resume_ready(client):
+    """POST /api/jobs/{id}/generate-resume on RESUME_READY job also creates a GenerationRun."""
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="RESUME_READY",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["generation_run_id"] is not None
+
+    run_id = uuid.UUID(data["generation_run_id"])
+    with get_sync_session() as session:
+        run = session.get(GenerationRun, run_id)
+        assert run is not None
+        assert run.triggered_by == "manual"
+
+
+async def test_manual_generate_resume_409_no_generation_run(client):
+    """POST /api/jobs/{id}/generate-resume with ineligible status does not create a GenerationRun."""
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+    from sqlalchemy import select
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="SCORED",
+        has_persona=False,
+        has_ats_keywords=False,
+    )
+    resp = await client.post(f"/api/jobs/{job_id}/generate-resume")
+    assert resp.status_code == 409
+
+    # No GenerationRun should exist for this job
+    with get_sync_session() as session:
+        result = session.execute(
+            select(GenerationRun).where(GenerationRun.job_id == job_id)
+        )
+        runs = result.scalars().all()
+        assert len(runs) == 0

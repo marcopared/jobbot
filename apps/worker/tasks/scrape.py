@@ -21,8 +21,10 @@ from core.dedup import normalize_company, normalize_location, normalize_title
 from core.scraping.base import compute_dedup_hash, detect_ats_type
 from core.scraping.jobspy_scraper import JobSpyScraper
 from core.scraping.base import ScrapeParams
+from core.run_items import make_run_item
 
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.run_helpers import mark_run_skipped
 from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
@@ -88,6 +90,7 @@ def scrape_jobspy(
     )
     if not settings.jobspy_enabled:
         logger.info("Skipping scrape run_id=%s because jobspy is disabled", run_id)
+        mark_run_skipped(run_id, "JOBSPY_ENABLED=false")
         return {"status": "skipped", "reason": "JOBSPY_ENABLED=false"}
     scraper = JobSpyScraper()
     logger.info(
@@ -231,22 +234,22 @@ def scrape_jobspy(
             if inserted_job_id is not None:
                 inserted += 1
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "inserted",
-                        "dedup_reason": "new",
-                        "job_id": str(inserted_job_id),
-                        "dedup_hash": dedup_hash,
-                        "source": nj.source.value,
-                        "source_job_id": nj.source_job_id,
-                        "title": nj.title,
-                        "company_name": nj.company_name,
-                        "location": nj.location,
-                        "url": nj.url,
-                        "apply_url": nj.apply_url,
-                        "ats_type": ats_type.value,
-                        "raw_payload_json": nj.raw_payload,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="inserted",
+                        job_id=str(inserted_job_id),
+                        dedup_hash=dedup_hash,
+                        source=nj.source.value,
+                        source_job_id=nj.source_job_id,
+                        title=nj.title,
+                        company_name=nj.company_name,
+                        location=nj.location,
+                        url=nj.url,
+                        apply_url=nj.apply_url,
+                        ats_type=ats_type.value,
+                        raw_payload_json=nj.raw_payload,
+                        dedup_reason="new",
+                    )
                 )
             else:
                 duplicates += 1
@@ -270,24 +273,24 @@ def scrape_jobspy(
                     )
                     backfilled_apply_url = True
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "duplicate",
-                        "dedup_reason": "dedup_hash",
-                        "job_id": existing_job_id,
-                        "dedup_hash": dedup_hash,
-                        "source": nj.source.value,
-                        "source_job_id": nj.source_job_id,
-                        "title": nj.title,
-                        "company_name": nj.company_name,
-                        "location": nj.location,
-                        "url": nj.url,
-                        "apply_url": nj.apply_url,
-                        "ats_type": ats_type.value,
-                        "backfilled_payload": backfilled_payload,
-                        "backfilled_apply_url": backfilled_apply_url,
-                        "raw_payload_json": nj.raw_payload,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="duplicate",
+                        job_id=existing_job_id,
+                        dedup_hash=dedup_hash,
+                        source=nj.source.value,
+                        source_job_id=nj.source_job_id,
+                        title=nj.title,
+                        company_name=nj.company_name,
+                        location=nj.location,
+                        url=nj.url,
+                        apply_url=nj.apply_url,
+                        ats_type=ats_type.value,
+                        raw_payload_json=nj.raw_payload,
+                        dedup_reason="dedup_hash",
+                        backfilled_payload=backfilled_payload,
+                        backfilled_apply_url=backfilled_apply_url,
+                    )
                 )
         run = session.get(ScrapeRun, UUID(run_id))
         if run:

@@ -21,9 +21,14 @@ celery_app.config_from_object(
         "worker_hijack_root_logger": False,
         "task_routes": {
             "apps.worker.tasks.scrape.*": {"queue": "scrape"},
+            "apps.worker.tasks.discovery.*": {"queue": "scrape"},
             "apps.worker.tasks.ingest.*": {"queue": "ingestion"},
             "apps.worker.tasks.score.*": {"queue": "default"},
+            "apps.worker.tasks.classify.*": {"queue": "default"},
             "apps.worker.tasks.ats_match.*": {"queue": "default"},
+            "apps.worker.tasks.generation.*": {"queue": "default"},
+            "apps.worker.tasks.resume.*": {"queue": "default"},
+            "apps.worker.tasks.resolution.*": {"queue": "default"},
             "apps.worker.tasks.notify.*": {"queue": "default"},
         },
     }

@@ -16,6 +16,7 @@ from core.connectors.base import (
     ProvenanceMetadata,
     RawJobWithProvenance,
 )
+from core.connectors.company_names import derive_company_name
 from core.dedup.normalization import (
     normalize_company,
     normalize_location,
@@ -28,17 +29,18 @@ GREENHOUSE_JOBS_BASE = "https://boards-api.greenhouse.io/v1/boards"
 class GreenhouseConnectorConfig:
     """Configuration for a single Greenhouse board."""
 
-    def __init__(self, board_token: str, company_name: str):
+    def __init__(self, board_token: str, company_name: str | None = None):
         self.board_token = board_token.strip()
-        self.company_name = company_name.strip()
+        self.company_name = (company_name or "").strip()
 
 
 class GreenhouseConnector:
     """
     Connector for the Greenhouse Job Board API.
 
-    Fetches jobs from a company's Greenhouse board. Company name is required
-    because the Job Board API does not return it (board is company-specific).
+    Fetches jobs from a company's Greenhouse board. Company name may be
+    supplied for canonical runs, but normalization prefers payload-derived
+    employer names when present.
     """
 
     def __init__(self, config: GreenhouseConnectorConfig):
@@ -120,9 +122,10 @@ class GreenhouseConnector:
         if not title:
             return None
 
-        company = self.config.company_name
-        if not company:
-            return None
+        company = derive_company_name(
+            raw_job,
+            configured_company_name=self.config.company_name,
+        )
 
         # Location from location.name or aggregate from offices
         location = None
@@ -188,7 +191,7 @@ class GreenhouseConnector:
 
 
 def create_greenhouse_connector(
-    board_token: str, company_name: str
+    board_token: str, company_name: str | None = None
 ) -> GreenhouseConnector:
     """Factory for GreenhouseConnector."""
     return GreenhouseConnector(

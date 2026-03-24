@@ -134,8 +134,17 @@ class GenerateResumeResponse(BaseModel):
     """Response for POST /api/jobs/{id}/generate-resume."""
 
     job_id: str
-    status: str = "queued"
-    task_id: str | None = None
+    status: str = Field(
+        default="queued",
+        description="Queue acceptance status for the manual resume generation request.",
+    )
+    task_id: str | None = Field(
+        default=None,
+        description="Celery task identifier for the queued resume generation worker.",
+    )
+    generation_run_id: str = Field(
+        description="Persisted GenerationRun id created before queueing the worker.",
+    )
 
 
 class ResolveJobResponse(BaseModel):
@@ -148,6 +157,34 @@ class ResolveJobResponse(BaseModel):
 
 
 # --- Artifacts ---
+
+
+# --- Manual ingest ---
+
+
+class ManualIngestBody(BaseModel):
+    """Request body for POST /api/jobs/manual-ingest."""
+
+    title: str
+    company: str
+    location: str
+    apply_url: str
+    description: str
+    source_url: str | None = None
+    posted_at: str | None = None
+    salary_min: int | None = None
+    salary_max: int | None = None
+    workplace_type: str | None = None
+    employment_type: str | None = None
+
+
+class ManualIngestResponse(BaseModel):
+    """Response for POST /api/jobs/manual-ingest."""
+
+    run_id: str
+    job_id: str | None = None
+    status: str  # "SUCCESS" | "DUPLICATE" | "FAILED"
+    task_id: str | None = None
 
 
 class ArtifactItem(BaseModel):

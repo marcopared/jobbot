@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { fetchRun, fetchRunItems, type Run, type RunItem } from "../api";
 import { notifyError } from "../notify";
+import { buildRunItemDisplay } from "./runItemDisplay";
 
 type OutcomeFilter = "all" | "inserted" | "duplicate";
 
@@ -170,8 +171,10 @@ export default function RunDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {items.map((item) => (
-                <tr key={`${item.index}-${item.dedup_hash}`}>
+              {items.map((item) => {
+                const display = buildRunItemDisplay(item);
+                return (
+                  <tr key={`${item.index}-${item.dedup_hash}`}>
                   <td className="px-3 py-2 text-gray-700">{item.index}</td>
                   <td className="px-3 py-2">
                     <span
@@ -186,19 +189,28 @@ export default function RunDetailPage() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="font-medium text-gray-900">{item.title}</div>
-                    <div className="text-gray-600">{item.company_name}</div>
-                    <div className="text-xs text-gray-500">{item.location ?? "N/A"}</div>
+                    <div className="text-gray-600">{display.companyName}</div>
+                    <div className="text-xs text-gray-500">{display.location}</div>
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    <div>
-                      <a href={item.url} target="_blank" rel="noreferrer" className="text-indigo-700 underline">
-                        listing
-                      </a>
-                    </div>
-                    {item.apply_url && (
+                    {display.listingHref ? (
                       <div>
                         <a
-                          href={item.apply_url}
+                          href={display.listingHref}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-700 underline"
+                        >
+                          listing
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="text-gray-400">listing unavailable</div>
+                    )}
+                    {display.applyHref && (
+                      <div>
+                        <a
+                          href={display.applyHref}
                           target="_blank"
                           rel="noreferrer"
                           className="text-indigo-700 underline"
@@ -209,9 +221,9 @@ export default function RunDetailPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-600">
-                    <div>source: {item.source}</div>
-                    <div>source id: {item.source_job_id ?? "N/A"}</div>
-                    <div>job id: {item.job_id ?? "N/A"}</div>
+                    <div>source: {display.source}</div>
+                    <div>source id: {display.sourceJobId}</div>
+                    <div>job id: {display.jobId}</div>
                   </td>
                   <td className="px-3 py-2">
                     <details>
@@ -219,12 +231,13 @@ export default function RunDetailPage() {
                         View JSON
                       </summary>
                       <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-gray-900 p-2 text-xs text-gray-100">
-                        {JSON.stringify(item.raw_payload_json, null, 2)}
+                        {display.rawPayloadText}
                       </pre>
                     </details>
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                );
+              })}
               {items.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-8 text-center text-gray-400">

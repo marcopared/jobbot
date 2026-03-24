@@ -24,6 +24,7 @@ from core.db.models import Job, JobSourceRecord, ScrapeRun, ScrapeRunStatus, Sou
 from core.db.session import get_sync_session
 
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.run_helpers import mark_run_skipped
 from apps.worker.tasks.score import score_jobs
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.ats_match import ats_match_resume
@@ -31,9 +32,43 @@ from apps.worker.tasks.generation import evaluate_generation_gate
 
 from core.observability import log_context, get_metrics
 from core.observability.metrics import TaskTimer
+from core.run_items import make_run_item
 
 settings = Settings()
 logger = logging.getLogger(__name__)
+
+
+def _provider_disabled_reason(provider: str) -> str | None:
+    """Return the feature-flag reason when a provider is disabled."""
+    if provider == "greenhouse" and not settings.greenhouse_enabled:
+        return "GREENHOUSE_ENABLED=false"
+    if provider == "lever" and not settings.lever_enabled:
+        return "LEVER_ENABLED=false"
+    if provider == "ashby" and not settings.ashby_enabled:
+        return "ASHBY_ENABLED=false"
+    return None
+
+
+def _skip_run_for_disabled_provider(run_id: str, provider: str) -> dict | None:
+    """Persist a terminal SKIPPED run when the provider is disabled."""
+    reason = _provider_disabled_reason(provider)
+    if reason is None:
+        return None
+    logger.info("Skipping %s ingest run_id=%s (%s)", provider, run_id, reason)
+    mark_run_skipped(run_id, reason)
+    return {"status": "skipped", "reason": reason}
+
+
+def _provider_slug_metadata(parsed) -> dict[str, str]:
+    """Preserve provider-specific URL identifiers as metadata, not company."""
+    metadata: dict[str, str] = {}
+    if parsed.provider == "greenhouse" and parsed.board_token:
+        metadata["board_token"] = parsed.board_token
+    elif parsed.provider == "lever" and parsed.client_name:
+        metadata["client_name"] = parsed.client_name
+    elif parsed.provider == "ashby" and parsed.job_board_name:
+        metadata["job_board_name"] = parsed.job_board_name
+    return metadata
 
 
 def _publish_log(level: str, message: str, run_id: str | None = None) -> None:
@@ -78,9 +113,9 @@ def ingest_greenhouse(
     with log_context(run_id=run_id, source_name="greenhouse", task_name="ingest_greenhouse"):
         metrics = get_metrics()
 
-        if not settings.greenhouse_enabled:
-            logger.info("Skipping Greenhouse ingest run_id=%s (greenhouse disabled)", run_id)
-            return {"status": "skipped", "reason": "GREENHOUSE_ENABLED=false"}
+        skip_result = _skip_run_for_disabled_provider(run_id, "greenhouse")
+        if skip_result is not None:
+            return skip_result
 
         connector = create_greenhouse_connector(
             board_token=board_token.strip(),
@@ -154,12 +189,22 @@ def ingest_greenhouse(
             canonical = connector.normalize(raw_job)
             if canonical is None:
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "skipped",
-                        "reason": "normalize_failed",
-                        "external_id": str(raw_job.get("id", "")),
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="skipped",
+                        job_id=None,
+                        dedup_hash=None,
+                        source="greenhouse",
+                        source_job_id=str(raw_job.get("id", "")) or None,
+                        title=raw_job.get("title"),
+                        company_name=company_name,
+                        location=None,
+                        url=raw_job.get("absolute_url"),
+                        apply_url=raw_job.get("absolute_url"),
+                        ats_type="greenhouse",
+                        raw_payload_json=raw_job,
+                        reason="normalize_failed",
+                    )
                 )
                 continue
 
@@ -185,46 +230,46 @@ def ingest_greenhouse(
 
             if job_id_for_source is None:
                 stmt = (
-                insert(Job)
-                .values(
-                    source="greenhouse",
-                    source_job_id=canonical.external_id,
-                    title=canonical.title,
-                    raw_title=canonical.title,
-                    normalized_title=canonical.normalized_title,
-                    raw_company=canonical.company,
-                    normalized_company=canonical.normalized_company,
-                    company_name_raw=canonical.company,
-                    raw_location=canonical.location,
-                    normalized_location=canonical.normalized_location,
-                    location=canonical.location,
-                    url=canonical.source_url or canonical.apply_url or "",
-                    apply_url=canonical.apply_url,
-                    description=canonical.description,
-                    posted_at=canonical.posted_at,
-                    ats_type="greenhouse",
-                    status="NEW",
-                    user_status="NEW",
-                    pipeline_status="INGESTED",
-                    score_total=0.0,
-                    source_payload_json=canonical.raw_payload,
-                    dedup_hash=dedup_hash,
+                    insert(Job)
+                    .values(
+                        source="greenhouse",
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        raw_title=canonical.title,
+                        normalized_title=canonical.normalized_title,
+                        raw_company=canonical.company,
+                        normalized_company=canonical.normalized_company,
+                        company_name_raw=canonical.company,
+                        raw_location=canonical.location,
+                        normalized_location=canonical.normalized_location,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url or "",
+                        apply_url=canonical.apply_url,
+                        description=canonical.description,
+                        posted_at=canonical.posted_at,
+                        ats_type="greenhouse",
+                        status="NEW",
+                        user_status="NEW",
+                        pipeline_status="INGESTED",
+                        score_total=0.0,
+                        source_payload_json=canonical.raw_payload,
+                        dedup_hash=dedup_hash,
+                    )
+                    .on_conflict_do_nothing(index_elements=["dedup_hash"])
+                    .returning(Job.id)
                 )
-                .on_conflict_do_nothing(index_elements=["dedup_hash"])
-                .returning(Job.id)
-            )
-            inserted_job_id = session.execute(stmt).scalar_one_or_none()
-            job_id_for_source = inserted_job_id
-            existing_job = None
-            if inserted_job_id is None:
-                existing_job = (
-                    session.execute(
-                        select(Job.id).where(Job.dedup_hash == dedup_hash)
-                    ).first()
-                )
-                if existing_job:
-                    job_id_for_source = existing_job[0]
-                    dedup_reason = "dedup_hash"
+                inserted_job_id = session.execute(stmt).scalar_one_or_none()
+                job_id_for_source = inserted_job_id
+                existing_job = None
+                if inserted_job_id is None:
+                    existing_job = (
+                        session.execute(
+                            select(Job.id).where(Job.dedup_hash == dedup_hash)
+                        ).first()
+                    )
+                    if existing_job:
+                        job_id_for_source = existing_job[0]
+                        dedup_reason = "dedup_hash"
 
             if job_id_for_source is not None:
                 ext_id = canonical.external_id
@@ -251,18 +296,22 @@ def ingest_greenhouse(
                 if canonical_apply_url and job_id_for_source:
                     apply_url_to_job_id[canonical_apply_url] = job_id_for_source
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "inserted",
-                        "dedup_reason": dedup_reason,
-                        "job_id": str(inserted_job_id),
-                        "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
-                        "title": canonical.title,
-                        "company": canonical.company,
-                        "location": canonical.location,
-                        "apply_url": canonical.apply_url,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="inserted",
+                        job_id=str(inserted_job_id),
+                        dedup_hash=dedup_hash,
+                        source="greenhouse",
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type="greenhouse",
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                    )
                 )
             else:
                 duplicates += 1
@@ -282,18 +331,22 @@ def ingest_greenhouse(
                         existing_job_id,
                     )
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "duplicate",
-                        "dedup_reason": dedup_reason,
-                        "job_id": existing_job_id,
-                        "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
-                        "title": canonical.title,
-                        "company": canonical.company,
-                        "location": canonical.location,
-                        "apply_url": canonical.apply_url,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="duplicate",
+                        job_id=existing_job_id,
+                        dedup_hash=dedup_hash,
+                        source="greenhouse",
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type="greenhouse",
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                    )
                 )
 
         run = session.get(ScrapeRun, UUID(run_id))
@@ -347,6 +400,7 @@ def _run_canonical_ingest(
     result,
     task_name: str,
     source_role_override: SourceRole | None = None,
+    provider_metadata: dict | None = None,
 ) -> dict:
     """
     Shared persist+chain logic for canonical connectors.
@@ -385,12 +439,22 @@ def _run_canonical_ingest(
             canonical = connector.normalize(raw_job)
             if canonical is None:
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "skipped",
-                        "reason": "normalize_failed",
-                        "external_id": str(raw_job.get("id", raw_job.get("jobUrl", ""))),
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="skipped",
+                        job_id=None,
+                        dedup_hash=None,
+                        source=source_name,
+                        source_job_id=str(raw_job.get("id", raw_job.get("jobUrl", ""))) or None,
+                        title=raw_job.get("title"),
+                        company_name=raw_job.get("company"),
+                        location=raw_job.get("location"),
+                        url=raw_job.get("jobUrl") or raw_job.get("hostedUrl") or raw_job.get("absolute_url"),
+                        apply_url=raw_job.get("jobUrl") or raw_job.get("hostedUrl") or raw_job.get("absolute_url"),
+                        ats_type=source_name,
+                        raw_payload_json=raw_job,
+                        reason="normalize_failed",
+                    )
                 )
                 continue
 
@@ -463,6 +527,8 @@ def _run_canonical_ingest(
                     "source_url": provenance.source_url,
                     "connector_version": provenance.connector_version,
                 }
+                if provider_metadata:
+                    provenance_meta["provider_metadata"] = provider_metadata
                 session.execute(
                     insert(JobSourceRecord)
                     .values(
@@ -481,35 +547,43 @@ def _run_canonical_ingest(
                 if canonical_apply_url and job_id_for_source:
                     apply_url_to_job_id[canonical_apply_url] = job_id_for_source
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "inserted",
-                        "dedup_reason": dedup_reason,
-                        "job_id": str(inserted_job_id),
-                        "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
-                        "title": canonical.title,
-                        "company": canonical.company,
-                        "location": canonical.location,
-                        "apply_url": canonical.apply_url,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="inserted",
+                        job_id=str(inserted_job_id),
+                        dedup_hash=dedup_hash,
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type=source_name,
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                    )
                 )
             else:
                 duplicates += 1
                 existing_job_id = str(existing_job[0]) if existing_job else None
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "duplicate",
-                        "dedup_reason": dedup_reason,
-                        "job_id": existing_job_id,
-                        "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
-                        "title": canonical.title,
-                        "company": canonical.company,
-                        "location": canonical.location,
-                        "apply_url": canonical.apply_url,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="duplicate",
+                        job_id=existing_job_id,
+                        dedup_hash=dedup_hash,
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type=source_name,
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                    )
                 )
 
         run = session.get(ScrapeRun, UUID(run_id))
@@ -552,8 +626,9 @@ def _run_canonical_ingest(
 def ingest_lever(self, run_id: str, client_name: str, company_name: str):
     """Fetch Lever jobs, normalize, persist. Same pipeline as Greenhouse."""
     with log_context(run_id=run_id, source_name="lever", task_name="ingest_lever"):
-        if not settings.lever_enabled:
-            return {"status": "skipped", "reason": "LEVER_ENABLED=false"}
+        skip_result = _skip_run_for_disabled_provider(run_id, "lever")
+        if skip_result is not None:
+            return skip_result
         connector = create_lever_connector(
             client_name=client_name.strip(),
             company_name=company_name.strip() or None,
@@ -599,8 +674,9 @@ def ingest_lever(self, run_id: str, client_name: str, company_name: str):
 def ingest_ashby(self, run_id: str, job_board_name: str, company_name: str):
     """Fetch Ashby jobs, normalize, persist. Same pipeline as Greenhouse."""
     with log_context(run_id=run_id, source_name="ashby", task_name="ingest_ashby"):
-        if not settings.ashby_enabled:
-            return {"status": "skipped", "reason": "ASHBY_ENABLED=false"}
+        skip_result = _skip_run_for_disabled_provider(run_id, "ashby")
+        if skip_result is not None:
+            return skip_result
         connector = create_ashby_connector(
             job_board_name=job_board_name.strip(),
             company_name=company_name.strip() or None,
@@ -649,6 +725,7 @@ def ingest_url(self, run_id: str, url: str):
 
     with log_context(run_id=run_id, source_name="url_ingest", task_name="ingest_url"):
         if not settings.url_ingest_enabled:
+            mark_run_skipped(run_id, "URL_INGEST_ENABLED=false")
             return {"status": "skipped", "reason": "URL_INGEST_ENABLED=false"}
         parsed = parse_supported_url(url)
         if parsed is None:
@@ -663,20 +740,24 @@ def ingest_url(self, run_id: str, url: str):
                     session.commit()
             return {"run_id": run_id, "status": "FAILED", "error": "Unsupported job URL"}
 
+        skip_result = _skip_run_for_disabled_provider(run_id, parsed.provider)
+        if skip_result is not None:
+            return skip_result
+
         if parsed.provider == "greenhouse":
             connector = create_greenhouse_connector(
                 board_token=parsed.board_token or "",
-                company_name=parsed.board_token or "",
+                company_name=None,
             )
         elif parsed.provider == "lever":
             connector = create_lever_connector(
                 client_name=parsed.client_name or "",
-                company_name=parsed.client_name or None,
+                company_name=None,
             )
         elif parsed.provider == "ashby":
             connector = create_ashby_connector(
                 job_board_name=parsed.job_board_name or "",
-                company_name=parsed.job_board_name or None,
+                company_name=None,
             )
         else:
             with get_sync_session() as session:
@@ -715,6 +796,7 @@ def ingest_url(self, run_id: str, url: str):
                 result=result,
                 task_name="ingest_url",
                 source_role_override=SourceRole.URL_INGEST,
+                provider_metadata=_provider_slug_metadata(parsed),
             )
 
         # Filter to job matching URL
@@ -748,7 +830,24 @@ def ingest_url(self, run_id: str, url: str):
                     run.finished_at = datetime.now(timezone.utc)
                     run.error_text = "Job not found at URL"
                     run.stats_json = {"fetched": result.stats.get("fetched", 0), "inserted": 0, "duplicates": 0, "errors": 0}
-                    run.items_json = [{"outcome": "not_found", "url": url}]
+                    run.items_json = [
+                        make_run_item(
+                            index=1,
+                            outcome="skipped",
+                            job_id=None,
+                            dedup_hash=None,
+                            source="url_ingest",
+                            source_job_id=None,
+                            title=None,
+                            company_name=None,
+                            location=None,
+                            url=url,
+                            apply_url=url,
+                            ats_type=parsed.provider,
+                            raw_payload_json={"reason": "job_not_found_at_url", "requested_url": url},
+                            reason="job_not_found_at_url",
+                        )
+                    ]
                     session.commit()
             return {"run_id": run_id, "status": "FAILED", "error": "Job not found at URL"}
 
@@ -759,4 +858,14 @@ def ingest_url(self, run_id: str, url: str):
             result=filtered,
             task_name="ingest_url",
             source_role_override=SourceRole.URL_INGEST,
+            provider_metadata=_provider_slug_metadata(parsed),
         )
+
+
+@celery_app.task(acks_late=True)
+def manual_ingest_pipeline(job_ids: list[str]):
+    """Kick off downstream pipeline for manually-ingested jobs."""
+    if not job_ids:
+        return {"status": "no_jobs"}
+    (score_jobs.s(job_ids) | classify_jobs.s() | ats_match_resume.s() | evaluate_generation_gate.s()).delay()
+    return {"status": "chained", "job_ids": job_ids}

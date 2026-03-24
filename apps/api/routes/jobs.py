@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Literal, Optional
 from uuid import UUID
 
@@ -16,6 +17,8 @@ from apps.api.schemas import (
     JobDetailResponse,
     JobListItem,
     JobListResponse,
+    ManualIngestBody,
+    ManualIngestResponse,
     PersonaInfo,
     ResolveJobResponse,
     ScoreBreakdown,
@@ -24,16 +27,19 @@ from apps.api.schemas import (
 )
 from apps.api.settings import Settings
 from apps.worker.tasks.discovery import run_discovery
+from apps.worker.tasks.generation_runs import build_generation_run
 from apps.worker.tasks.ingest import (
     ingest_ashby,
     ingest_greenhouse,
     ingest_lever,
     ingest_url,
+    manual_ingest_pipeline,
 )
 from apps.worker.tasks.resolution import resolve_discovery_job
 from apps.worker.tasks.resume import generate_grounded_resume_task
 from apps.worker.tasks.scrape import scrape_jobspy
 from core.connectors.url_provider import parse_supported_url
+from core.dedup import compute_dedup_hash, normalize_company, normalize_location, normalize_title
 from core.db.models import (
     Artifact,
     Job,
@@ -46,6 +52,7 @@ from core.db.models import (
     UserStatus,
 )
 from core.job_status import legacy_status_from_canonical
+from core.run_items import make_run_item
 
 settings = Settings()
 
@@ -405,6 +412,156 @@ async def ingest_url_route(
     }
 
 
+@router.post("/manual-ingest", response_model=ManualIngestResponse)
+async def manual_ingest(
+    body: ManualIngestBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist a manually-entered job and enqueue the downstream pipeline."""
+    from sqlalchemy.dialects.postgresql import insert
+
+    norm_title = normalize_title(body.title)
+    norm_company = normalize_company(body.company)
+    norm_location = normalize_location(body.location)
+    dedup_hash = compute_dedup_hash(
+        normalized_company=norm_company,
+        normalized_title=norm_title,
+        normalized_location=norm_location or "",
+        apply_url=body.apply_url,
+    )
+
+    posted_at = None
+    if body.posted_at:
+        try:
+            posted_at = datetime.fromisoformat(body.posted_at)
+        except (ValueError, OverflowError):
+            pass
+
+    # Create ScrapeRun for tracking
+    scrape_run = ScrapeRun(
+        source="manual_intake",
+        status=ScrapeRunStatus.RUNNING.value,
+        params_json={
+            "title": body.title,
+            "company": body.company,
+            "location": body.location,
+            "apply_url": body.apply_url,
+        },
+    )
+    db.add(scrape_run)
+    await db.flush()
+    run_id = str(scrape_run.id)
+
+    # Insert job with dedup
+    stmt = (
+        insert(Job)
+        .values(
+            source="manual_intake",
+            source_role=SourceRole.CANONICAL.value,
+            source_confidence=1.0,
+            title=body.title.strip(),
+            raw_title=body.title.strip(),
+            normalized_title=norm_title,
+            raw_company=body.company.strip(),
+            normalized_company=norm_company,
+            company_name_raw=body.company.strip(),
+            raw_location=body.location.strip(),
+            normalized_location=norm_location,
+            location=body.location.strip(),
+            url=body.source_url or body.apply_url,
+            apply_url=body.apply_url.strip(),
+            description=body.description.strip(),
+            posted_at=posted_at,
+            salary_min=body.salary_min,
+            salary_max=body.salary_max,
+            workplace_type=body.workplace_type,
+            employment_type=body.employment_type,
+            ats_type="manual",
+            status="NEW",
+            user_status="NEW",
+            pipeline_status="INGESTED",
+            score_total=0.0,
+            dedup_hash=dedup_hash,
+            source_payload_json={
+                "intake_source": "manual_intake",
+                "run_id": run_id,
+            },
+        )
+        .on_conflict_do_nothing(index_elements=["dedup_hash"])
+        .returning(Job.id)
+    )
+    result = await db.execute(stmt)
+    job_id = result.scalar_one_or_none()
+    raw_payload = {
+        "intake_source": "manual_intake",
+        "run_id": run_id,
+    }
+
+    if job_id is None:
+        # Duplicate
+        existing_job_id = (
+            await db.execute(select(Job.id).where(Job.dedup_hash == dedup_hash))
+        ).scalar_one_or_none()
+        scrape_run.status = ScrapeRunStatus.SUCCESS.value
+        scrape_run.finished_at = datetime.now(timezone.utc)
+        scrape_run.stats_json = {"fetched": 1, "inserted": 0, "duplicates": 1, "errors": 0}
+        scrape_run.items_json = [
+            make_run_item(
+                index=1,
+                outcome="duplicate",
+                job_id=str(existing_job_id) if existing_job_id is not None else None,
+                dedup_hash=dedup_hash,
+                source="manual_intake",
+                source_job_id=None,
+                title=body.title,
+                company_name=body.company,
+                location=body.location,
+                url=body.source_url or body.apply_url,
+                apply_url=body.apply_url,
+                ats_type="manual_intake",
+                raw_payload_json=raw_payload,
+            )
+        ]
+        await db.commit()
+        return ManualIngestResponse(
+            run_id=run_id,
+            job_id=None,
+            status="DUPLICATE",
+        )
+
+    scrape_run.status = ScrapeRunStatus.SUCCESS.value
+    scrape_run.finished_at = datetime.now(timezone.utc)
+    scrape_run.stats_json = {"fetched": 1, "inserted": 1, "duplicates": 0, "errors": 0}
+    scrape_run.items_json = [
+        make_run_item(
+            index=1,
+            outcome="inserted",
+            job_id=str(job_id),
+            dedup_hash=dedup_hash,
+            source="manual_intake",
+            source_job_id=None,
+            title=body.title,
+            company_name=body.company,
+            location=body.location,
+            url=body.source_url or body.apply_url,
+            apply_url=body.apply_url,
+            ats_type="manual_intake",
+            raw_payload_json=raw_payload,
+        )
+    ]
+    await db.commit()
+
+    # Enqueue downstream pipeline
+    task = manual_ingest_pipeline.delay([str(job_id)])
+
+    return ManualIngestResponse(
+        run_id=run_id,
+        job_id=str(job_id),
+        status="SUCCESS",
+        task_id=str(task.id),
+    )
+
+
 @router.post("/run-scrape")
 async def run_scrape(
     body: RunScrapeBody | None = None,
@@ -688,9 +845,19 @@ async def trigger_generate_resume(job_id: UUID, db: AsyncSession = Depends(get_d
             "Job pipeline_status must be ATS_ANALYZED or RESUME_READY. "
             f"Current: {job.pipeline_status}.",
         )
-    task = generate_grounded_resume_task.delay(str(job_id))
+    run = build_generation_run(job_id, "manual")
+    db.add(run)
+    await db.flush()
+    generation_run_id = str(run.id)
+    await db.commit()
+    task = generate_grounded_resume_task.delay(
+        str(job_id), generation_run_id=generation_run_id, triggered_by="manual"
+    )
     return GenerateResumeResponse(
-        job_id=str(job_id), status="queued", task_id=str(task.id)
+        job_id=str(job_id),
+        status="queued",
+        task_id=str(task.id),
+        generation_run_id=generation_run_id,
     )
 
 

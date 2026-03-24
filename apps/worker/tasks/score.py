@@ -89,9 +89,8 @@ def score_jobs(self, job_ids: list[str] | None = None):
                         "persona_specific_scores": breakdown if isinstance(breakdown, dict) else None,
                     },
                 )
-            )
-            session.execute(stmt_ja)
-        session.commit()
+                )
+                session.execute(stmt_ja)
     metrics.increment("jobs.scored", value=scored_count)
     metrics.increment("rejected.count", value=rejected)
     logger.info("Scored %s jobs, rejected %s", len(jobs), rejected, extra={"task_name": "score_jobs"})

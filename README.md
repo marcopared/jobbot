@@ -30,6 +30,7 @@ Planned implementation order for the next code PRs: `AGG-1` Adzuna hardening, `S
 - Coding-agent operating instructions: `docs/CODING_AGENT_GUIDE.md`
 
 See `docs/README.md` for the authoritative docs index and current-system summary.
+See `docs/KNOWN_ISSUES.md` before making any claim that the current branch is fully verified or ready for unrestricted feature work.
 
 ## Prerequisites
 
@@ -84,6 +85,13 @@ cd ui && npm run dev -- --host 127.0.0.1 --port 5173
 | **URL ingest** | `POST /api/jobs/ingest-url` | Canonical | Paste supported Greenhouse/Lever/Ashby job URL. Feature-flagged (`URL_INGEST_ENABLED`). |
 
 All paths run score → classify → ATS analysis. Resume generation: manual via `POST /api/jobs/{id}/generate-resume`, or automatic when `ENABLE_AUTO_RESUME_GENERATION=true` and the job passes the generation gate.
+
+## Known Issues / Verification Reality
+
+- The repo has focused regression coverage for several high-risk invariants, but that is not the same as full end-to-end provider verification.
+- Historical docs such as `docs/ACCEPTANCE_REPORT.md` and `docs/CLOSEOUT_AUDIT.md` are point-in-time snapshots, not blanket proof for the current branch.
+- Real provider credentials, ready-to-apply throughput, and PDF generation still need local/manual verification when those areas are touched.
+- Use `docs/KNOWN_ISSUES.md` and the listed focused suites as the baseline closeout checklist for backend changes.
 
 ### Example: JobSpy scrape
 

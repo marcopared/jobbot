@@ -10,6 +10,13 @@ It should be read together with:
 - `IMPLEMENTATION_PLAN.md` for PR boundaries and merge order
 - `CODING_AGENT_GUIDE.md` for coding-agent operating instructions
 - `IMPLEMENTATION_STATUS.md` for a verification audit of what is implemented vs aspirational
+- `KNOWN_ISSUES.md` for current-branch reliability gaps and mandatory regression suites
+
+## Reliability note
+
+Architecture describes the implemented design shape, not a blanket guarantee that the current
+branch is bug-free or fully verified. Do not convert architectural descriptions into readiness
+claims without checking `KNOWN_ISSUES.md` and rerunning relevant regression suites.
 
 ## 1. Current system (implemented)
 

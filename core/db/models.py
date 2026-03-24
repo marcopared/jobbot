@@ -76,6 +76,7 @@ class ScrapeRunStatus(str, Enum):
     RUNNING = "RUNNING"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
 
 
 class ATSType(str, Enum):

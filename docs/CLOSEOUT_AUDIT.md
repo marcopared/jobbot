@@ -4,6 +4,10 @@
 **Scope:** Final no-code audit after docs cleanup. Source of truth: real repository only.  
 **Goal:** Decide whether the repo is ready to resume feature work.
 
+> Historical snapshot only. This file records a point-in-time audit from 2026-03-16.
+> Do not use it as sole evidence that the current branch is stable or fully verified.
+> Check `IMPLEMENTATION_STATUS.md` and `KNOWN_ISSUES.md` first.
+
 ---
 
 ## 1. Cross-Doc Consistency
@@ -14,7 +18,8 @@
 | **IMPLEMENTATION_STATUS** vs **ACCEPTANCE_REPORT** | resolve endpoint, job_resolution_attempts, generation gate, ready-to-apply | ✓ Aligned |
 | **FOLLOWUP_DISCOVERY** vs others | Resolution implemented; generation gate; ready-to-apply (notes "when implemented" for source_confidence filter) | ✓ Aligned; FOLLOWUP correctly frames source_confidence as future |
 
-**No contradictions found** between README, docs/README, IMPLEMENTATION_STATUS, ACCEPTANCE_REPORT, and FOLLOWUP_DISCOVERY.
+At the time of this audit, no contradictions were identified between the listed docs.
+That statement does **not** automatically apply to later branches.
 
 ---
 
@@ -76,19 +81,17 @@
 
 ## 5. Recommendation
 
-### **GO** — Ready to resume feature work
+### Historical recommendation only
 
 **Rationale:**
-- Docs are mutually consistent and accurately describe the implemented system.
-- Code matches documented behavior for resolve endpoint, job_resolution_attempts, JobSpy source_role, generation gate, and ready-to-apply.
-- All four ingestion paths chain to the generation gate; pipeline status transitions are audited.
-- Test suite passes; ACCEPTANCE_REPORT merge recommendation is YES; no critical drift.
+- This was the recommendation for the audited snapshot on 2026-03-16.
+- Current-branch readiness must be re-evaluated against current code and focused regression suites.
 
 ---
 
 ## 6. Remaining Contradictions
 
-**None.** No factual contradictions identified between docs and code.
+None were found in the audited snapshot. Re-audit current code before repeating that claim.
 
 ---
 

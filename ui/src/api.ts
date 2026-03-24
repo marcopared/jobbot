@@ -90,7 +90,7 @@ export interface RunsResponse {
 
 export interface RunItem {
   index: number;
-  outcome: "inserted" | "duplicate";
+  outcome: "inserted" | "duplicate" | "skipped";
   job_id: string | null;
   dedup_hash: string;
   source: string;
@@ -102,7 +102,9 @@ export interface RunItem {
   apply_url: string | null;
   ats_type: string;
   backfilled_payload?: boolean;
-  raw_payload_json: Record<string, unknown> | null;
+  backfilled_apply_url?: boolean;
+  source_confidence?: number;
+  raw_payload_json: unknown | null;
 }
 
 export interface RunItemsResponse {
@@ -217,6 +219,7 @@ export async function triggerGenerateResume(jobId: string): Promise<{
   job_id: string;
   status: string;
   task_id?: string;
+  generation_run_id: string;
 }> {
   const res = await fetch(`${BASE}/jobs/${jobId}/generate-resume`, {
     method: "POST",
@@ -281,6 +284,37 @@ export async function ingestUrl(url: string): Promise<{
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `URL ingest failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Manual job intake — persist a user-entered job and start pipeline */
+export async function manualIngest(body: {
+  title: string;
+  company: string;
+  location: string;
+  apply_url: string;
+  description: string;
+  source_url?: string;
+  posted_at?: string;
+  salary_min?: number;
+  salary_max?: number;
+  workplace_type?: string;
+  employment_type?: string;
+}): Promise<{
+  run_id: string;
+  job_id: string | null;
+  status: string;
+  task_id?: string;
+}> {
+  const res = await fetch(`${BASE}/jobs/manual-ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Manual ingest failed: ${res.status}`);
   }
   return res.json();
 }

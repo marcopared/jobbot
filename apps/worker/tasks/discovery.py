@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from apps.api.settings import Settings
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.run_helpers import mark_run_skipped
 from apps.worker.tasks.ats_match import ats_match_resume
 from apps.worker.tasks.classify import classify_jobs
 from apps.worker.tasks.generation import evaluate_generation_gate
@@ -34,6 +35,7 @@ from core.db.session import get_sync_session
 from core.dedup import canonicalize_apply_url, compute_dedup_hash
 from core.observability import get_metrics, log_context
 from core.observability.metrics import TaskTimer
+from core.run_items import make_run_item
 
 settings = Settings()
 logger = logging.getLogger(__name__)
@@ -117,12 +119,22 @@ def _run_discovery_persist(
             canonical = connector.normalize(raw_job)
             if canonical is None:
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "skipped",
-                        "reason": "normalize_failed",
-                        "external_id": str(raw_job.get("id", raw_job.get("url", ""))),
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="skipped",
+                        job_id=None,
+                        dedup_hash=None,
+                        source=source_name,
+                        source_job_id=str(raw_job.get("id", raw_job.get("url", ""))) or None,
+                        title=raw_job.get("title"),
+                        company_name=raw_job.get("company"),
+                        location=raw_job.get("location"),
+                        url=raw_job.get("url") or raw_job.get("redirect_url"),
+                        apply_url=raw_job.get("redirect_url") or raw_job.get("url"),
+                        ats_type=source_name,
+                        raw_payload_json=raw_job,
+                        reason="normalize_failed",
+                    )
                 )
                 continue
 
@@ -216,36 +228,44 @@ def _run_discovery_persist(
                 if canonical_apply_url and job_id_for_source:
                     apply_url_to_job_id[canonical_apply_url] = job_id_for_source
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "inserted",
-                        "dedup_reason": dedup_reason,
-                        "job_id": str(inserted_job_id),
-                        "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
-                        "title": canonical.title,
-                        "company": canonical.company,
-                        "location": canonical.location,
-                        "apply_url": canonical.apply_url,
-                        "source_confidence": source_confidence,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="inserted",
+                        job_id=str(inserted_job_id),
+                        dedup_hash=dedup_hash,
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type=source_name,
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                        source_confidence=source_confidence,
+                    )
                 )
             else:
                 duplicates += 1
                 existing_job_id = str(existing_job[0]) if existing_job else None
                 run_items.append(
-                    {
-                        "index": index,
-                        "outcome": "duplicate",
-                        "dedup_reason": dedup_reason,
-                        "job_id": existing_job_id,
-                        "dedup_hash": dedup_hash,
-                        "external_id": canonical.external_id,
-                        "title": canonical.title,
-                        "company": canonical.company,
-                        "location": canonical.location,
-                        "apply_url": canonical.apply_url,
-                    }
+                    make_run_item(
+                        index=index,
+                        outcome="duplicate",
+                        job_id=existing_job_id,
+                        dedup_hash=dedup_hash,
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type=source_name,
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                    )
                 )
 
         run = session.get(ScrapeRun, UUID(run_id))
@@ -327,6 +347,7 @@ def run_discovery(
                     "Skipping AGG-1 discovery run_id=%s (ENABLE_AGG1_DISCOVERY=false)",
                     run_id,
                 )
+                mark_run_skipped(run_id, "ENABLE_AGG1_DISCOVERY=false")
                 return {"status": "skipped", "reason": "ENABLE_AGG1_DISCOVERY=false"}
             conn = create_agg1_connector(
                 app_id=settings.adzuna_app_id or "",
@@ -339,6 +360,7 @@ def run_discovery(
                     "Skipping SERP1 discovery run_id=%s (ENABLE_SERP1_DISCOVERY=false)",
                     run_id,
                 )
+                mark_run_skipped(run_id, "ENABLE_SERP1_DISCOVERY=false")
                 return {"status": "skipped", "reason": "ENABLE_SERP1_DISCOVERY=false"}
             conn = create_serp1_connector()
         else:

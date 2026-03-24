@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { manualIngest } from "../api";
 
 type IntakeForm = {
   title: string;
@@ -29,9 +30,17 @@ const INITIAL_FORM: IntakeForm = {
   employment_type: "",
 };
 
+type SubmitState =
+  | { kind: "idle" }
+  | { kind: "submitting" }
+  | { kind: "success"; jobId: string | null; runId: string; status: string }
+  | { kind: "duplicate"; runId: string }
+  | { kind: "error"; message: string };
+
 export default function ManualJobIntakePage() {
   const [form, setForm] = useState<IntakeForm>(INITIAL_FORM);
-  const [submitted, setSubmitted] = useState(false);
+  const [validated, setValidated] = useState(false);
+  const [submitState, setSubmitState] = useState<SubmitState>({ kind: "idle" });
 
   const requiredMissing = useMemo(() => {
     const missing: string[] = [];
@@ -43,7 +52,7 @@ export default function ManualJobIntakePage() {
     return missing;
   }, [form]);
 
-  const payloadPreview = useMemo(() => {
+  const buildPayload = () => {
     const out: Record<string, unknown> = {
       title: form.title.trim(),
       company: form.company.trim(),
@@ -60,25 +69,51 @@ export default function ManualJobIntakePage() {
     if (form.employment_type.trim())
       out.employment_type = form.employment_type.trim();
     return out;
-  }, [form]);
+  };
 
   const onChange = (key: keyof IntakeForm, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
-    if (submitted) setSubmitted(false);
+    if (validated) setValidated(false);
+    if (submitState.kind !== "idle") setSubmitState({ kind: "idle" });
   };
 
-  const onSubmit = (e: FormEvent) => {
+  const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setValidated(true);
+
+    if (requiredMissing.length > 0) return;
+
+    setSubmitState({ kind: "submitting" });
+    try {
+      const payload = buildPayload();
+      const res = await manualIngest(
+        payload as Parameters<typeof manualIngest>[0],
+      );
+      if (res.status === "DUPLICATE") {
+        setSubmitState({ kind: "duplicate", runId: res.run_id });
+      } else {
+        setSubmitState({
+          kind: "success",
+          jobId: res.job_id,
+          runId: res.run_id,
+          status: res.status,
+        });
+      }
+    } catch (err) {
+      setSubmitState({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
   };
 
-  const canProceed = submitted && requiredMissing.length === 0;
+  const isSubmitting = submitState.kind === "submitting";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm">
         <Link to="/ready" className="text-indigo-600 hover:underline">
-          ← Ready to Apply
+          &larr; Ready to Apply
         </Link>
       </div>
 
@@ -104,6 +139,7 @@ export default function ManualJobIntakePage() {
               value={form.title}
               onChange={(e) => onChange("title", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -112,6 +148,7 @@ export default function ManualJobIntakePage() {
               value={form.company}
               onChange={(e) => onChange("company", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -120,6 +157,7 @@ export default function ManualJobIntakePage() {
               value={form.location}
               onChange={(e) => onChange("location", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -129,6 +167,7 @@ export default function ManualJobIntakePage() {
               value={form.apply_url}
               onChange={(e) => onChange("apply_url", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
         </div>
@@ -140,6 +179,7 @@ export default function ManualJobIntakePage() {
             onChange={(e) => onChange("description", e.target.value)}
             rows={8}
             className="w-full rounded border border-gray-300 px-3 py-2"
+            disabled={isSubmitting}
           />
         </label>
 
@@ -151,6 +191,7 @@ export default function ManualJobIntakePage() {
               value={form.source_url}
               onChange={(e) => onChange("source_url", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -160,6 +201,7 @@ export default function ManualJobIntakePage() {
               value={form.posted_at}
               onChange={(e) => onChange("posted_at", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -169,6 +211,7 @@ export default function ManualJobIntakePage() {
               value={form.salary_min}
               onChange={(e) => onChange("salary_min", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -178,6 +221,7 @@ export default function ManualJobIntakePage() {
               value={form.salary_max}
               onChange={(e) => onChange("salary_max", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             />
           </label>
           <label className="text-sm">
@@ -186,6 +230,7 @@ export default function ManualJobIntakePage() {
               value={form.workplace_type}
               onChange={(e) => onChange("workplace_type", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             >
               <option value="">Select</option>
               <option value="remote">Remote</option>
@@ -201,6 +246,7 @@ export default function ManualJobIntakePage() {
               value={form.employment_type}
               onChange={(e) => onChange("employment_type", e.target.value)}
               className="w-full rounded border border-gray-300 px-3 py-2"
+              disabled={isSubmitting}
             >
               <option value="">Select</option>
               <option value="full_time">Full-time</option>
@@ -214,15 +260,18 @@ export default function ManualJobIntakePage() {
         <div className="flex items-center gap-2">
           <button
             type="submit"
-            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            disabled={isSubmitting}
+            className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            Validate Fields
+            {isSubmitting ? "Submitting\u2026" : "Submit Job"}
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => {
               setForm(INITIAL_FORM);
-              setSubmitted(false);
+              setValidated(false);
+              setSubmitState({ kind: "idle" });
             }}
             className="rounded border border-gray-300 px-4 py-2 text-sm"
           >
@@ -230,25 +279,43 @@ export default function ManualJobIntakePage() {
           </button>
         </div>
 
-        {submitted && requiredMissing.length > 0 && (
+        {validated && requiredMissing.length > 0 && (
           <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             Missing required fields: {requiredMissing.join(", ")}
           </div>
         )}
 
-        {canProceed && (
+        {submitState.kind === "success" && (
           <div className="space-y-2 rounded border border-green-200 bg-green-50 p-3">
-            <p className="text-sm text-green-800">
-              Required fields are complete. Manual intake payload is ready.
+            <p className="text-sm font-medium text-green-800">
+              Job ingested successfully. Pipeline started.
             </p>
-            <pre className="max-h-64 overflow-auto rounded bg-white p-2 text-xs text-gray-700">
-              {JSON.stringify(payloadPreview, null, 2)}
-            </pre>
-            <p className="text-xs text-green-900">
-              Note: this UI currently validates and formats manual intake data.
-              Persisting these records requires a backend manual-ingest
-              endpoint.
+            {submitState.jobId && (
+              <p className="text-sm text-green-700">
+                <Link
+                  to={`/jobs/${submitState.jobId}`}
+                  className="underline hover:text-green-900"
+                >
+                  View job &rarr;
+                </Link>
+              </p>
+            )}
+            <p className="text-xs text-green-600">
+              Run ID: {submitState.runId}
             </p>
+          </div>
+        )}
+
+        {submitState.kind === "duplicate" && (
+          <div className="rounded border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+            This job already exists (duplicate detected). Run ID:{" "}
+            {submitState.runId}
+          </div>
+        )}
+
+        {submitState.kind === "error" && (
+          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            Error: {submitState.message}
           </div>
         )}
       </form>

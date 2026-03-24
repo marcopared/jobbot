@@ -4,12 +4,19 @@ JobBot is a personal job discovery, ranking, and resume-tailoring system.
 
 This documentation set describes the **current system** (source of truth: the real repository) and remaining gaps.
 
+## Current branch caveat
+
+- Treat `KNOWN_ISSUES.md` as required reading before making readiness or stability claims.
+- Treat `ACCEPTANCE_REPORT.md` and `CLOSEOUT_AUDIT.md` as historical snapshots, not current-branch proof.
+- Do not describe the system as fully verified unless the focused regression suites relevant to your change have been rerun successfully.
+
 ## Current system (implemented)
 
 - **Canonical ATS:** Greenhouse, Lever, Ashby via `POST /api/jobs/run-ingestion`
 - **Discovery:** JobSpy (scrape); AGG-1 and SERP1 (feature-flagged: `ENABLE_AGG1_DISCOVERY`, `ENABLE_SERP1_DISCOVERY`)
 - **URL ingest:** supported ATS job URLs via `POST /api/jobs/ingest-url` (feature-flagged: `URL_INGEST_ENABLED`)
 - **Processing:** score → classify → ATS analysis → generation gate; auto-generation when `ENABLE_AUTO_RESUME_GENERATION=true`
+- **Manual generation contract:** `POST /api/jobs/{id}/generate-resume` is available only for `ATS_ANALYZED` or `RESUME_READY` jobs and returns a persisted `generation_run_id`
 - **Resolution:** `POST /api/jobs/{id}/resolve` for discovery-to-canonical enrichment (discovery jobs only); attempts recorded in `job_resolution_attempts`
 - **Ready-to-apply:** `GET /api/jobs/ready-to-apply` feed; UI has ReadyToApplyPage
 - **Manual apply:** user downloads artifact and opens job URL externally; no browser automation
@@ -30,6 +37,13 @@ This documentation set describes the **current system** (source of truth: the re
 - Full target pipeline states (DISCOVERED, NORMALIZED, DEDUPED, etc.) — not yet implemented
 - Target queue model (discovery, resolution, analysis queues) — not yet implemented
 - UI throughput mode: ready-to-apply default view and URL ingest entry point are partially implemented
+- Closeout/readiness claims must be checked against the current branch, not older audit notes
+- Provider-backed end-to-end verification still requires manual/local verification beyond unit tests
+- Manual generation tracking is proven by focused route and worker tests, not by docs alone: see `tests/test_api_jobs.py -k manual_generate_resume` and `tests/test_generation_run_tracking.py`
+
+## Known issues / reliability gaps
+
+See `KNOWN_ISSUES.md` for the short current-branch reliability summary and the mandatory regression suites.
 
 ## Authoritative docs
 
@@ -39,6 +53,7 @@ This documentation set describes the **current system** (source of truth: the re
 - `IMPLEMENTATION_PLAN.md` — PR boundaries, merge order, and delivery plan
 - `CODING_AGENT_GUIDE.md` — operating instructions and constraints for coding agents
 - `IMPLEMENTATION_STATUS.md` — backend verification audit (what is implemented vs aspirational)
+- `KNOWN_ISSUES.md` — current branch reliability gaps and mandatory invariant suites
 
 ## Hard non-goals
 
@@ -89,3 +104,6 @@ See `IMPLEMENTATION_PLAN.md` for PR boundaries, merge rules, and acceptance crit
 ## Notes for contributors
 
 Use this documentation set and the real repo as the planning baseline. Ignore scaffold, patches, and synthetic repo summaries.
+
+Developer note:
+The canonical invariant for manual generation is: the route creates `GenerationRun(triggered_by="manual")`, commits it before queueing, passes the same `generation_run_id` to the worker, and returns that id in the API response.
