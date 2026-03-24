@@ -1,0 +1,12 @@
+---
+description: Global operating rules for JobBot. Keep changes incremental and verifiable.
+alwaysApply: true
+globs:
+  - "**/*"
+---
+
+- Do not implement multiple TASKS at once. Implement exactly the requested TASK number, stop, and wait.
+- Prefer minimal diffs. No refactors unless explicitly requested or required for the task.
+- Before coding: scan relevant existing code; do not invent structure that conflicts with repository reality.
+- After coding: run the acceptance checks listed in @docs/IMPLEMENTATION_PLAN.md for that task. Fix until green.
+- If requirements conflict: call it out, propose the smallest resolution, and continue only after selecting one.

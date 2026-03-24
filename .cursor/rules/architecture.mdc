@@ -1,0 +1,17 @@
+---
+description: Architecture invariants. Use when touching backend/worker/browser infra.
+globs:
+  - "apps/**"
+  - "packages/**"
+  - "src/**"
+  - "**/*.py"
+  - "**/Dockerfile*"
+  - "docker-compose*.yml"
+---
+
+Read and follow: @docs/ARCHITECTURE.md
+
+Non-negotiables:
+- Preserve service boundaries and data-flow assumptions described in @docs/ARCHITECTURE.md.
+- Keep worker execution idempotent; retries must be safe.
+- Any new component must include: interface, failure modes, retry strategy, and where state lives.

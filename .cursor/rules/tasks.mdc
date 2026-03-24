@@ -1,0 +1,10 @@
+---
+alwaysApply: false
+---
+Read and follow: @docs/TODO.md and @docs/IMPLEMENTATION_PLAN.md
+
+Protocol:
+- Only work on the single task I specify (e.g., TASK-03).
+- Create/modify only the files in that task’s scope unless required.
+- Run the task’s acceptance checks and report results.
+- When complete: mark the task done in @docs/TODO.md and add short notes (what changed, commands run).

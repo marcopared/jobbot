@@ -1,0 +1,11 @@
+---
+description: Project overview and doc index. Use when orienting to the codebase.
+globs:
+  - "**/*"
+---
+Read and follow: @docs/README.md
+
+Rules:
+- Use the authoritative docs list for source of truth.
+- Do not assume older manual-review-first docs are correct.
+- Current baseline vs target state is explicitly documented here.

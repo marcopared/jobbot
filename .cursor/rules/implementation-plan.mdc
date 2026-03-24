@@ -1,0 +1,12 @@
+---
+description: PR boundaries, merge order, feature flags, and test expectations. Use when delivering or reviewing code.
+globs:
+  - "**/*"
+---
+Read and follow: @docs/IMPLEMENTATION_PLAN.md
+
+Rules:
+- Respect PR order and merge rules (§2, §3).
+- Use feature flags per §4 for risky or incremental lanes.
+- Meet test expectations in §5 for the relevant PR scope.
+- Avoid explicit anti-patterns in §6.

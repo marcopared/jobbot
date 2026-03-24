@@ -1,0 +1,14 @@
+---
+description: Operating instructions and constraints for coding agents. Use when scoping, implementing, or reviewing.
+alwaysApply: false
+globs:
+  - "**/*"
+---
+Read and follow: @docs/CODING_AGENT_GUIDE.md
+
+Rules:
+- Trust docs in the order specified (§1).
+- Do not violate product constraints (§2).
+- Preserve source-role discipline: canonical ATS vs discovery vs URL ingest (§3).
+- Prefer small PRs with explicit out-of-scope (§4, §8).
+- Stop and ask for review per escalation rules (§10).

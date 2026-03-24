@@ -1,0 +1,16 @@
+---
+description: Product/system spec for JobBot. Use for endpoints, models, scoring, UI behavior.
+globs:
+  - "apps/api/**"
+  - "apps/ui/**"
+  - "packages/**"
+  - "**/*.py"
+  - "**/*.tsx"
+  - "**/*.ts"
+---
+
+Read and follow: @docs/SPEC.md
+
+Rules:
+- Implement to the spec. If you must deviate, explicitly document the deviation and why.
+- Every feature change must include acceptance criteria and edge cases (reference SPEC sections).

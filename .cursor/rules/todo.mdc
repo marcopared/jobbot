@@ -1,0 +1,11 @@
+---
+description: Prioritized backlog and phased milestones. Use when planning or sequencing work.
+globs:
+  - "**/*"
+---
+Read and follow: @docs/TODO.md
+
+Rules:
+- Respect Now / Next / Later priority order.
+- Do not pull Later items into Now or Next scope without explicit user direction.
+- Product scope for this wave: automated discovery through artifact-ready; manual apply remains final step; no browser automation.
