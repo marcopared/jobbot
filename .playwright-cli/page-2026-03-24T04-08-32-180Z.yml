@@ -1,0 +1,56 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]: JobBot
+    - navigation [ref=e6]:
+      - link "⌂ Ready to Apply" [ref=e7] [cursor=pointer]:
+        - /url: /ready
+        - generic [ref=e8]:
+          - generic [ref=e9]: ⌂
+          - text: Ready to Apply
+      - link "All Jobs" [ref=e10] [cursor=pointer]:
+        - /url: /jobs
+        - generic [ref=e11]: All Jobs
+      - link "Runs" [ref=e12] [cursor=pointer]:
+        - /url: /runs
+        - generic [ref=e13]: Runs
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - heading "Ready to Apply" [level=1] [ref=e18]
+        - paragraph [ref=e19]:
+          - text: Your operational home — jobs with tailored resumes ready. Download the resume, open the application link, and apply
+          - strong [ref=e20]: manually
+          - text: . JobBot never auto-submits.
+        - generic [ref=e21]:
+          - text: "Operator flow:"
+          - strong [ref=e22]: 1)
+          - text: click
+          - strong [ref=e23]: Apply
+          - text: in the table to open Job Detail,
+          - strong [ref=e24]: 2)
+          - text: download artifact,
+          - strong [ref=e25]: 3)
+          - text: open external apply link,
+          - strong [ref=e26]: 4)
+          - text: mark applied.
+        - generic [ref=e27]:
+          - heading "Paste job URL" [level=2] [ref=e28]
+          - paragraph [ref=e29]: "Supported ATS: Greenhouse, Lever, Ashby. Paste a job URL to add it to the pipeline."
+          - generic [ref=e30]:
+            - textbox "https://boards.greenhouse.io/company/jobs/123..." [ref=e31]
+            - button "Ingest URL" [disabled] [ref=e32]
+          - generic [ref=e33]:
+            - link "Or paste full description" [ref=e34] [cursor=pointer]:
+              - /url: /jobs/manual-intake
+            - paragraph [ref=e35]: Use this when there is no supported ATS URL and you want to enter extracted fields manually.
+      - generic [ref=e40]:
+        - generic [ref=e41]: 0 jobs ready
+        - generic [ref=e42]:
+          - combobox [ref=e43]:
+            - option "Sort by Ready" [selected]
+            - option "Sort by Score"
+            - option "Sort by Scraped"
+          - button "↓" [ref=e44] [cursor=pointer]
+          - button "Prev" [disabled] [ref=e45]
+          - generic [ref=e46]: Page 1 of 1
+          - button "Next" [disabled] [ref=e47]

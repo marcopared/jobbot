@@ -1,0 +1,628 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]: JobBot
+    - navigation [ref=e6]:
+      - link "⌂ Ready to Apply" [ref=e7] [cursor=pointer]:
+        - /url: /ready
+        - generic [ref=e8]:
+          - generic [ref=e9]: ⌂
+          - text: Ready to Apply
+      - link "All Jobs" [ref=e10] [cursor=pointer]:
+        - /url: /jobs
+        - generic [ref=e11]: All Jobs
+      - link "Runs" [ref=e12] [cursor=pointer]:
+        - /url: /runs
+        - generic [ref=e13]: Runs
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - heading "Ready to Apply" [level=1] [ref=e18]
+        - paragraph [ref=e19]:
+          - text: Your operational home — jobs with tailored resumes ready. Download the resume, open the application link, and apply
+          - strong [ref=e20]: manually
+          - text: . JobBot never auto-submits.
+        - generic [ref=e21]:
+          - text: "Operator flow:"
+          - strong [ref=e22]: 1)
+          - text: click
+          - strong [ref=e23]: Apply
+          - text: in the table to open Job Detail,
+          - strong [ref=e24]: 2)
+          - text: download artifact,
+          - strong [ref=e25]: 3)
+          - text: open external apply link,
+          - strong [ref=e26]: 4)
+          - text: mark applied.
+        - generic [ref=e27]:
+          - heading "Paste job URL" [level=2] [ref=e28]
+          - paragraph [ref=e29]: "Supported ATS: Greenhouse, Lever, Ashby. Paste a job URL to add it to the pipeline."
+          - generic [ref=e30]:
+            - textbox "https://boards.greenhouse.io/company/jobs/123..." [ref=e31]
+            - button "Ingest URL" [disabled] [ref=e32]
+          - generic [ref=e33]:
+            - link "Or paste full description" [ref=e34] [cursor=pointer]:
+              - /url: /jobs/manual-intake
+            - paragraph [ref=e35]: Use this when there is no supported ATS URL and you want to enter extracted fields manually.
+      - generic [ref=e48]:
+        - text: Apply column opens Job Detail where
+        - strong [ref=e49]: Download Resume
+        - text: and
+        - strong [ref=e50]: Open Application
+        - text: are shown together for manual submission.
+      - table [ref=e52]:
+        - rowgroup [ref=e53]:
+          - row "Title Company Location Score Persona Status Resume Provenance Apply Actions" [ref=e54]:
+            - columnheader [ref=e55]:
+              - checkbox [ref=e56]
+            - columnheader "Title" [ref=e57]
+            - columnheader "Company" [ref=e58]
+            - columnheader "Location" [ref=e59]
+            - columnheader "Score" [ref=e60]
+            - columnheader "Persona" [ref=e61]
+            - columnheader "Status" [ref=e62]
+            - columnheader "Resume" [ref=e63]
+            - columnheader "Provenance" [ref=e64]
+            - columnheader "Apply" [ref=e65]
+            - columnheader "Actions" [ref=e66]
+        - rowgroup [ref=e67]:
+          - row "sr. software engineer, rtb unknown remote (united states) 100.0 BACKEND NEW ✓ Discovery Apply Save Archive" [ref=e68]:
+            - cell [ref=e69]:
+              - checkbox [ref=e70]
+            - cell "sr. software engineer, rtb" [ref=e71]:
+              - link "sr. software engineer, rtb" [ref=e72] [cursor=pointer]:
+                - /url: /jobs/f9d69100-9376-4180-ab41-e2269763968a
+            - cell "unknown" [ref=e73]
+            - cell "remote (united states)" [ref=e74]
+            - cell "100.0" [ref=e75]
+            - cell "BACKEND" [ref=e76]
+            - cell "NEW" [ref=e77]:
+              - generic [ref=e78]: NEW
+            - cell "✓" [ref=e79]
+            - cell "Discovery" [ref=e80]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e81]': Discovery
+            - cell "Apply" [ref=e82]:
+              - link "Apply" [ref=e83] [cursor=pointer]:
+                - /url: /jobs/f9d69100-9376-4180-ab41-e2269763968a
+            - cell "Save Archive" [ref=e84]:
+              - generic [ref=e85]:
+                - button "Save" [ref=e86] [cursor=pointer]
+                - button "Archive" [ref=e87] [cursor=pointer]
+          - row "site engineer vercel remote - united states 80.0 HYBRID NEW ✓ Canonical ATS Apply Save Archive" [ref=e88]:
+            - cell [ref=e89]:
+              - checkbox [ref=e90]
+            - cell "site engineer" [ref=e91]:
+              - link "site engineer" [ref=e92] [cursor=pointer]:
+                - /url: /jobs/259517ff-1111-4694-b8e3-7d81d8d8277f
+            - cell "vercel" [ref=e93]
+            - cell "remote - united states" [ref=e94]
+            - cell "80.0" [ref=e95]
+            - cell "HYBRID" [ref=e96]
+            - cell "NEW" [ref=e97]:
+              - generic [ref=e98]: NEW
+            - cell "✓" [ref=e99]
+            - cell "Canonical ATS" [ref=e100]:
+              - 'generic "Source: greenhouse · Role: Canonical ATS" [ref=e101]': Canonical ATS
+            - cell "Apply" [ref=e102]:
+              - link "Apply" [ref=e103] [cursor=pointer]:
+                - /url: /jobs/259517ff-1111-4694-b8e3-7d81d8d8277f
+            - cell "Save Archive" [ref=e104]:
+              - generic [ref=e105]:
+                - button "Save" [ref=e106] [cursor=pointer]
+                - button "Archive" [ref=e107] [cursor=pointer]
+          - row "senior software engineer, trust & safety vercel remote - united states 96.2 BACKEND NEW ✓ Canonical ATS Apply Save Archive" [ref=e108]:
+            - cell [ref=e109]:
+              - checkbox [ref=e110]
+            - cell "senior software engineer, trust & safety" [ref=e111]:
+              - link "senior software engineer, trust & safety" [ref=e112] [cursor=pointer]:
+                - /url: /jobs/74b9f783-10f7-46ca-aac0-bd53de52871f
+            - cell "vercel" [ref=e113]
+            - cell "remote - united states" [ref=e114]
+            - cell "96.2" [ref=e115]
+            - cell "BACKEND" [ref=e116]
+            - cell "NEW" [ref=e117]:
+              - generic [ref=e118]: NEW
+            - cell "✓" [ref=e119]
+            - cell "Canonical ATS" [ref=e120]:
+              - 'generic "Source: greenhouse · Role: Canonical ATS" [ref=e121]': Canonical ATS
+            - cell "Apply" [ref=e122]:
+              - link "Apply" [ref=e123] [cursor=pointer]:
+                - /url: /jobs/74b9f783-10f7-46ca-aac0-bd53de52871f
+            - cell "Save Archive" [ref=e124]:
+              - generic [ref=e125]:
+                - button "Save" [ref=e126] [cursor=pointer]
+                - button "Archive" [ref=e127] [cursor=pointer]
+          - row "senior engineer testgen_18479869 remote 75.0 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e128]:
+            - cell [ref=e129]:
+              - checkbox [ref=e130]
+            - cell "senior engineer" [ref=e131]:
+              - link "senior engineer" [ref=e132] [cursor=pointer]:
+                - /url: /jobs/5ef00fe7-11ff-4c33-b003-aeb349ca17ba
+            - cell "testgen_18479869" [ref=e133]
+            - cell "remote" [ref=e134]
+            - cell "75.0" [ref=e135]
+            - cell "HYBRID" [ref=e136]
+            - cell "NEW" [ref=e137]:
+              - generic [ref=e138]: NEW
+            - cell "✓" [ref=e139]
+            - cell "Discovery" [ref=e140]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e141]': Discovery
+            - cell "Apply" [ref=e142]:
+              - link "Apply" [ref=e143] [cursor=pointer]:
+                - /url: /jobs/5ef00fe7-11ff-4c33-b003-aeb349ca17ba
+            - cell "Save Archive" [ref=e144]:
+              - generic [ref=e145]:
+                - button "Save" [ref=e146] [cursor=pointer]
+                - button "Archive" [ref=e147] [cursor=pointer]
+          - row "senior engineer testgen_80b2548c remote 75.0 BACKEND NEW ✓ Discovery Apply Save Archive" [ref=e148]:
+            - cell [ref=e149]:
+              - checkbox [ref=e150]
+            - cell "senior engineer" [ref=e151]:
+              - link "senior engineer" [ref=e152] [cursor=pointer]:
+                - /url: /jobs/84283c20-cda0-4195-8bb6-73f554865d29
+            - cell "testgen_80b2548c" [ref=e153]
+            - cell "remote" [ref=e154]
+            - cell "75.0" [ref=e155]
+            - cell "BACKEND" [ref=e156]
+            - cell "NEW" [ref=e157]:
+              - generic [ref=e158]: NEW
+            - cell "✓" [ref=e159]
+            - cell "Discovery" [ref=e160]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e161]': Discovery
+            - cell "Apply" [ref=e162]:
+              - link "Apply" [ref=e163] [cursor=pointer]:
+                - /url: /jobs/84283c20-cda0-4195-8bb6-73f554865d29
+            - cell "Save Archive" [ref=e164]:
+              - generic [ref=e165]:
+                - button "Save" [ref=e166] [cursor=pointer]
+                - button "Archive" [ref=e167] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e168]:
+            - cell [ref=e169]:
+              - checkbox [ref=e170]
+            - cell "senior backend platform engineer" [ref=e171]:
+              - link "senior backend platform engineer" [ref=e172] [cursor=pointer]:
+                - /url: /jobs/b391ac84-28b9-4f98-89ff-66486aee22b9
+            - cell "adzuna smoke co" [ref=e173]
+            - cell "remote" [ref=e174]
+            - cell "87.5" [ref=e175]
+            - cell "HYBRID" [ref=e176]
+            - cell "NEW" [ref=e177]:
+              - generic [ref=e178]: NEW
+            - cell "✓" [ref=e179]
+            - cell "Discovery" [ref=e180]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e181]': Discovery
+            - cell "Apply" [ref=e182]:
+              - link "Apply" [ref=e183] [cursor=pointer]:
+                - /url: /jobs/b391ac84-28b9-4f98-89ff-66486aee22b9
+            - cell "Save Archive" [ref=e184]:
+              - generic [ref=e185]:
+                - button "Save" [ref=e186] [cursor=pointer]
+                - button "Archive" [ref=e187] [cursor=pointer]
+          - row "senior engineer readyapply_34952647 remote 75.0 — NEW — Canonical ATS Apply Save Archive" [ref=e188]:
+            - cell [ref=e189]:
+              - checkbox [ref=e190]
+            - cell "senior engineer" [ref=e191]:
+              - link "senior engineer" [ref=e192] [cursor=pointer]:
+                - /url: /jobs/8cdd6ef1-7de4-4e43-adb1-e4c14cf14cd3
+            - cell "readyapply_34952647" [ref=e193]
+            - cell "remote" [ref=e194]
+            - cell "75.0" [ref=e195]
+            - cell "—" [ref=e196]
+            - cell "NEW" [ref=e197]:
+              - generic [ref=e198]: NEW
+            - cell "—" [ref=e199]
+            - cell "Canonical ATS" [ref=e200]:
+              - 'generic "Source: greenhouse · Role: Canonical ATS" [ref=e201]': Canonical ATS
+            - cell "Apply" [ref=e202]:
+              - link "Apply" [ref=e203] [cursor=pointer]:
+                - /url: /jobs/8cdd6ef1-7de4-4e43-adb1-e4c14cf14cd3
+            - cell "Save Archive" [ref=e204]:
+              - generic [ref=e205]:
+                - button "Save" [ref=e206] [cursor=pointer]
+                - button "Archive" [ref=e207] [cursor=pointer]
+          - row "senior engineer testgen_3fa3fee3 remote 75.0 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e208]:
+            - cell [ref=e209]:
+              - checkbox [ref=e210]
+            - cell "senior engineer" [ref=e211]:
+              - link "senior engineer" [ref=e212] [cursor=pointer]:
+                - /url: /jobs/025fb362-5a40-4c1e-a0e6-1549e034efd9
+            - cell "testgen_3fa3fee3" [ref=e213]
+            - cell "remote" [ref=e214]
+            - cell "75.0" [ref=e215]
+            - cell "HYBRID" [ref=e216]
+            - cell "NEW" [ref=e217]:
+              - generic [ref=e218]: NEW
+            - cell "✓" [ref=e219]
+            - cell "Discovery" [ref=e220]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e221]': Discovery
+            - cell "Apply" [ref=e222]:
+              - link "Apply" [ref=e223] [cursor=pointer]:
+                - /url: /jobs/025fb362-5a40-4c1e-a0e6-1549e034efd9
+            - cell "Save Archive" [ref=e224]:
+              - generic [ref=e225]:
+                - button "Save" [ref=e226] [cursor=pointer]
+                - button "Archive" [ref=e227] [cursor=pointer]
+          - row "senior engineer testgen_3af4e664 remote 75.0 BACKEND NEW ✓ Discovery Apply Save Archive" [ref=e228]:
+            - cell [ref=e229]:
+              - checkbox [ref=e230]
+            - cell "senior engineer" [ref=e231]:
+              - link "senior engineer" [ref=e232] [cursor=pointer]:
+                - /url: /jobs/f4b2d6d7-c5e7-4214-9433-c3b8b63217d0
+            - cell "testgen_3af4e664" [ref=e233]
+            - cell "remote" [ref=e234]
+            - cell "75.0" [ref=e235]
+            - cell "BACKEND" [ref=e236]
+            - cell "NEW" [ref=e237]:
+              - generic [ref=e238]: NEW
+            - cell "✓" [ref=e239]
+            - cell "Discovery" [ref=e240]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e241]': Discovery
+            - cell "Apply" [ref=e242]:
+              - link "Apply" [ref=e243] [cursor=pointer]:
+                - /url: /jobs/f4b2d6d7-c5e7-4214-9433-c3b8b63217d0
+            - cell "Save Archive" [ref=e244]:
+              - generic [ref=e245]:
+                - button "Save" [ref=e246] [cursor=pointer]
+                - button "Archive" [ref=e247] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e248]:
+            - cell [ref=e249]:
+              - checkbox [ref=e250]
+            - cell "senior backend platform engineer" [ref=e251]:
+              - link "senior backend platform engineer" [ref=e252] [cursor=pointer]:
+                - /url: /jobs/30882462-cd77-4d90-a6a5-ff1162e45390
+            - cell "adzuna smoke co" [ref=e253]
+            - cell "remote" [ref=e254]
+            - cell "87.5" [ref=e255]
+            - cell "HYBRID" [ref=e256]
+            - cell "NEW" [ref=e257]:
+              - generic [ref=e258]: NEW
+            - cell "✓" [ref=e259]
+            - cell "Discovery" [ref=e260]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e261]': Discovery
+            - cell "Apply" [ref=e262]:
+              - link "Apply" [ref=e263] [cursor=pointer]:
+                - /url: /jobs/30882462-cd77-4d90-a6a5-ff1162e45390
+            - cell "Save Archive" [ref=e264]:
+              - generic [ref=e265]:
+                - button "Save" [ref=e266] [cursor=pointer]
+                - button "Archive" [ref=e267] [cursor=pointer]
+          - row "senior engineer readyapply_169d72e4 remote 75.0 — NEW — Canonical ATS Apply Save Archive" [ref=e268]:
+            - cell [ref=e269]:
+              - checkbox [ref=e270]
+            - cell "senior engineer" [ref=e271]:
+              - link "senior engineer" [ref=e272] [cursor=pointer]:
+                - /url: /jobs/9607e261-f9da-4fd9-9584-d16ea7d22ebd
+            - cell "readyapply_169d72e4" [ref=e273]
+            - cell "remote" [ref=e274]
+            - cell "75.0" [ref=e275]
+            - cell "—" [ref=e276]
+            - cell "NEW" [ref=e277]:
+              - generic [ref=e278]: NEW
+            - cell "—" [ref=e279]
+            - cell "Canonical ATS" [ref=e280]:
+              - 'generic "Source: greenhouse · Role: Canonical ATS" [ref=e281]': Canonical ATS
+            - cell "Apply" [ref=e282]:
+              - link "Apply" [ref=e283] [cursor=pointer]:
+                - /url: /jobs/9607e261-f9da-4fd9-9584-d16ea7d22ebd
+            - cell "Save Archive" [ref=e284]:
+              - generic [ref=e285]:
+                - button "Save" [ref=e286] [cursor=pointer]
+                - button "Archive" [ref=e287] [cursor=pointer]
+          - row "senior engineer testgen_06383de7 remote 75.0 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e288]:
+            - cell [ref=e289]:
+              - checkbox [ref=e290]
+            - cell "senior engineer" [ref=e291]:
+              - link "senior engineer" [ref=e292] [cursor=pointer]:
+                - /url: /jobs/8448afda-2056-42be-a56a-330558d05488
+            - cell "testgen_06383de7" [ref=e293]
+            - cell "remote" [ref=e294]
+            - cell "75.0" [ref=e295]
+            - cell "HYBRID" [ref=e296]
+            - cell "NEW" [ref=e297]:
+              - generic [ref=e298]: NEW
+            - cell "✓" [ref=e299]
+            - cell "Discovery" [ref=e300]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e301]': Discovery
+            - cell "Apply" [ref=e302]:
+              - link "Apply" [ref=e303] [cursor=pointer]:
+                - /url: /jobs/8448afda-2056-42be-a56a-330558d05488
+            - cell "Save Archive" [ref=e304]:
+              - generic [ref=e305]:
+                - button "Save" [ref=e306] [cursor=pointer]
+                - button "Archive" [ref=e307] [cursor=pointer]
+          - row "senior engineer testgen_e77d838f remote 75.0 BACKEND NEW ✓ Discovery Apply Save Archive" [ref=e308]:
+            - cell [ref=e309]:
+              - checkbox [ref=e310]
+            - cell "senior engineer" [ref=e311]:
+              - link "senior engineer" [ref=e312] [cursor=pointer]:
+                - /url: /jobs/578f86e1-ffdd-4ad5-b298-e6df0a5416a0
+            - cell "testgen_e77d838f" [ref=e313]
+            - cell "remote" [ref=e314]
+            - cell "75.0" [ref=e315]
+            - cell "BACKEND" [ref=e316]
+            - cell "NEW" [ref=e317]:
+              - generic [ref=e318]: NEW
+            - cell "✓" [ref=e319]
+            - cell "Discovery" [ref=e320]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e321]': Discovery
+            - cell "Apply" [ref=e322]:
+              - link "Apply" [ref=e323] [cursor=pointer]:
+                - /url: /jobs/578f86e1-ffdd-4ad5-b298-e6df0a5416a0
+            - cell "Save Archive" [ref=e324]:
+              - generic [ref=e325]:
+                - button "Save" [ref=e326] [cursor=pointer]
+                - button "Archive" [ref=e327] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e328]:
+            - cell [ref=e329]:
+              - checkbox [ref=e330]
+            - cell "senior backend platform engineer" [ref=e331]:
+              - link "senior backend platform engineer" [ref=e332] [cursor=pointer]:
+                - /url: /jobs/c491b7e7-a159-447e-8e5f-90728ac81e6e
+            - cell "adzuna smoke co" [ref=e333]
+            - cell "remote" [ref=e334]
+            - cell "87.5" [ref=e335]
+            - cell "HYBRID" [ref=e336]
+            - cell "NEW" [ref=e337]:
+              - generic [ref=e338]: NEW
+            - cell "✓" [ref=e339]
+            - cell "Discovery" [ref=e340]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e341]': Discovery
+            - cell "Apply" [ref=e342]:
+              - link "Apply" [ref=e343] [cursor=pointer]:
+                - /url: /jobs/c491b7e7-a159-447e-8e5f-90728ac81e6e
+            - cell "Save Archive" [ref=e344]:
+              - generic [ref=e345]:
+                - button "Save" [ref=e346] [cursor=pointer]
+                - button "Archive" [ref=e347] [cursor=pointer]
+          - row "senior engineer readyapply_cbe17c20 remote 75.0 — NEW — Canonical ATS Apply Save Archive" [ref=e348]:
+            - cell [ref=e349]:
+              - checkbox [ref=e350]
+            - cell "senior engineer" [ref=e351]:
+              - link "senior engineer" [ref=e352] [cursor=pointer]:
+                - /url: /jobs/767fbef8-6df6-4cb2-a04a-92c98a967f54
+            - cell "readyapply_cbe17c20" [ref=e353]
+            - cell "remote" [ref=e354]
+            - cell "75.0" [ref=e355]
+            - cell "—" [ref=e356]
+            - cell "NEW" [ref=e357]:
+              - generic [ref=e358]: NEW
+            - cell "—" [ref=e359]
+            - cell "Canonical ATS" [ref=e360]:
+              - 'generic "Source: greenhouse · Role: Canonical ATS" [ref=e361]': Canonical ATS
+            - cell "Apply" [ref=e362]:
+              - link "Apply" [ref=e363] [cursor=pointer]:
+                - /url: /jobs/767fbef8-6df6-4cb2-a04a-92c98a967f54
+            - cell "Save Archive" [ref=e364]:
+              - generic [ref=e365]:
+                - button "Save" [ref=e366] [cursor=pointer]
+                - button "Archive" [ref=e367] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e368]:
+            - cell [ref=e369]:
+              - checkbox [ref=e370]
+            - cell "senior backend platform engineer" [ref=e371]:
+              - link "senior backend platform engineer" [ref=e372] [cursor=pointer]:
+                - /url: /jobs/73d85e13-7feb-4583-9087-d0c934a8c76d
+            - cell "adzuna smoke co" [ref=e373]
+            - cell "remote" [ref=e374]
+            - cell "87.5" [ref=e375]
+            - cell "HYBRID" [ref=e376]
+            - cell "NEW" [ref=e377]:
+              - generic [ref=e378]: NEW
+            - cell "✓" [ref=e379]
+            - cell "Discovery" [ref=e380]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e381]': Discovery
+            - cell "Apply" [ref=e382]:
+              - link "Apply" [ref=e383] [cursor=pointer]:
+                - /url: /jobs/73d85e13-7feb-4583-9087-d0c934a8c76d
+            - cell "Save Archive" [ref=e384]:
+              - generic [ref=e385]:
+                - button "Save" [ref=e386] [cursor=pointer]
+                - button "Archive" [ref=e387] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e388]:
+            - cell [ref=e389]:
+              - checkbox [ref=e390]
+            - cell "senior backend platform engineer" [ref=e391]:
+              - link "senior backend platform engineer" [ref=e392] [cursor=pointer]:
+                - /url: /jobs/5c1a7b86-cde8-4153-8d63-ef585218f3c2
+            - cell "adzuna smoke co" [ref=e393]
+            - cell "remote" [ref=e394]
+            - cell "87.5" [ref=e395]
+            - cell "HYBRID" [ref=e396]
+            - cell "NEW" [ref=e397]:
+              - generic [ref=e398]: NEW
+            - cell "✓" [ref=e399]
+            - cell "Discovery" [ref=e400]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e401]': Discovery
+            - cell "Apply" [ref=e402]:
+              - link "Apply" [ref=e403] [cursor=pointer]:
+                - /url: /jobs/5c1a7b86-cde8-4153-8d63-ef585218f3c2
+            - cell "Save Archive" [ref=e404]:
+              - generic [ref=e405]:
+                - button "Save" [ref=e406] [cursor=pointer]
+                - button "Archive" [ref=e407] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e408]:
+            - cell [ref=e409]:
+              - checkbox [ref=e410]
+            - cell "senior backend platform engineer" [ref=e411]:
+              - link "senior backend platform engineer" [ref=e412] [cursor=pointer]:
+                - /url: /jobs/93190bd2-9330-4d9a-b5c6-a5acb03cc599
+            - cell "adzuna smoke co" [ref=e413]
+            - cell "remote" [ref=e414]
+            - cell "87.5" [ref=e415]
+            - cell "HYBRID" [ref=e416]
+            - cell "NEW" [ref=e417]:
+              - generic [ref=e418]: NEW
+            - cell "✓" [ref=e419]
+            - cell "Discovery" [ref=e420]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e421]': Discovery
+            - cell "Apply" [ref=e422]:
+              - link "Apply" [ref=e423] [cursor=pointer]:
+                - /url: /jobs/93190bd2-9330-4d9a-b5c6-a5acb03cc599
+            - cell "Save Archive" [ref=e424]:
+              - generic [ref=e425]:
+                - button "Save" [ref=e426] [cursor=pointer]
+                - button "Archive" [ref=e427] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e428]:
+            - cell [ref=e429]:
+              - checkbox [ref=e430]
+            - cell "senior backend platform engineer" [ref=e431]:
+              - link "senior backend platform engineer" [ref=e432] [cursor=pointer]:
+                - /url: /jobs/c9056b7c-f31d-474c-9321-2cfa19dc80c6
+            - cell "adzuna smoke co" [ref=e433]
+            - cell "remote" [ref=e434]
+            - cell "87.5" [ref=e435]
+            - cell "HYBRID" [ref=e436]
+            - cell "NEW" [ref=e437]:
+              - generic [ref=e438]: NEW
+            - cell "✓" [ref=e439]
+            - cell "Discovery" [ref=e440]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e441]': Discovery
+            - cell "Apply" [ref=e442]:
+              - link "Apply" [ref=e443] [cursor=pointer]:
+                - /url: /jobs/c9056b7c-f31d-474c-9321-2cfa19dc80c6
+            - cell "Save Archive" [ref=e444]:
+              - generic [ref=e445]:
+                - button "Save" [ref=e446] [cursor=pointer]
+                - button "Archive" [ref=e447] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e448]:
+            - cell [ref=e449]:
+              - checkbox [ref=e450]
+            - cell "senior backend platform engineer" [ref=e451]:
+              - link "senior backend platform engineer" [ref=e452] [cursor=pointer]:
+                - /url: /jobs/5b264231-cff5-4054-8ee3-7b9cd154e674
+            - cell "adzuna smoke co" [ref=e453]
+            - cell "remote" [ref=e454]
+            - cell "87.5" [ref=e455]
+            - cell "HYBRID" [ref=e456]
+            - cell "NEW" [ref=e457]:
+              - generic [ref=e458]: NEW
+            - cell "✓" [ref=e459]
+            - cell "Discovery" [ref=e460]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e461]': Discovery
+            - cell "Apply" [ref=e462]:
+              - link "Apply" [ref=e463] [cursor=pointer]:
+                - /url: /jobs/5b264231-cff5-4054-8ee3-7b9cd154e674
+            - cell "Save Archive" [ref=e464]:
+              - generic [ref=e465]:
+                - button "Save" [ref=e466] [cursor=pointer]
+                - button "Archive" [ref=e467] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e468]:
+            - cell [ref=e469]:
+              - checkbox [ref=e470]
+            - cell "senior backend platform engineer" [ref=e471]:
+              - link "senior backend platform engineer" [ref=e472] [cursor=pointer]:
+                - /url: /jobs/f5035a5b-0982-45af-bc3f-96367261b915
+            - cell "adzuna smoke co" [ref=e473]
+            - cell "remote" [ref=e474]
+            - cell "87.5" [ref=e475]
+            - cell "HYBRID" [ref=e476]
+            - cell "NEW" [ref=e477]:
+              - generic [ref=e478]: NEW
+            - cell "✓" [ref=e479]
+            - cell "Discovery" [ref=e480]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e481]': Discovery
+            - cell "Apply" [ref=e482]:
+              - link "Apply" [ref=e483] [cursor=pointer]:
+                - /url: /jobs/f5035a5b-0982-45af-bc3f-96367261b915
+            - cell "Save Archive" [ref=e484]:
+              - generic [ref=e485]:
+                - button "Save" [ref=e486] [cursor=pointer]
+                - button "Archive" [ref=e487] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e488]:
+            - cell [ref=e489]:
+              - checkbox [ref=e490]
+            - cell "senior backend platform engineer" [ref=e491]:
+              - link "senior backend platform engineer" [ref=e492] [cursor=pointer]:
+                - /url: /jobs/3022ed79-f3d4-4d4d-b3fa-105c4197a91a
+            - cell "adzuna smoke co" [ref=e493]
+            - cell "remote" [ref=e494]
+            - cell "87.5" [ref=e495]
+            - cell "HYBRID" [ref=e496]
+            - cell "NEW" [ref=e497]:
+              - generic [ref=e498]: NEW
+            - cell "✓" [ref=e499]
+            - cell "Discovery" [ref=e500]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e501]': Discovery
+            - cell "Apply" [ref=e502]:
+              - link "Apply" [ref=e503] [cursor=pointer]:
+                - /url: /jobs/3022ed79-f3d4-4d4d-b3fa-105c4197a91a
+            - cell "Save Archive" [ref=e504]:
+              - generic [ref=e505]:
+                - button "Save" [ref=e506] [cursor=pointer]
+                - button "Archive" [ref=e507] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e508]:
+            - cell [ref=e509]:
+              - checkbox [ref=e510]
+            - cell "senior backend platform engineer" [ref=e511]:
+              - link "senior backend platform engineer" [ref=e512] [cursor=pointer]:
+                - /url: /jobs/1970211a-3faa-4fb8-8e1c-38ae0cdbaf73
+            - cell "adzuna smoke co" [ref=e513]
+            - cell "remote" [ref=e514]
+            - cell "87.5" [ref=e515]
+            - cell "HYBRID" [ref=e516]
+            - cell "NEW" [ref=e517]:
+              - generic [ref=e518]: NEW
+            - cell "✓" [ref=e519]
+            - cell "Discovery" [ref=e520]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e521]': Discovery
+            - cell "Apply" [ref=e522]:
+              - link "Apply" [ref=e523] [cursor=pointer]:
+                - /url: /jobs/1970211a-3faa-4fb8-8e1c-38ae0cdbaf73
+            - cell "Save Archive" [ref=e524]:
+              - generic [ref=e525]:
+                - button "Save" [ref=e526] [cursor=pointer]
+                - button "Archive" [ref=e527] [cursor=pointer]
+          - row "senior backend platform engineer adzuna smoke co remote 87.5 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e528]:
+            - cell [ref=e529]:
+              - checkbox [ref=e530]
+            - cell "senior backend platform engineer" [ref=e531]:
+              - link "senior backend platform engineer" [ref=e532] [cursor=pointer]:
+                - /url: /jobs/a319c858-3171-437c-a0d2-3962edfac049
+            - cell "adzuna smoke co" [ref=e533]
+            - cell "remote" [ref=e534]
+            - cell "87.5" [ref=e535]
+            - cell "HYBRID" [ref=e536]
+            - cell "NEW" [ref=e537]:
+              - generic [ref=e538]: NEW
+            - cell "✓" [ref=e539]
+            - cell "Discovery" [ref=e540]:
+              - 'generic "Source: agg1 · Role: Discovery" [ref=e541]': Discovery
+            - cell "Apply" [ref=e542]:
+              - link "Apply" [ref=e543] [cursor=pointer]:
+                - /url: /jobs/a319c858-3171-437c-a0d2-3962edfac049
+            - cell "Save Archive" [ref=e544]:
+              - generic [ref=e545]:
+                - button "Save" [ref=e546] [cursor=pointer]
+                - button "Archive" [ref=e547] [cursor=pointer]
+          - row "senior engineer testgen_f56ad25b remote 75.0 HYBRID NEW ✓ Discovery Apply Save Archive" [ref=e548]:
+            - cell [ref=e549]:
+              - checkbox [ref=e550]
+            - cell "senior engineer" [ref=e551]:
+              - link "senior engineer" [ref=e552] [cursor=pointer]:
+                - /url: /jobs/d6c70ff4-b9bd-4f6d-a698-bb0066fc825b
+            - cell "testgen_f56ad25b" [ref=e553]
+            - cell "remote" [ref=e554]
+            - cell "75.0" [ref=e555]
+            - cell "HYBRID" [ref=e556]
+            - cell "NEW" [ref=e557]:
+              - generic [ref=e558]: NEW
+            - cell "✓" [ref=e559]
+            - cell "Discovery" [ref=e560]:
+              - 'generic "Source: jobspy · Role: Discovery" [ref=e561]': Discovery
+            - cell "Apply" [ref=e562]:
+              - link "Apply" [ref=e563] [cursor=pointer]:
+                - /url: /jobs/d6c70ff4-b9bd-4f6d-a698-bb0066fc825b
+            - cell "Save Archive" [ref=e564]:
+              - generic [ref=e565]:
+                - button "Save" [ref=e566] [cursor=pointer]
+                - button "Archive" [ref=e567] [cursor=pointer]
+      - generic [ref=e40]:
+        - generic [ref=e41]: 46 jobs ready
+        - generic [ref=e42]:
+          - combobox [ref=e43]:
+            - option "Sort by Ready" [selected]
+            - option "Sort by Score"
+            - option "Sort by Scraped"
+          - button "↓" [ref=e44] [cursor=pointer]
+          - button "Prev" [disabled] [ref=e45]
+          - generic [ref=e46]: Page 1 of 2
+          - button "Next" [ref=e47] [cursor=pointer]
