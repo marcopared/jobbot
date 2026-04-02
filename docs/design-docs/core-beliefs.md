@@ -21,11 +21,13 @@ update or delete the doc, not to pretend the implementation already matches the 
 ## Belief 4: Discovery And Canonical Sources Are Different Kinds Of Truth
 
 Discovery improves coverage. Canonical ATS improves trust. Conflating those roles damages scoring,
-resolution, and generation behavior.
+resolution, and generation behavior. Acquisition infrastructure can evolve, but it should remain
+separate from scoring, persistence policy, and other product logic.
 
-## Belief 5: Manual Apply Is A Permanent Boundary
+## Belief 5: Manual Apply Is The Current Implemented Product Boundary
 
-JobBot prepares the user to apply. It does not apply for them.
+JobBot prepares the user to apply. It does not apply for them today. Documentation should preserve
+that current scope while clearly separating it from future-compatible infrastructure decisions.
 
 ## Belief 6: Durable Run Records Are Part Of The Product
 

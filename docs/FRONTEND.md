@@ -6,6 +6,9 @@ The frontend is a thin operator console over the REST API. It helps the user ins
 ingestion paths, review pipeline results, and download artifacts. It does not contain core business
 logic.
 
+Approved ingestion-v2 work changes backend acquisition architecture, not the current route model or
+the frontend's responsibility as an operator console over existing API contracts.
+
 ## Current Routes
 
 Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):

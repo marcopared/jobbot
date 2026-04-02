@@ -86,3 +86,4 @@ That script covers:
 1. Prefer changing code and docs together when touching contracts.
 2. Do not use deleted historical audit docs as proof of current-branch readiness.
 3. Keep the docs aligned to the implemented runtime model, not to planned queue/state expansions.
+4. Keep future-facing ingestion backend notes clearly separated from implemented runtime claims.

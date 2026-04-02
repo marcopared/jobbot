@@ -40,6 +40,21 @@ The primary user is an operator running their own job search pipeline:
 5. Open the external apply URL and apply manually.
 6. Mark status in JobBot after the human action.
 
+## Coverage Direction
+
+JobBot's ingestion architecture is being widened so the product can support broader source coverage
+over time without changing what the product is for.
+
+That widening is a behind-the-scenes infrastructure choice, not a new user-facing promise:
+
+- the product still centers on better discovery, better filtering, and faster preparation
+- manual apply remains the implemented product boundary today
+- Scrapling is the default acquisition backend direction for most standard source capture
+- bb-browser is the selective authenticated-session backend direction for a small subset of
+  browser-native or auth-bound sources
+- those backend choices do not turn JobBot into an auto-apply product or imply that every future
+  source is already supported now
+
 ## Product Rules That Agents Must Not Erode
 
 1. Canonical ATS and discovery have different trust levels.
@@ -51,6 +66,7 @@ The primary user is an operator running their own job search pipeline:
 ## Current Strengths
 
 - multiple intake lanes
+- room to widen source coverage without changing the product boundary
 - deterministic scoring/classification/ATS analysis
 - durable run tracking
 - grounded resume generation path

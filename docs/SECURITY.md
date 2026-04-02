@@ -63,6 +63,23 @@ That keeps raw payload visibility out of the normal operator path.
 2. Keep provider-specific unmapped fields in `raw_payload` rather than forcing schema churn.
 3. Do not broaden discovery providers into generic crawling.
 
+## Authenticated-Browser Ingestion
+
+If authenticated-browser acquisition is introduced for ingestion, treat it as a bounded
+browser/session capability layer only.
+
+Security rules:
+
+- bb-browser may be used for auth-bound or browser-native source acquisition where normal fetch
+  paths are insufficient.
+- bb-browser must not own JobBot business logic, trust policy, scoring, classification, or
+  persistence rules.
+- bb-browser must not be framed as a CAPTCHA, anti-bot, or guaranteed bypass strategy.
+- session-derived payloads should still flow through the normal JobBot provenance and `raw_payload`
+  handling discipline.
+- browser-session capability for ingestion does not change the boundary that JobBot does not
+  automate application submission.
+
 ## Data Handling Notes
 
 - Job payloads and artifacts may contain sensitive personal job-search context.
