@@ -59,13 +59,15 @@ That keeps raw payload visibility out of the normal operator path.
 
 ## Provider Safety
 
-1. Use only the named provider surfaces already supported in code.
-2. Keep provider-specific unmapped fields in `raw_payload` rather than forcing schema churn.
-3. Do not broaden discovery providers into generic crawling.
+1. Current implementation uses the named provider surfaces already supported in code.
+2. New provider surfaces should be added explicitly through the approved source-adapter and
+   acquisition-backend model.
+3. Keep provider-specific unmapped fields in `raw_payload` rather than forcing schema churn.
+4. Do not broaden discovery providers into generic crawling.
 
 ## Authenticated-Browser Ingestion
 
-If authenticated-browser acquisition is introduced for ingestion, treat it as a bounded
+Authenticated-browser acquisition is an approved ingestion direction, but it must remain a bounded
 browser/session capability layer only.
 
 Security rules:

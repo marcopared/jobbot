@@ -119,8 +119,8 @@ Approved ingestion-v2 direction:
 
 Intended responsibilities:
 
-- source adapters own source-specific request, parsing, and provenance mapping rules
-- acquisition backends own fetch/capture mechanics only
+- source adapters own source-specific extraction, field mapping, and provenance rules
+- acquisition backends own transport, browser, and session mechanics only
 - JobBot-owned normalization and persistence remain responsible for dedupe, schema mapping, run
   records, and durable job state
 - the downstream analysis chain remains the same application spine after persistence
