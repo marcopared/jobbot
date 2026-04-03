@@ -18,6 +18,7 @@ from core.db.models import (
 )
 from core.db.session import get_sync_session
 from core.dedup import normalize_company, normalize_location, normalize_title
+from core.ingestion import source_registry
 from core.scraping.base import compute_dedup_hash, detect_ats_type
 from core.scraping.jobspy_scraper import JobSpyScraper
 from core.scraping.base import ScrapeParams
@@ -92,7 +93,7 @@ def scrape_jobspy(
         logger.info("Skipping scrape run_id=%s because jobspy is disabled", run_id)
         mark_run_skipped(run_id, "JOBSPY_ENABLED=false")
         return {"status": "skipped", "reason": "JOBSPY_ENABLED=false"}
-    scraper = JobSpyScraper()
+    scraper = source_registry.create("jobspy", scraper=JobSpyScraper())
     logger.info(
         "Starting scrape run_id=%s query=%s location=%s hours_old=%s results_wanted=%s",
         run_id,

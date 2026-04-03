@@ -22,6 +22,7 @@ from core.connectors.url_provider import parse_supported_url
 from core.dedup import canonicalize_apply_url, compute_dedup_hash, format_similarity_diagnostic
 from core.db.models import Job, JobSourceRecord, ScrapeRun, ScrapeRunStatus, SourceRole
 from core.db.session import get_sync_session
+from core.ingestion import source_registry
 
 from apps.worker.celery_app import celery_app
 from apps.worker.tasks.run_helpers import mark_run_skipped
@@ -121,6 +122,7 @@ def ingest_greenhouse(
             board_token=board_token.strip(),
             company_name=company_name.strip(),
         )
+        source_adapter = source_registry.create("greenhouse", connector=connector)
     logger.info(
         "Starting Greenhouse ingest run_id=%s board=%s company=%s",
         run_id,
@@ -134,7 +136,7 @@ def ingest_greenhouse(
     )
     try:
         with TaskTimer("ingestion.latency", tags=["source:greenhouse"]):
-            result = connector.fetch_raw_jobs(include_content=True)
+            result = source_adapter.fetch_raw_jobs(include_content=True)
     except Exception as e:
         metrics.increment("ingestion.failure", tags=["source:greenhouse"])
         logger.exception("Greenhouse fetch failed for run_id=%s", run_id)
@@ -186,7 +188,7 @@ def ingest_greenhouse(
 
         for index, raw_with_prov in enumerate(result.raw_jobs, start=1):
             raw_job = raw_with_prov.raw_payload
-            canonical = connector.normalize(raw_job)
+            canonical = source_adapter.normalize(raw_job)
             if canonical is None:
                 run_items.append(
                     make_run_item(
@@ -633,10 +635,11 @@ def ingest_lever(self, run_id: str, client_name: str, company_name: str):
             client_name=client_name.strip(),
             company_name=company_name.strip() or None,
         )
+        source_adapter = source_registry.create("lever", connector=connector)
         _publish_log("INFO", f"Lever ingest started client={client_name}", run_id=run_id)
         try:
             with TaskTimer("ingestion.latency", tags=["source:lever"]):
-                result = connector.fetch_raw_jobs()
+                result = source_adapter.fetch_raw_jobs()
         except Exception as e:
             get_metrics().increment("ingestion.failure", tags=["source:lever"])
             _publish_log("ERROR", f"Lever fetch failed: {e}", run_id=run_id)
@@ -656,7 +659,7 @@ def ingest_lever(self, run_id: str, client_name: str, company_name: str):
         return _run_canonical_ingest(
             run_id=run_id,
             source_name="lever",
-            connector=connector,
+            connector=source_adapter,
             result=result,
             task_name="ingest_lever",
         )
@@ -681,10 +684,11 @@ def ingest_ashby(self, run_id: str, job_board_name: str, company_name: str):
             job_board_name=job_board_name.strip(),
             company_name=company_name.strip() or None,
         )
+        source_adapter = source_registry.create("ashby", connector=connector)
         _publish_log("INFO", f"Ashby ingest started board={job_board_name}", run_id=run_id)
         try:
             with TaskTimer("ingestion.latency", tags=["source:ashby"]):
-                result = connector.fetch_raw_jobs()
+                result = source_adapter.fetch_raw_jobs()
         except Exception as e:
             get_metrics().increment("ingestion.failure", tags=["source:ashby"])
             _publish_log("ERROR", f"Ashby fetch failed: {e}", run_id=run_id)
@@ -704,7 +708,7 @@ def ingest_ashby(self, run_id: str, job_board_name: str, company_name: str):
         return _run_canonical_ingest(
             run_id=run_id,
             source_name="ashby",
-            connector=connector,
+            connector=source_adapter,
             result=result,
             task_name="ingest_ashby",
         )
@@ -771,9 +775,10 @@ def ingest_url(self, run_id: str, url: str):
                     session.commit()
             return {"run_id": run_id, "status": "FAILED", "error": "Unsupported provider"}
 
+        source_adapter = source_registry.create(parsed.provider, connector=connector)
         try:
             with TaskTimer("ingestion.latency", tags=["source:url_ingest"]):
-                result = connector.fetch_raw_jobs()
+                result = source_adapter.fetch_raw_jobs()
         except Exception as e:
             get_metrics().increment("ingestion.failure", tags=["source:url_ingest"])
             _publish_log("ERROR", f"URL ingest fetch failed: {e}", run_id=run_id)
@@ -792,7 +797,7 @@ def ingest_url(self, run_id: str, url: str):
             return _run_canonical_ingest(
                 run_id=run_id,
                 source_name=parsed.provider,
-                connector=connector,
+                connector=source_adapter,
                 result=result,
                 task_name="ingest_url",
                 source_role_override=SourceRole.URL_INGEST,
@@ -854,7 +859,7 @@ def ingest_url(self, run_id: str, url: str):
         return _run_canonical_ingest(
             run_id=run_id,
             source_name=parsed.provider,
-            connector=connector,
+            connector=source_adapter,
             result=filtered,
             task_name="ingest_url",
             source_role_override=SourceRole.URL_INGEST,
