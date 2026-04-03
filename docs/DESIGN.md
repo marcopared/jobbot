@@ -41,8 +41,17 @@ These are the high-confidence providers for job content and apply URLs.
 - JobSpy
 - AGG-1 = Adzuna
 - SERP1 = DataForSEO Google Jobs
+- startupjobs.nyc
+- Built In NYC
+- Welcome to the Jungle
 
 These maximize coverage and should not be treated as canonical by default.
+
+Registered but currently gated or explicitly unsupported public-board adapters:
+
+- TrueUp
+- Underdog.io
+- VentureLoop
 
 #### Direct URL ingest
 

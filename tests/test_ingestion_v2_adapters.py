@@ -18,6 +18,12 @@ from core.ingestion.sources.compatibility import (
     CanonicalConnectorSourceAdapter,
     JobSpyScraperSourceAdapter,
 )
+from core.ingestion.sources.public_boards import (
+    BuiltInNYCSourceAdapter,
+    StartupJobsNYCSourceAdapter,
+    UnsupportedPublicBoardSourceAdapter,
+    WelcomeToTheJungleSourceAdapter,
+)
 from core.scraping.base import NormalizedJob, ScrapeParams, ScrapeResult
 
 
@@ -105,6 +111,10 @@ def test_source_registry_lookup_returns_compatibility_adapters():
 
     canonical_adapter = registry.create("greenhouse", connector=_FakeCanonicalConnector())
     jobspy_adapter = registry.create("jobspy", scraper=_FakeJobSpyScraper())
+    startupjobs_adapter = registry.create("startupjobs_nyc")
+    builtin_adapter = registry.create("builtin_nyc")
+    wttj_adapter = registry.create("welcome_to_the_jungle")
+    trueup_adapter = registry.create("trueup")
 
     assert isinstance(canonical_adapter, CanonicalConnectorSourceAdapter)
     assert canonical_adapter.source_name == "greenhouse"
@@ -113,6 +123,19 @@ def test_source_registry_lookup_returns_compatibility_adapters():
     assert isinstance(jobspy_adapter, JobSpyScraperSourceAdapter)
     assert jobspy_adapter.source_name == "jobspy"
     assert jobspy_adapter.policy.backend_preference == "legacy_scraper"
+
+    assert isinstance(startupjobs_adapter, StartupJobsNYCSourceAdapter)
+    assert startupjobs_adapter.policy.backend_preference == "scrapling"
+    assert startupjobs_adapter.policy.source_role_default == "discovery"
+
+    assert isinstance(builtin_adapter, BuiltInNYCSourceAdapter)
+    assert builtin_adapter.policy.backend_preference == "scrapling"
+
+    assert isinstance(wttj_adapter, WelcomeToTheJungleSourceAdapter)
+    assert wttj_adapter.policy.backend_preference == "scrapling"
+
+    assert isinstance(trueup_adapter, UnsupportedPublicBoardSourceAdapter)
+    assert trueup_adapter.policy.backend_preference == "scrapling"
 
 
 def test_backend_registry_lookup_returns_compatibility_backends():

@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     lever_enabled: bool = True
     ashby_enabled: bool = True
     url_ingest_enabled: bool = True
+    trueup_enabled: bool = False
+    underdog_enabled: bool = False
+    startupjobs_nyc_enabled: bool = True
+    ventureloop_enabled: bool = False
+    builtin_nyc_enabled: bool = True
+    welcome_to_the_jungle_enabled: bool = True
     # Discovery lane (ARCH §11.2, IMPLEMENTATION_PLAN §6)
     enable_agg1_discovery: bool = False
     # SERP1: explicit stub. When enabled, returns empty results; never raises.
@@ -46,7 +52,6 @@ class Settings(BaseSettings):
     adzuna_app_key: str = ""
     adzuna_country: str = "us"
     wellfound_enabled: bool = False
-    builtinnyc_enabled: bool = False
     yc_enabled: bool = False
     apollo_api_key: str = ""
     scrapeops_api_key: str = ""

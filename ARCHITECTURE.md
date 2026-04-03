@@ -123,6 +123,15 @@ JobBot uses a fixed source-role model:
   - JobSpy
   - AGG-1 (Adzuna)
   - SERP1 (DataForSEO Google Jobs)
+  - startupjobs.nyc
+  - Built In NYC
+  - Welcome to the Jungle
+
+Registered but currently gated/unsupported public-board adapters:
+
+- TrueUp
+- Underdog.io
+- VentureLoop
 - Direct URL ingest:
   - supported Greenhouse/Lever/Ashby URLs
 
