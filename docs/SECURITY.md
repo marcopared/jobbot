@@ -74,6 +74,8 @@ Security rules:
 
 - bb-browser may be used for auth-bound or browser-native source acquisition where normal fetch
   paths are insufficient.
+- current bb-browser implementation is ingestion-only and intentionally excludes form-filling,
+  application submission, CAPTCHA solving, or anti-bot bypass logic.
 - bb-browser must not own JobBot business logic, trust policy, scoring, classification, or
   persistence rules.
 - bb-browser must not be framed as a CAPTCHA, anti-bot, or guaranteed bypass strategy.

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ventureloop_enabled: bool = False
     builtin_nyc_enabled: bool = True
     welcome_to_the_jungle_enabled: bool = True
+    linkedin_jobs_enabled: bool = False
     # Discovery lane (ARCH §11.2, IMPLEMENTATION_PLAN §6)
     enable_agg1_discovery: bool = False
     # SERP1: explicit stub. When enabled, returns empty results; never raises.
@@ -57,6 +58,14 @@ class Settings(BaseSettings):
     adzuna_country: str = "us"
     wellfound_enabled: bool = False
     yc_enabled: bool = False
+    bb_browser_enabled: bool = False
+    bb_browser_base_url: str = "http://127.0.0.1:9223"
+    bb_browser_capture_path: str = "/session/acquire"
+    bb_browser_api_key: str = ""
+    bb_browser_timeout_ms: int = 45000
+    bb_browser_connect_timeout_ms: int = 5000
+    bb_browser_session_name: str = "jobbot-ingestion"
+    bb_browser_verify_ssl: bool = True
     apollo_api_key: str = ""
     scrapeops_api_key: str = ""
     push_provider: str = "pushover"

@@ -52,6 +52,8 @@ That widening is a behind-the-scenes infrastructure choice, not a new user-facin
 - Scrapling is the default acquisition backend direction for most standard source capture
 - bb-browser is the selective authenticated-session backend direction for a small subset of
   browser-native or auth-bound sources
+- the current bb-browser implementation only widens ingestion coverage for selected auth-bound
+  sources; it does not add apply automation
 - those backend choices do not turn JobBot into an auto-apply product or imply that every future
   source is already supported now
 

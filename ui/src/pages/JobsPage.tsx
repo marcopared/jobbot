@@ -15,8 +15,9 @@ const SOURCES = [
   "ashby",
   "agg1",
   "serp1",
+  "linkedin_jobs",
   "wellfound",
-  "builtinnyc",
+  "builtin_nyc",
   "yc",
 ];
 

@@ -35,7 +35,11 @@ from core.db.session import get_sync_session
 from core.dedup import canonicalize_apply_url, compute_dedup_hash
 from core.ingestion import get_source_policy, source_registry
 from core.ingestion.sources.base import SourceAdapter
-from core.ingestion.types import AcquisitionBatch, AcquisitionRecord
+from core.ingestion.types import (
+    AcquisitionBatch,
+    AcquisitionRecord,
+    BackendPreference,
+)
 from core.observability import get_metrics, log_context
 from core.observability.metrics import TaskTimer
 from core.run_items import make_run_item
@@ -96,8 +100,20 @@ def _source_disabled_reason(source_name: str) -> str | None:
     return f"{policy.feature_flag_key}=false"
 
 
+def _backend_disabled_reason(source_name: str) -> str | None:
+    try:
+        policy = get_source_policy(source_name)
+    except KeyError:
+        return None
+    if policy.backend_preference != BackendPreference.BB_BROWSER.value:
+        return None
+    if settings.bb_browser_enabled:
+        return None
+    return "BB_BROWSER_ENABLED=false"
+
+
 def _skip_run_for_disabled_source(run_id: str, source_name: str) -> dict | None:
-    reason = _source_disabled_reason(source_name)
+    reason = _source_disabled_reason(source_name) or _backend_disabled_reason(source_name)
     if reason is None:
         return None
     logger.info("Skipping %s discovery run_id=%s (%s)", source_name, run_id, reason)
@@ -732,48 +748,91 @@ def run_public_board_source(
     max_results: int | None = 25,
 ):
     with log_context(run_id=run_id, source_name=source_name, task_name="run_public_board_source"):
-        skip_result = _skip_run_for_disabled_source(run_id, source_name)
-        if skip_result is not None:
-            return skip_result
-
-        try:
-            source_adapter = source_registry.create(source_name)
-        except Exception as exc:
-            return _finalize_failed_run(
-                run_id,
-                source_name=source_name,
-                error=f"Unsupported public-board source: {source_name} ({exc})",
-            )
-
-        _publish_discovery_log(
-            "INFO",
-            f"Public-board discovery started source={source_name}",
+        return _run_source_adapter_task(
+            task_self=self,
             run_id=run_id,
+            source_name=source_name,
+            max_results=max_results,
+            source_family="public-board",
         )
-        try:
-            with TaskTimer("discovery.latency", tags=[f"source:{source_name}"]):
-                result = source_adapter.acquire(max_results=max_results or 25)
-        except Exception as exc:
-            get_metrics().increment("discovery.failure", tags=[f"source:{source_name}"])
-            _publish_discovery_log(
-                "ERROR",
-                f"Public-board acquisition failed source={source_name}: {exc}",
-                run_id=run_id,
-            )
-            try:
-                raise self.retry(exc=exc)
-            except self.MaxRetriesExceededError:
-                return _finalize_failed_run(run_id, source_name=source_name, error=str(exc))
 
-        output = _run_source_adapter_persist(
+
+@celery_app.task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    acks_late=True,
+)
+def run_auth_board_source(
+    self,
+    run_id: str,
+    source_name: str,
+    max_results: int | None = 25,
+):
+    with log_context(run_id=run_id, source_name=source_name, task_name="run_auth_board_source"):
+        return _run_source_adapter_task(
+            task_self=self,
+            run_id=run_id,
+            source_name=source_name,
+            max_results=max_results,
+            source_family="auth-board",
+        )
+
+
+def _run_source_adapter_task(
+    *,
+    task_self,
+    run_id: str,
+    source_name: str,
+    max_results: int | None,
+    source_family: str,
+) -> dict:
+    skip_result = _skip_run_for_disabled_source(run_id, source_name)
+    if skip_result is not None:
+        return skip_result
+
+    try:
+        source_adapter = source_registry.create(source_name)
+    except Exception as exc:
+        return _finalize_failed_run(
             run_id,
             source_name=source_name,
-            source_adapter=source_adapter,
-            result=result,
+            error=f"Unsupported {source_family} source: {source_name} ({exc})",
         )
+
+    display_name = "Auth-board" if source_family == "auth-board" else "Public-board"
+    _publish_discovery_log(
+        "INFO",
+        f"{display_name} discovery started source={source_name}",
+        run_id=run_id,
+    )
+    try:
+        with TaskTimer("discovery.latency", tags=[f"source:{source_name}"]):
+            result = source_adapter.acquire(max_results=max_results or 25)
+    except Exception as exc:
+        get_metrics().increment("discovery.failure", tags=[f"source:{source_name}"])
         _publish_discovery_log(
-            "INFO",
-            f"Public-board discovery finished source={source_name} fetched={result.stats.get('fetched', 0)} inserted={output.get('stats', {}).get('inserted', 0)}",
+            "ERROR",
+            f"{display_name} acquisition failed source={source_name}: {exc}",
             run_id=run_id,
         )
-        return output
+        try:
+            raise task_self.retry(exc=exc)
+        except task_self.MaxRetriesExceededError:
+            return _finalize_failed_run(run_id, source_name=source_name, error=str(exc))
+
+    output = _run_source_adapter_persist(
+        run_id,
+        source_name=source_name,
+        source_adapter=source_adapter,
+        result=result,
+    )
+    _publish_discovery_log(
+        "INFO",
+        f"{display_name} discovery finished source={source_name} fetched={result.stats.get('fetched', 0)} inserted={output.get('stats', {}).get('inserted', 0)}",
+        run_id=run_id,
+    )
+    return output

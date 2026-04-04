@@ -14,6 +14,11 @@ from core.ingestion.registry import (
     build_default_backend_registry,
     build_default_source_registry,
 )
+from core.ingestion.sources.auth_boards import (
+    LinkedInJobsSourceAdapter,
+    WellfoundSourceAdapter,
+    YCJobsSourceAdapter,
+)
 from core.ingestion.sources.compatibility import (
     CanonicalConnectorSourceAdapter,
     JobSpyScraperSourceAdapter,
@@ -125,6 +130,9 @@ def test_source_registry_lookup_returns_compatibility_adapters():
     builtin_adapter = registry.create("builtin_nyc")
     wttj_adapter = registry.create("welcome_to_the_jungle")
     trueup_adapter = registry.create("trueup")
+    linkedin_adapter = registry.create("linkedin_jobs")
+    wellfound_adapter = registry.create("wellfound")
+    yc_adapter = registry.create("yc")
 
     assert isinstance(canonical_adapter, CanonicalConnectorSourceAdapter)
     assert canonical_adapter.source_name == "greenhouse"
@@ -159,15 +167,27 @@ def test_source_registry_lookup_returns_compatibility_adapters():
     assert isinstance(trueup_adapter, UnsupportedPublicBoardSourceAdapter)
     assert trueup_adapter.policy.backend_preference == "scrapling"
 
+    assert isinstance(linkedin_adapter, LinkedInJobsSourceAdapter)
+    assert linkedin_adapter.policy.backend_preference == "bb_browser"
+    assert linkedin_adapter.policy.requires_auth is True
+
+    assert isinstance(wellfound_adapter, WellfoundSourceAdapter)
+    assert wellfound_adapter.policy.backend_preference == "bb_browser"
+
+    assert isinstance(yc_adapter, YCJobsSourceAdapter)
+    assert yc_adapter.policy.backend_preference == "bb_browser"
+
 
 def test_backend_registry_lookup_returns_compatibility_backends():
     registry = build_default_backend_registry()
 
     connector_backend = registry.create("legacy_connector")
     scraper_backend = registry.create("legacy_scraper")
+    bb_browser_backend = registry.create("bb_browser")
 
     assert connector_backend.name == "legacy_connector"
     assert scraper_backend.name == "legacy_scraper"
+    assert bb_browser_backend.name == "bb_browser"
 
 
 def test_canonical_connector_compatibility_adapter_preserves_contract():

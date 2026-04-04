@@ -116,6 +116,30 @@ SOURCE_POLICIES: dict[str, SourcePolicy] = {
         backend_preference=BackendPreference.SCRAPLING.value,
         feature_flag_key="WELCOME_TO_THE_JUNGLE_ENABLED",
     ),
+    "linkedin_jobs": SourcePolicy(
+        source_name="linkedin_jobs",
+        source_kind=SourceKind.BROWSER_AUTH,
+        source_role_default="discovery",
+        requires_auth=True,
+        backend_preference=BackendPreference.BB_BROWSER.value,
+        feature_flag_key="LINKEDIN_JOBS_ENABLED",
+    ),
+    "wellfound": SourcePolicy(
+        source_name="wellfound",
+        source_kind=SourceKind.BROWSER_AUTH,
+        source_role_default="discovery",
+        requires_auth=True,
+        backend_preference=BackendPreference.BB_BROWSER.value,
+        feature_flag_key="WELLFOUND_ENABLED",
+    ),
+    "yc": SourcePolicy(
+        source_name="yc",
+        source_kind=SourceKind.BROWSER_AUTH,
+        source_role_default="discovery",
+        requires_auth=True,
+        backend_preference=BackendPreference.BB_BROWSER.value,
+        feature_flag_key="YC_ENABLED",
+    ),
 }
 
 

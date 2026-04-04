@@ -8,7 +8,13 @@ from core.ingestion.backends.base import (
     LegacyConnectorBackend,
     LegacyScraperBackend,
 )
+from core.ingestion.backends.bb_browser_backend import BbBrowserSessionBackend
 from core.ingestion.backends.scrapling_backend import ScraplingFetchBackend
+from core.ingestion.sources.auth_boards import (
+    build_linkedin_jobs_adapter,
+    build_wellfound_adapter,
+    build_yc_jobs_adapter,
+)
 from core.ingestion.sources.compatibility.canonical_connector_adapter import (
     build_canonical_connector_adapter,
 )
@@ -82,6 +88,7 @@ def build_default_backend_registry() -> BackendRegistry:
     registry.register("legacy_connector", LegacyConnectorBackend)
     registry.register("legacy_scraper", LegacyScraperBackend)
     registry.register("scrapling", ScraplingFetchBackend)
+    registry.register("bb_browser", BbBrowserSessionBackend)
     return registry
 
 
@@ -101,4 +108,7 @@ def build_default_source_registry() -> SourceAdapterRegistry:
     registry.register("ventureloop", build_ventureloop_adapter)
     registry.register("builtin_nyc", build_builtin_nyc_adapter)
     registry.register("welcome_to_the_jungle", build_welcome_to_the_jungle_adapter)
+    registry.register("linkedin_jobs", build_linkedin_jobs_adapter)
+    registry.register("wellfound", build_wellfound_adapter)
+    registry.register("yc", build_yc_jobs_adapter)
     return registry

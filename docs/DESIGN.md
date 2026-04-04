@@ -118,8 +118,9 @@ The UI is an operator console, not a consumer product and not an autonomous agen
 
 ## Approved Ingestion-V2 Direction
 
-This section describes approved near-term architecture direction. It does not claim that the full
-ingestion-v2 shape is already implemented.
+This section describes approved near-term architecture direction and the currently implemented
+backend/source seams. It does not claim that every planned ingestion-v2 source family is already
+implemented.
 
 ### Current vs approved direction
 
@@ -144,6 +145,8 @@ Intended responsibilities:
   non-auth-heavy sources.
 - bb-browser is the approved selective authenticated-session backend direction for a small subset
   of browser-native or auth-bound sources.
+- The bb-browser session backend is now implemented for ingestion-only acquisition, with initial
+  LinkedIn Jobs, Wellfound, and YC adapters behind explicit feature flags and backend config.
 - bb-browser is a capabilities layer only. It does not own JobBot product logic, business rules,
   scoring, classification, ATS analysis, generation gating, or persistence contracts.
 - The architecture is being shaped so that a browser-capability backend can be reused later where
