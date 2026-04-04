@@ -15,6 +15,12 @@ from core.ingestion.sources.compatibility.canonical_connector_adapter import (
 from core.ingestion.sources.compatibility.jobspy_scraper_adapter import (
     build_jobspy_scraper_adapter,
 )
+from core.ingestion.sources.portfolio_boards import (
+    build_greycroft_adapter,
+    build_primary_vc_adapter,
+    build_technyc_adapter,
+    build_usv_adapter,
+)
 from core.ingestion.sources.public_boards import (
     build_builtin_nyc_adapter,
     build_startupjobs_nyc_adapter,
@@ -88,6 +94,10 @@ def build_default_source_registry() -> SourceAdapterRegistry:
     registry.register("trueup", build_trueup_adapter)
     registry.register("underdog", build_underdog_adapter)
     registry.register("startupjobs_nyc", build_startupjobs_nyc_adapter)
+    registry.register("technyc", build_technyc_adapter)
+    registry.register("primary_vc", build_primary_vc_adapter)
+    registry.register("greycroft", build_greycroft_adapter)
+    registry.register("usv", build_usv_adapter)
     registry.register("ventureloop", build_ventureloop_adapter)
     registry.register("builtin_nyc", build_builtin_nyc_adapter)
     registry.register("welcome_to_the_jungle", build_welcome_to_the_jungle_adapter)

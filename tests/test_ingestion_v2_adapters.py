@@ -18,6 +18,12 @@ from core.ingestion.sources.compatibility import (
     CanonicalConnectorSourceAdapter,
     JobSpyScraperSourceAdapter,
 )
+from core.ingestion.sources.portfolio_boards import (
+    GreycroftSourceAdapter,
+    PrimaryVCSourceAdapter,
+    TechNYCSourceAdapter,
+    USVSourceAdapter,
+)
 from core.ingestion.sources.public_boards import (
     BuiltInNYCSourceAdapter,
     StartupJobsNYCSourceAdapter,
@@ -112,6 +118,10 @@ def test_source_registry_lookup_returns_compatibility_adapters():
     canonical_adapter = registry.create("greenhouse", connector=_FakeCanonicalConnector())
     jobspy_adapter = registry.create("jobspy", scraper=_FakeJobSpyScraper())
     startupjobs_adapter = registry.create("startupjobs_nyc")
+    technyc_adapter = registry.create("technyc")
+    primary_vc_adapter = registry.create("primary_vc")
+    greycroft_adapter = registry.create("greycroft")
+    usv_adapter = registry.create("usv")
     builtin_adapter = registry.create("builtin_nyc")
     wttj_adapter = registry.create("welcome_to_the_jungle")
     trueup_adapter = registry.create("trueup")
@@ -127,6 +137,18 @@ def test_source_registry_lookup_returns_compatibility_adapters():
     assert isinstance(startupjobs_adapter, StartupJobsNYCSourceAdapter)
     assert startupjobs_adapter.policy.backend_preference == "scrapling"
     assert startupjobs_adapter.policy.source_role_default == "discovery"
+
+    assert isinstance(technyc_adapter, TechNYCSourceAdapter)
+    assert technyc_adapter.policy.backend_preference == "scrapling"
+
+    assert isinstance(primary_vc_adapter, PrimaryVCSourceAdapter)
+    assert primary_vc_adapter.policy.backend_preference == "scrapling"
+
+    assert isinstance(greycroft_adapter, GreycroftSourceAdapter)
+    assert greycroft_adapter.policy.backend_preference == "scrapling"
+
+    assert isinstance(usv_adapter, USVSourceAdapter)
+    assert usv_adapter.policy.backend_preference == "scrapling"
 
     assert isinstance(builtin_adapter, BuiltInNYCSourceAdapter)
     assert builtin_adapter.policy.backend_preference == "scrapling"

@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     trueup_enabled: bool = False
     underdog_enabled: bool = False
     startupjobs_nyc_enabled: bool = True
+    technyc_enabled: bool = True
+    primary_vc_enabled: bool = True
+    greycroft_enabled: bool = True
+    usv_enabled: bool = True
     ventureloop_enabled: bool = False
     builtin_nyc_enabled: bool = True
     welcome_to_the_jungle_enabled: bool = True

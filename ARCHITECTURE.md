@@ -124,6 +124,10 @@ JobBot uses a fixed source-role model:
   - AGG-1 (Adzuna)
   - SERP1 (DataForSEO Google Jobs)
   - startupjobs.nyc
+  - Tech:NYC Jobs
+  - Primary Venture Partners Jobs Board
+  - Greycroft Jobs Board
+  - Union Square Ventures Jobs Board
   - Built In NYC
   - Welcome to the Jungle
 

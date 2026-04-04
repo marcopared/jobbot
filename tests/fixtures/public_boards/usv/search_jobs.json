@@ -1,0 +1,59 @@
+{
+  "version": {
+    "client": {
+      "git": "7144695f75655e39232be21dc6648394868866a7",
+      "date": "2026-04-03T19:45:25.473Z"
+    },
+    "server": {
+      "git": "7144695f75655e39232be21dc6648394868866a7",
+      "date": "2026-04-03T19:45:25.473Z"
+    }
+  },
+  "meta": {
+    "size": 1,
+    "sequence": "eyJfaWQiOiAiMTUwZDgwMGE5NTY3ZDIyYjZkYjY2NjgyYjZjZGJlNTMiLCAic2NvcmUiOiAxMDAxLjE3MTczODYyMDk5NjV9"
+  },
+  "total": 1235,
+  "jobs": [
+    {
+      "jobId": "e23d43f4-8239-4a1a-925a-d68031eff30b",
+      "title": "Electrical Engineer, PCB Design",
+      "companyId": "Radiant",
+      "companySlug": "radiant",
+      "companyName": "Radiant",
+      "companyDomain": "radiantnuclear.com",
+      "considerHosted": false,
+      "applyUrl": "https://jobs.ashbyhq.com/radiant-industries/e23d43f4-8239-4a1a-925a-d68031eff30b?utm_source=jobs.usv.com",
+      "url": "https://jobs.ashbyhq.com/radiant-industries/e23d43f4-8239-4a1a-925a-d68031eff30b",
+      "locations": [
+        "El Segundo, California, United States",
+        "El Segundo, CA"
+      ],
+      "departments": [
+        "Electrical Engineering"
+      ],
+      "jobTypes": [
+        {
+          "id": "electrical-engineer",
+          "label": "Electrical Engineer",
+          "value": "electrical-engineer"
+        },
+        {
+          "id": "pcb-designer",
+          "label": "PCB Designer",
+          "value": "pcb-designer"
+        }
+      ],
+      "timeStamp": "2026-04-03T00:00:00Z",
+      "remote": false,
+      "hybrid": false,
+      "scores": {
+        "score": 1001.1717386209965,
+        "richnessScore": 2
+      }
+    }
+  ],
+  "availableFilters": {},
+  "errors": [],
+  "debug": {}
+}
