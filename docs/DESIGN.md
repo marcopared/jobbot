@@ -76,6 +76,10 @@ Current trust rules:
 
 - canonical ingestion
 - discovery run
+- source-adapter launch:
+  - public boards
+  - portfolio boards
+  - auth boards
 - URL ingest
 - JobSpy scrape
 - manual intake
@@ -101,7 +105,10 @@ Artifact generation is deliberately conservative:
 
 - Ready to Apply
 - All Jobs
-- Runs
+- Runs:
+  - legacy launchers for JobSpy, canonical ATS, and broad discovery
+  - capability-backed source-adapter launcher for public-board, portfolio-board, and auth-board
+    sources
 - Job detail
 - Run detail
 - Manual job intake

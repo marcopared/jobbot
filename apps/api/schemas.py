@@ -1,7 +1,7 @@
 """Pydantic schemas for v1 REST API (EPIC 8)."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -145,6 +145,59 @@ class GenerateResumeResponse(BaseModel):
     generation_run_id: str = Field(
         description="Persisted GenerationRun id created before queueing the worker.",
     )
+
+
+class QueuedRunResponse(BaseModel):
+    """Common response for run-launching endpoints."""
+
+    run_id: str
+    status: str
+    task_id: str | None = None
+
+
+class SourceAdapterCapability(BaseModel):
+    """Operator-visible metadata for adapter-backed ingestion-v2 sources."""
+
+    source_name: str
+    source_label: str
+    source_family: Literal["public_board", "portfolio_board", "auth_board"]
+    family_label: str
+    source_kind: str
+    source_role: str
+    backend: str
+    backend_label: str
+    requires_auth: bool = False
+    feature_flag_key: str | None = None
+    enabled: bool = True
+    launch_enabled: bool = True
+    launch_reason: str | None = None
+
+
+class SourceAdapterCapabilitiesResponse(BaseModel):
+    """Response for listing adapter-backed run capabilities."""
+
+    items: list[SourceAdapterCapability]
+
+
+class SourceAdapterRunBody(BaseModel):
+    """Request body for POST /api/jobs/run-source-adapter."""
+
+    source_name: str = Field(description="Registered ingestion-v2 adapter source name.")
+    max_results: int | None = Field(
+        default=25,
+        ge=1,
+        le=100,
+        description="Upper bound for jobs to acquire in this operator-triggered run.",
+    )
+
+
+class SourceAdapterRunResponse(QueuedRunResponse):
+    """Response for POST /api/jobs/run-source-adapter."""
+
+    source_name: str
+    source_label: str
+    source_family: Literal["public_board", "portfolio_board", "auth_board"]
+    backend: str
 
 
 class ResolveJobResponse(BaseModel):

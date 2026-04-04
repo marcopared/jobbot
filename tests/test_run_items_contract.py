@@ -116,6 +116,40 @@ MANUAL_INTAKE_ITEM = {
     "raw_payload_json": None,
 }
 
+PUBLIC_BOARD_ITEM = {
+    "index": 1,
+    "outcome": "inserted",
+    "dedup_reason": "inserted",
+    "job_id": str(uuid.uuid4()),
+    "dedup_hash": "public001",
+    "source": "startupjobs_nyc",
+    "source_job_id": "startupjobs-001",
+    "title": "Platform Engineer",
+    "company_name": "CityJobs",
+    "location": "New York, NY",
+    "url": "https://startupjobs.nyc/jobs/platform-engineer",
+    "apply_url": "https://startupjobs.nyc/jobs/platform-engineer",
+    "ats_type": "startupjobs_nyc",
+    "raw_payload_json": {"family": "public_board", "backend": "scrapling"},
+}
+
+AUTH_BOARD_ITEM = {
+    "index": 1,
+    "outcome": "inserted",
+    "dedup_reason": "inserted",
+    "job_id": str(uuid.uuid4()),
+    "dedup_hash": "auth001",
+    "source": "linkedin_jobs",
+    "source_job_id": "linkedin-001",
+    "title": "Staff Engineer",
+    "company_name": "Networked Inc",
+    "location": "Remote",
+    "url": "https://www.linkedin.com/jobs/view/123/",
+    "apply_url": "https://www.linkedin.com/jobs/view/123/",
+    "ats_type": "linkedin_jobs",
+    "raw_payload_json": {"family": "auth_board", "backend": "bb_browser"},
+}
+
 
 @pytest.fixture
 async def client():
@@ -131,6 +165,8 @@ async def client():
         ("greenhouse", "greenhouse", GREENHOUSE_ITEM),
         ("discovery_agg1", "agg1", DISCOVERY_ITEM),
         ("manual_intake", "manual_intake", MANUAL_INTAKE_ITEM),
+        ("public_board_startupjobs", "startupjobs_nyc", PUBLIC_BOARD_ITEM),
+        ("auth_board_linkedin", "linkedin_jobs", AUTH_BOARD_ITEM),
     ],
 )
 async def test_run_item_has_canonical_fields(client, label, source, item):

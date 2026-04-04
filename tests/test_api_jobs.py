@@ -682,6 +682,129 @@ async def test_run_discovery_unsupported_connector_returns_422(client):
     assert resp.status_code == 422
 
 
+async def test_list_source_adapter_capabilities_exposes_operator_families(
+    client, monkeypatch
+):
+    """GET /api/jobs/run-source-adapter lists adapter-backed launch metadata."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "startupjobs_nyc_enabled", True)
+    monkeypatch.setattr(jobs_route.settings, "technyc_enabled", True)
+    monkeypatch.setattr(jobs_route.settings, "linkedin_jobs_enabled", True)
+    monkeypatch.setattr(jobs_route.settings, "bb_browser_enabled", True)
+
+    resp = await client.get("/api/jobs/run-source-adapter")
+    assert resp.status_code == 200
+    items = {item["source_name"]: item for item in resp.json()["items"]}
+
+    assert "startupjobs_nyc" in items
+    assert items["startupjobs_nyc"]["source_family"] == "public_board"
+    assert items["startupjobs_nyc"]["backend"] == "scrapling"
+    assert items["startupjobs_nyc"]["launch_enabled"] is True
+
+    assert "technyc" in items
+    assert items["technyc"]["source_family"] == "portfolio_board"
+    assert items["technyc"]["family_label"] == "Portfolio boards"
+    assert items["technyc"]["backend"] == "scrapling"
+    assert items["technyc"]["launch_enabled"] is True
+
+    assert "linkedin_jobs" in items
+    assert items["linkedin_jobs"]["source_family"] == "auth_board"
+    assert items["linkedin_jobs"]["backend"] == "bb_browser"
+    assert items["linkedin_jobs"]["launch_enabled"] is True
+
+
+async def test_run_source_adapter_portfolio_board_returns_200(client, monkeypatch):
+    """POST /api/jobs/run-source-adapter launches a portfolio-board adapter run via the public worker."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "technyc_enabled", True)
+    monkeypatch.setattr(
+        jobs_route.run_public_board_source,
+        "delay",
+        lambda **kwargs: type("TaskResult", (), {"id": "portfolio-adapter-task"})(),
+    )
+
+    resp = await client.post(
+        "/api/jobs/run-source-adapter",
+        json={"source_name": "technyc", "max_results": 5},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "RUNNING"
+    assert data["source_name"] == "technyc"
+    assert data["source_family"] == "portfolio_board"
+    assert data["backend"] == "scrapling"
+    assert data["task_id"] == "portfolio-adapter-task"
+    assert data["run_id"]
+
+
+async def test_run_source_adapter_public_board_returns_200(client, monkeypatch):
+    """POST /api/jobs/run-source-adapter launches a public-board adapter run."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "startupjobs_nyc_enabled", True)
+    monkeypatch.setattr(
+        jobs_route.run_public_board_source,
+        "delay",
+        lambda **kwargs: type("TaskResult", (), {"id": "public-adapter-task"})(),
+    )
+
+    resp = await client.post(
+        "/api/jobs/run-source-adapter",
+        json={"source_name": "startupjobs_nyc", "max_results": 7},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "RUNNING"
+    assert data["source_name"] == "startupjobs_nyc"
+    assert data["source_family"] == "public_board"
+    assert data["backend"] == "scrapling"
+    assert data["task_id"] == "public-adapter-task"
+    assert data["run_id"]
+
+
+async def test_run_source_adapter_auth_board_returns_200(client, monkeypatch):
+    """POST /api/jobs/run-source-adapter launches an auth-board adapter run."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "linkedin_jobs_enabled", True)
+    monkeypatch.setattr(jobs_route.settings, "bb_browser_enabled", True)
+    monkeypatch.setattr(
+        jobs_route.run_auth_board_source,
+        "delay",
+        lambda **kwargs: type("TaskResult", (), {"id": "auth-adapter-task"})(),
+    )
+
+    resp = await client.post(
+        "/api/jobs/run-source-adapter",
+        json={"source_name": "linkedin_jobs", "max_results": 3},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "RUNNING"
+    assert data["source_name"] == "linkedin_jobs"
+    assert data["source_family"] == "auth_board"
+    assert data["backend"] == "bb_browser"
+    assert data["task_id"] == "auth-adapter-task"
+    assert data["run_id"]
+
+
+async def test_run_source_adapter_returns_403_when_backend_disabled(client, monkeypatch):
+    """POST /api/jobs/run-source-adapter rejects auth-board launches when bb-browser is off."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "linkedin_jobs_enabled", True)
+    monkeypatch.setattr(jobs_route.settings, "bb_browser_enabled", False)
+
+    resp = await client.post(
+        "/api/jobs/run-source-adapter",
+        json={"source_name": "linkedin_jobs"},
+    )
+    assert resp.status_code == 403
+    assert "BB_BROWSER_ENABLED=false" in resp.json()["detail"]
+
+
 # --- Manual ingest route tests ---
 
 

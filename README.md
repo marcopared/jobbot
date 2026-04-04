@@ -2,24 +2,23 @@
 
 JobBot is a local-first job discovery and decision-support tool.
 
-Alpha discovery implementation wave note: the current system still reflects the implemented scope below. Tonight's target implementation wave maps `AGG-1` to Adzuna and `SERP1` to DataForSEO Google Jobs once those code PRs land.
-
 ## Implemented scope
 
 **Ingestion:**
 - **Canonical ATS:** Greenhouse, Lever, Ashby
-- **Discovery:** JobSpy (scrape), AGG-1, SERP1 (latter two feature-flagged)
+- **Discovery:** JobSpy scrape, AGG-1, SERP1 (`AGG-1` and `SERP1` remain feature-flagged)
+- **Adapter-backed discovery launchers:**  
+  public boards: StartupJobs NYC, Built In NYC, Welcome to the Jungle  
+  portfolio boards: Tech:NYC, Primary Venture Partners, Greycroft, USV  
+  auth boards: LinkedIn Jobs, Wellfound, YC (`auth_board` sources remain gated by source flags and `BB_BROWSER_ENABLED`)
 - **URL ingest:** supported ATS job URLs (Greenhouse, Lever, Ashby)
+- **Manual intake:** manual operator-entered jobs
 
 **Processing:** store, score, classify, ATS analysis; generation gate (auto-generate for eligible jobs when enabled)
 
 **Output:** job-specific resume artifacts; ready-to-apply queue; manual apply via job URL
 
 **Non-goals:** auto-apply, browser automation; final application step is always manual.
-
-## Planned next alpha wave
-
-Planned implementation order for the next code PRs: `AGG-1` Adzuna hardening, `SERP1` DataForSEO Google Jobs implementation, discovery end-to-end verification, then optional UI polish. For this wave, `AGG-1` maps to Adzuna and `SERP1` maps to DataForSEO Google Jobs. This is planned work only; the implemented scope above remains the current truth until those PRs land.
 
 ## Documentation
 
@@ -84,6 +83,8 @@ cd ui && npm run dev -- --host 127.0.0.1 --port 5173
 | **JobSpy scrape** | `POST /api/jobs/run-scrape` | Discovery | Scrapes job boards via JobSpy. Uses `.env` defaults or optional body params. |
 | **Canonical ATS** | `POST /api/jobs/run-ingestion` | Canonical | Greenhouse, Lever, Ashby. Requires connector-specific params (e.g. `board_token` for greenhouse, `client_name` for lever). |
 | **Broad discovery** | `POST /api/jobs/run-discovery` | Discovery | AGG-1 or SERP1. Feature-flagged (`ENABLE_AGG1_DISCOVERY`, `ENABLE_SERP1_DISCOVERY`). |
+| **Source adapters: capability read-model** | `GET /api/jobs/run-source-adapter` | Discovery | Lists launchable adapter-backed sources plus operator-facing family, backend, and gating metadata. |
+| **Source adapters: launch** | `POST /api/jobs/run-source-adapter` | Discovery | Launches adapter-backed discovery runs for public boards, portfolio boards, and gated auth boards through the existing operator run model. |
 | **URL ingest** | `POST /api/jobs/ingest-url` | Canonical | Paste supported Greenhouse/Lever/Ashby job URL. Feature-flagged (`URL_INGEST_ENABLED`). |
 
 All paths run score → classify → ATS analysis. Resume generation: manual via `POST /api/jobs/{id}/generate-resume`, or automatic when `ENABLE_AUTO_RESUME_GENERATION=true` and the job passes the generation gate.
@@ -120,6 +121,24 @@ curl -X POST http://127.0.0.1:8000/api/jobs/run-ingestion \
   -d '{"connector":"ashby","company_name":"Acme","job_board_name":"acme"}'
 ```
 
+### Example: Source-adapter launch
+
+```bash
+# List operator-visible adapter capabilities
+curl http://127.0.0.1:8000/api/jobs/run-source-adapter
+
+# Launch a portfolio-board adapter run
+curl -X POST http://127.0.0.1:8000/api/jobs/run-source-adapter \
+  -H "Content-Type: application/json" \
+  -d '{"source_name":"technyc","max_results":25}'
+```
+
+The response includes operator-facing metadata such as `source_label`, `source_family`, and
+`backend`. Auth-board sources are only launchable when both their source flag and
+`BB_BROWSER_ENABLED=true` are set. Registered unsupported public-board adapters such as TrueUp,
+Underdog.io, and VentureLoop appear as unavailable in capability metadata rather than being treated
+as fully live.
+
 ### Seed data (quick start)
 
 With API + worker running:
@@ -142,6 +161,8 @@ Runs `POST /api/jobs/run-scrape` and waits for completion.
 | `POST /api/jobs/{id}/resolve` | Trigger discovery-to-canonical resolution (discovery jobs only) |
 | `POST /api/jobs/{id}/generate-resume` | Trigger tailored resume generation (manual override) |
 | `GET /api/jobs/{id}/artifacts` | List artifacts for a job |
+| `GET /api/jobs/run-source-adapter` | List adapter-backed source capabilities and launch gating |
+| `POST /api/jobs/run-source-adapter` | Launch adapter-backed source run |
 | `GET /api/runs` | List scrape/ingest/discovery runs |
 | `GET /api/runs/{id}` | Run detail |
 | `GET /api/debug/failures` | Recent task failures (debug-only; requires `DEBUG_ENDPOINTS_ENABLED=true`) |

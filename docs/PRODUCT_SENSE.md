@@ -33,7 +33,7 @@ The primary user is an operator running their own job search pipeline:
 
 ## Current Product Loop
 
-1. Trigger intake from scrape, discovery, canonical ingest, URL ingest, or manual intake.
+1. Trigger intake from JobSpy scrape, broad discovery, canonical ingest, source-adapter launch, URL ingest, or manual intake.
 2. Let the backend score, classify, and analyze jobs.
 3. Review artifact-ready jobs in the ready-to-apply queue.
 4. Download a generated artifact if needed.

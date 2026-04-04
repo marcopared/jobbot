@@ -119,6 +119,26 @@ export interface RunItemsResponse {
   };
 }
 
+export interface SourceAdapterCapability {
+  source_name: string;
+  source_label: string;
+  source_family: "public_board" | "portfolio_board" | "auth_board";
+  family_label: string;
+  source_kind: string;
+  source_role: string;
+  backend: string;
+  backend_label: string;
+  requires_auth: boolean;
+  feature_flag_key: string | null;
+  enabled: boolean;
+  launch_enabled: boolean;
+  launch_reason: string | null;
+}
+
+export interface SourceAdapterCapabilitiesResponse {
+  items: SourceAdapterCapability[];
+}
+
 export async function fetchJobs(
   params: Record<string, string>,
 ): Promise<JobsResponse> {
@@ -319,6 +339,14 @@ export async function manualIngest(body: {
   return res.json();
 }
 
+export async function fetchSourceAdapterCapabilities(): Promise<SourceAdapterCapabilitiesResponse> {
+  const res = await fetch(`${BASE}/jobs/run-source-adapter`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch source adapter capabilities: ${res.status}`);
+  }
+  return res.json();
+}
+
 /** Trigger discovery run (AGG-1 or SERP1) */
 export async function runDiscovery(body: {
   connector: "agg1" | "serp1";
@@ -361,6 +389,30 @@ export async function runIngestion(body: {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `Ingestion run failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function runSourceAdapter(body: {
+  source_name: string;
+  max_results?: number;
+}): Promise<{
+  run_id: string;
+  status: string;
+  task_id?: string;
+  source_name: string;
+  source_label: string;
+  source_family: "public_board" | "portfolio_board" | "auth_board";
+  backend: string;
+}> {
+  const res = await fetch(`${BASE}/jobs/run-source-adapter`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Source adapter run failed: ${res.status}`);
   }
   return res.json();
 }

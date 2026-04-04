@@ -20,8 +20,26 @@ Use these as the highest-confidence sources for job content and apply entry poin
 - JobSpy
 - AGG-1 = Adzuna
 - SERP1 = DataForSEO Google Jobs
+- source-adapter launchers:
+  - public boards: StartupJobs NYC, Built In NYC, Welcome to the Jungle
+  - portfolio boards: Tech:NYC, Primary Venture Partners, Greycroft, USV
+  - auth boards: LinkedIn Jobs, Wellfound, YC
+
+Registered but not currently operator-launchable as live sources:
+
+- TrueUp
+- Underdog.io
+- VentureLoop
 
 Use these for coverage, filtering, and ranking. Do not treat them as canonical truth by default.
+
+Current operator launch surface for adapter-backed discovery:
+
+- `GET /api/jobs/run-source-adapter` exposes capability metadata including family, backend, and
+  launch gating
+- `POST /api/jobs/run-source-adapter` launches adapter-backed runs through the existing non-auth or
+  auth worker paths
+- auth-board sources remain gated by explicit source flags and `BB_BROWSER_ENABLED`
 
 ### Direct URL ingest
 

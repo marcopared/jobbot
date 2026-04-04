@@ -3,10 +3,13 @@ import { Link } from "react-router-dom";
 
 import {
   fetchRuns,
+  fetchSourceAdapterCapabilities,
   runScrapeNow,
   runDiscovery,
   runIngestion,
   type Run,
+  type SourceAdapterCapability,
+  runSourceAdapter,
 } from "../api";
 import EmptyState from "../components/EmptyState";
 import { notifyError } from "../notify";
@@ -35,8 +38,13 @@ function statsText(run: Run): string {
   return `fetched ${fetched} · inserted ${inserted} · duplicates ${duplicates}`;
 }
 
+type SourceAdapterFamily = "public_board" | "portfolio_board" | "auth_board";
+
 export default function RunsPage() {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [sourceCapabilities, setSourceCapabilities] = useState<
+    SourceAdapterCapability[]
+  >([]);
   const [loading, setLoading] = useState(false);
   const [triggering, setTriggering] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,17 +69,61 @@ export default function RunsPage() {
   const [ingestJobBoardName, setIngestJobBoardName] = useState("");
   const [ingestTriggering, setIngestTriggering] = useState(false);
 
+  const [sourceAdapterFamily, setSourceAdapterFamily] =
+    useState<SourceAdapterFamily>("public_board");
+  const [sourceAdapterName, setSourceAdapterName] = useState("");
+  const [sourceAdapterMaxResults, setSourceAdapterMaxResults] = useState("25");
+  const [sourceAdapterTriggering, setSourceAdapterTriggering] = useState(false);
+  const [lastSourceAdapterRunId, setLastSourceAdapterRunId] = useState<
+    string | null
+  >(null);
+
   const hasRunning = useMemo(
     () => runs.some((r) => r.status === "RUNNING"),
     [runs],
+  );
+
+  const capabilityMap = useMemo(
+    () => new Map(sourceCapabilities.map((item) => [item.source_name, item])),
+    [sourceCapabilities],
+  );
+
+  const familyOptions = useMemo(() => {
+    const seen = new Set<SourceAdapterFamily>();
+    const ordered: SourceAdapterFamily[] = [];
+    for (const item of sourceCapabilities) {
+      if (seen.has(item.source_family)) continue;
+      seen.add(item.source_family);
+      ordered.push(item.source_family);
+    }
+    return ordered;
+  }, [sourceCapabilities]);
+
+  const sourceOptions = useMemo(
+    () =>
+      sourceCapabilities.filter(
+        (item) => item.source_family === sourceAdapterFamily,
+      ),
+    [sourceCapabilities, sourceAdapterFamily],
+  );
+
+  const selectedSourceCapability = useMemo(
+    () =>
+      sourceOptions.find((item) => item.source_name === sourceAdapterName) ??
+      null,
+    [sourceAdapterName, sourceOptions],
   );
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchRuns({ page: "1", per_page: "25" });
-      setRuns(data.items);
+      const [runsData, capabilitiesData] = await Promise.all([
+        fetchRuns({ page: "1", per_page: "25" }),
+        fetchSourceAdapterCapabilities(),
+      ]);
+      setRuns(runsData.items);
+      setSourceCapabilities(capabilitiesData.items);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to load runs";
       setError(message);
@@ -92,6 +144,26 @@ export default function RunsPage() {
     }, 2000);
     return () => window.clearInterval(id);
   }, [hasRunning, load]);
+
+  useEffect(() => {
+    if (!familyOptions.length) return;
+    if (!familyOptions.includes(sourceAdapterFamily)) {
+      setSourceAdapterFamily(familyOptions[0]);
+    }
+  }, [familyOptions, sourceAdapterFamily]);
+
+  useEffect(() => {
+    if (!sourceOptions.length) {
+      if (sourceAdapterName) setSourceAdapterName("");
+      return;
+    }
+    const hasSelected = sourceOptions.some(
+      (item) => item.source_name === sourceAdapterName,
+    );
+    if (hasSelected) return;
+    const nextSource = sourceOptions.find((item) => item.launch_enabled);
+    setSourceAdapterName((nextSource ?? sourceOptions[0]).source_name);
+  }, [sourceAdapterName, sourceOptions]);
 
   const onRunScrape = async () => {
     setTriggering(true);
@@ -172,14 +244,48 @@ export default function RunsPage() {
     }
   };
 
+  const onRunSourceAdapter = async () => {
+    if (!selectedSourceCapability) {
+      setError("Select a source adapter");
+      return;
+    }
+    if (!selectedSourceCapability.launch_enabled) {
+      setError(
+        selectedSourceCapability.launch_reason || "This source is not launchable",
+      );
+      return;
+    }
+    setSourceAdapterTriggering(true);
+    setError(null);
+    try {
+      const data = await runSourceAdapter({
+        source_name: selectedSourceCapability.source_name,
+        max_results:
+          sourceAdapterMaxResults.trim() &&
+          !Number.isNaN(Number(sourceAdapterMaxResults))
+            ? Number(sourceAdapterMaxResults)
+            : undefined,
+      });
+      setLastSourceAdapterRunId(data.run_id);
+      await load();
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : "Failed to trigger source adapter run";
+      setError(message);
+      notifyError(message);
+    } finally {
+      setSourceAdapterTriggering(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Runs</h1>
           <p className="text-sm text-gray-600">
-            Trigger discovery, canonical ingestion, or JobSpy scrape. Runs
-            appear below.
+            Trigger JobSpy, legacy routes, or ingestion-v2 source adapters.
+            Runs appear below.
           </p>
         </div>
         <Link
@@ -190,7 +296,7 @@ export default function RunsPage() {
         </Link>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-4">
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <h2 className="mb-2 text-sm font-semibold text-gray-700">
             JobSpy Scrape
@@ -333,6 +439,115 @@ export default function RunsPage() {
             </button>
           </div>
         </div>
+
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+            Source Adapters
+          </h2>
+          <p className="mb-3 text-xs text-gray-500">
+            Launch ingestion-v2 public-board or authenticated-board sources
+            from the same operator console.
+          </p>
+          <div className="space-y-2">
+            <select
+              value={sourceAdapterFamily}
+              onChange={(e) =>
+                setSourceAdapterFamily(
+                  e.target.value as
+                    | "public_board"
+                    | "portfolio_board"
+                    | "auth_board",
+                )
+              }
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              disabled={familyOptions.length === 0}
+            >
+              {familyOptions.map((family) => {
+                const label =
+                  sourceCapabilities.find(
+                    (item) => item.source_family === family,
+                  )?.family_label ?? family;
+                return (
+                  <option key={family} value={family}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+            <select
+              value={sourceAdapterName}
+              onChange={(e) => setSourceAdapterName(e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+              disabled={sourceOptions.length === 0}
+            >
+              {sourceOptions.map((item) => (
+                <option
+                  key={item.source_name}
+                  value={item.source_name}
+                  disabled={!item.launch_enabled}
+                >
+                  {item.source_label}
+                  {item.launch_enabled ? "" : " (unavailable)"}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              placeholder="Max results (default 25)"
+              value={sourceAdapterMaxResults}
+              onChange={(e) => setSourceAdapterMaxResults(e.target.value)}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+            {selectedSourceCapability ? (
+              <div className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                <div>
+                  backend: {selectedSourceCapability.backend_label} · role:{" "}
+                  {selectedSourceCapability.source_role}
+                </div>
+                <div>
+                  {selectedSourceCapability.requires_auth
+                    ? "Requires authenticated browser session support."
+                    : "Uses bounded public-board acquisition."}
+                </div>
+                {selectedSourceCapability.launch_reason && (
+                  <div className="text-red-700">
+                    Unavailable: {selectedSourceCapability.launch_reason}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">
+                No source adapters available.
+              </p>
+            )}
+            <button
+              onClick={() => void onRunSourceAdapter()}
+              disabled={
+                sourceAdapterTriggering ||
+                !selectedSourceCapability ||
+                !selectedSourceCapability.launch_enabled
+              }
+              className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {sourceAdapterTriggering
+                ? "Triggering…"
+                : "Run Source Adapter"}
+            </button>
+            {lastSourceAdapterRunId && (
+              <p className="text-xs text-green-700">
+                Source adapter run started.{" "}
+                <Link
+                  to={`/runs/${lastSourceAdapterRunId}`}
+                  className="underline"
+                >
+                  View run
+                </Link>
+              </p>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -350,7 +565,7 @@ export default function RunsPage() {
       ) : runs.length === 0 ? (
         <EmptyState
           title="No runs yet"
-          description="Trigger a JobSpy scrape, discovery run, or canonical ingestion above. Runs will appear here as they complete."
+          description="Trigger a JobSpy scrape, a legacy run route, or a source-adapter run above. Runs will appear here as they complete."
         />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -373,7 +588,7 @@ export default function RunsPage() {
                   Stats
                 </th>
                 <th className="px-3 py-3 text-left font-semibold text-gray-600">
-                  Provider
+                  Error
                 </th>
                 <th className="px-3 py-3 text-left font-semibold text-gray-600">
                   Details
@@ -383,7 +598,14 @@ export default function RunsPage() {
             <tbody className="divide-y divide-gray-100">
               {runs.map((run) => (
                 <tr key={run.id}>
-                  <td className="px-3 py-2">{run.source}</td>
+                  <td className="px-3 py-2">
+                    <div className="font-medium text-gray-900">
+                      {capabilityMap.get(run.source)?.source_label ?? run.source}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {capabilityMap.get(run.source)?.family_label ?? "Legacy route"}
+                    </div>
+                  </td>
                   <td className="px-3 py-2">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-medium ${
