@@ -2,10 +2,9 @@
 
 ## Active Plans
 
-No active execution plans are tracked in-repo right now.
-
-When new substantial work starts, add a plan under
-[docs/exec-plans/active](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active) and list it here.
+| Plan | Location | Started | Scope |
+| --- | --- | --- | --- |
+| Ingestion-v2 docs and architecture | [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md) | 2026-04-02 | Docs rewrites and architecture clarification for the ingestion-v2 direction |
 
 ## Completed Plans
 

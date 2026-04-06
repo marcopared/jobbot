@@ -33,12 +33,29 @@ The primary user is an operator running their own job search pipeline:
 
 ## Current Product Loop
 
-1. Trigger intake from scrape, discovery, canonical ingest, URL ingest, or manual intake.
+1. Trigger intake from JobSpy scrape, broad discovery, canonical ingest, source-adapter launch, URL ingest, or manual intake.
 2. Let the backend score, classify, and analyze jobs.
 3. Review artifact-ready jobs in the ready-to-apply queue.
 4. Download a generated artifact if needed.
 5. Open the external apply URL and apply manually.
 6. Mark status in JobBot after the human action.
+
+## Coverage Direction
+
+JobBot's ingestion architecture is being widened so the product can support broader source coverage
+over time without changing what the product is for.
+
+That widening is a behind-the-scenes infrastructure choice, not a new user-facing promise:
+
+- the product still centers on better discovery, better filtering, and faster preparation
+- manual apply remains the implemented product boundary today
+- Scrapling is the default acquisition backend direction for most standard source capture
+- bb-browser is the selective authenticated-session backend direction for a small subset of
+  browser-native or auth-bound sources
+- the current bb-browser implementation only widens ingestion coverage for selected auth-bound
+  sources; it does not add apply automation
+- those backend choices do not turn JobBot into an auto-apply product or imply that every future
+  source is already supported now
 
 ## Product Rules That Agents Must Not Erode
 
@@ -51,6 +68,7 @@ The primary user is an operator running their own job search pipeline:
 ## Current Strengths
 
 - multiple intake lanes
+- room to widen source coverage without changing the product boundary
 - deterministic scoring/classification/ATS analysis
 - durable run tracking
 - grounded resume generation path

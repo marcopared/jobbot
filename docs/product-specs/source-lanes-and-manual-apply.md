@@ -1,11 +1,11 @@
 # Source Lanes And Manual Apply
 
-## Product Rule
+## Current Product Rule
 
-JobBot discovers broadly but only prepares selectively, and it always stops before the actual
+JobBot discovers broadly but only prepares selectively, and it currently stops before the actual
 application submission.
 
-## Supported Source Lanes
+## Current Implemented Source Lanes
 
 ### Canonical ATS
 
@@ -20,8 +20,26 @@ Use these as the highest-confidence sources for job content and apply entry poin
 - JobSpy
 - AGG-1 = Adzuna
 - SERP1 = DataForSEO Google Jobs
+- source-adapter launchers:
+  - public boards: StartupJobs NYC, Built In NYC, Welcome to the Jungle
+  - portfolio boards: Tech:NYC, Primary Venture Partners, Greycroft, USV
+  - auth boards: LinkedIn Jobs, Wellfound, YC
+
+Registered but not currently operator-launchable as live sources:
+
+- TrueUp
+- Underdog.io
+- VentureLoop
 
 Use these for coverage, filtering, and ranking. Do not treat them as canonical truth by default.
+
+Current operator launch surface for adapter-backed discovery:
+
+- `GET /api/jobs/run-source-adapter` exposes capability metadata including family, backend, and
+  launch gating
+- `POST /api/jobs/run-source-adapter` launches adapter-backed runs through the existing non-auth or
+  auth worker paths
+- auth-board sources remain gated by explicit source flags and `BB_BROWSER_ENABLED`
 
 ### Direct URL ingest
 
@@ -29,7 +47,7 @@ Use these for coverage, filtering, and ranking. Do not treat them as canonical t
 
 This is the fastest route from a known job posting to the normal downstream pipeline.
 
-## Confidence Model
+## Current Trust Model
 
 Trust order:
 
@@ -39,6 +57,34 @@ Trust order:
 4. SERP1
 
 SERP1 remains lower-confidence and feature-flagged.
+
+## Approved Ingestion Expansion Direction
+
+This section describes approved product direction for source onboarding. It does not claim broader
+source support is already shipped.
+
+The architecture target is:
+
+- source adapters for source-specific parsing, field mapping, and provenance handling
+- acquisition backends for how content is fetched or captured
+
+Product intent:
+
+- widen coverage over time without blurring the trust distinction between canonical ATS and
+  discovery
+- add new source categories deliberately instead of turning the system into a generic crawling
+  platform
+- keep the product centered on discovery quality, ranking, and preparation rather than automated
+  application
+
+Approved backend direction:
+
+- Scrapling is the default acquisition backend direction for most non-API and non-auth-heavy
+  sources.
+- bb-browser is the selective authenticated-session backend direction for a small subset of
+  browser-native or auth-bound sources.
+- These are backend directions, not user-facing product features or promises of universal current
+  support.
 
 ## Manual Apply Boundary
 
@@ -54,3 +100,5 @@ The product does not:
 - submit forms automatically
 - drive a browser through application workflows
 - mark applications as submitted without user action
+
+That boundary does not change under the approved ingestion expansion direction.

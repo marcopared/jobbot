@@ -10,6 +10,7 @@ python-jobspy>=1.1.0
 pdfplumber>=0.10.0
 playwright>=1.40.0
 httpx>=0.26.0
+scrapling[fetchers]>=0.4.3
 python-dotenv>=1.0.0
 pydantic-settings>=2.1.0
 PyYAML>=6.0.0

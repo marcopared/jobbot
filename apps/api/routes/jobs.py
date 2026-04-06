@@ -22,11 +22,19 @@ from apps.api.schemas import (
     PersonaInfo,
     ResolveJobResponse,
     ScoreBreakdown,
+    SourceAdapterCapabilitiesResponse,
+    SourceAdapterCapability,
+    SourceAdapterRunBody,
+    SourceAdapterRunResponse,
     UpdateStatusRequest,
     UpdateStatusResponse,
 )
 from apps.api.settings import Settings
-from apps.worker.tasks.discovery import run_discovery
+from apps.worker.tasks.discovery import (
+    run_auth_board_source,
+    run_discovery,
+    run_public_board_source,
+)
 from apps.worker.tasks.generation_runs import build_generation_run
 from apps.worker.tasks.ingest import (
     ingest_ashby,
@@ -51,10 +59,15 @@ from core.db.models import (
     SourceRole,
     UserStatus,
 )
+from core.ingestion.registry import build_default_source_registry
+from core.ingestion.source_policies import SOURCE_POLICIES, get_source_policy
+from core.ingestion.sources.public_boards.common import UnsupportedPublicBoardSourceAdapter
+from core.ingestion.types import BackendPreference, SourceKind
 from core.job_status import legacy_status_from_canonical
 from core.run_items import make_run_item
 
 settings = Settings()
+source_registry = build_default_source_registry()
 
 # User workflow: NEW is the initial state; clients may only set SAVED, APPLIED, ARCHIVED.
 WRITABLE_USER_STATUSES = frozenset(
@@ -62,6 +75,117 @@ WRITABLE_USER_STATUSES = frozenset(
 )
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+SOURCE_LABELS: dict[str, str] = {
+    "builtin_nyc": "Built In NYC",
+    "greycroft": "Greycroft",
+    "linkedin_jobs": "LinkedIn Jobs",
+    "primary_vc": "Primary Venture Partners",
+    "startupjobs_nyc": "StartupJobs NYC",
+    "technyc": "Tech:NYC",
+    "trueup": "TrueUp",
+    "underdog": "Underdog",
+    "usv": "USV",
+    "ventureloop": "VentureLoop",
+    "wellfound": "Wellfound",
+    "welcome_to_the_jungle": "Welcome to the Jungle",
+    "yc": "Work at a Startup (YC)",
+}
+
+PORTFOLIO_BOARD_SOURCES = {
+    "technyc",
+    "primary_vc",
+    "greycroft",
+    "usv",
+}
+
+BACKEND_LABELS = {
+    BackendPreference.SCRAPLING.value: "Scrapling",
+    BackendPreference.BB_BROWSER.value: "bb-browser",
+}
+
+SOURCE_FAMILY_LABELS = {
+    "public_board": "Public boards",
+    "portfolio_board": "Portfolio boards",
+    "auth_board": "Authenticated boards",
+}
+
+
+def _source_label(source_name: str) -> str:
+    return SOURCE_LABELS.get(source_name, source_name.replace("_", " ").title())
+
+
+def _source_family_for_policy(source_name: str, source_kind: str) -> str:
+    if source_kind == SourceKind.BROWSER_AUTH.value:
+        return "auth_board"
+    if source_name in PORTFOLIO_BOARD_SOURCES:
+        return "portfolio_board"
+    return "public_board"
+
+
+def _setting_name_for_feature_flag(flag_key: str | None) -> str | None:
+    if not flag_key:
+        return None
+    return flag_key.lower()
+
+
+def _adapter_launch_reason(source_name: str) -> str | None:
+    policy = get_source_policy(source_name)
+    setting_name = _setting_name_for_feature_flag(policy.feature_flag_key)
+    if setting_name and not getattr(settings, setting_name, True):
+        return f"{policy.feature_flag_key}=false"
+    if (
+        policy.backend_preference == BackendPreference.BB_BROWSER.value
+        and not settings.bb_browser_enabled
+    ):
+        return "BB_BROWSER_ENABLED=false"
+
+    adapter = source_registry.create(source_name)
+    if isinstance(adapter, UnsupportedPublicBoardSourceAdapter):
+        return getattr(adapter, "_reason", None) or "Source adapter is registered but currently unsupported."
+    return None
+
+
+def _build_source_adapter_capability(source_name: str) -> SourceAdapterCapability:
+    policy = get_source_policy(source_name)
+    source_family = _source_family_for_policy(source_name, policy.source_kind)
+    launch_reason = _adapter_launch_reason(source_name)
+    setting_name = _setting_name_for_feature_flag(policy.feature_flag_key)
+    enabled = True if setting_name is None else bool(getattr(settings, setting_name, True))
+    return SourceAdapterCapability(
+        source_name=source_name,
+        source_label=_source_label(source_name),
+        source_family=source_family,
+        family_label=SOURCE_FAMILY_LABELS[source_family],
+        source_kind=policy.source_kind,
+        source_role=policy.source_role_default,
+        backend=policy.backend_preference,
+        backend_label=BACKEND_LABELS.get(policy.backend_preference, policy.backend_preference),
+        requires_auth=policy.requires_auth,
+        feature_flag_key=policy.feature_flag_key,
+        enabled=enabled,
+        launch_enabled=launch_reason is None,
+        launch_reason=launch_reason,
+    )
+
+
+def _list_source_adapter_capabilities() -> list[SourceAdapterCapability]:
+    items: list[SourceAdapterCapability] = []
+    family_order = {"public_board": 0, "portfolio_board": 1, "auth_board": 2}
+    for source_name, policy in SOURCE_POLICIES.items():
+        if policy.backend_preference not in {
+            BackendPreference.SCRAPLING.value,
+            BackendPreference.BB_BROWSER.value,
+        }:
+            continue
+        items.append(_build_source_adapter_capability(source_name))
+    return sorted(
+        items,
+        key=lambda item: (
+            family_order.get(item.source_family, 99),
+            item.source_label.lower(),
+        ),
+    )
 
 
 def _job_to_list_item(j: Job) -> JobListItem:
@@ -75,9 +199,9 @@ def _job_to_list_item(j: Job) -> JobListItem:
     )
     return JobListItem(
         id=str(j.id),
-        title=j.normalized_title or j.title or "",
-        company=j.normalized_company or j.company_name_raw or "",
-        location=j.normalized_location or j.location,
+        title=j.title or j.normalized_title or "",
+        company=j.company_name_raw or j.normalized_company or "",
+        location=j.location or j.normalized_location,
         score=j.score_total or 0.0,
         persona=persona,
         pipeline_status=j.pipeline_status or "INGESTED",
@@ -158,9 +282,9 @@ def _job_to_detail_response(
         }
     return JobDetailResponse(
         id=str(j.id),
-        title=j.normalized_title or j.title or "",
-        company=j.normalized_company or j.company_name_raw or "",
-        location=j.normalized_location or j.location,
+        title=j.title or j.normalized_title or "",
+        company=j.company_name_raw or j.normalized_company or "",
+        location=j.location or j.normalized_location,
         description=j.description,
         url=j.url,
         apply_url=j.apply_url,
@@ -229,6 +353,75 @@ class RunDiscoveryBody(BaseModel):
 
 class BulkJobIds(BaseModel):
     job_ids: list[str]
+
+
+@router.get(
+    "/run-source-adapter",
+    response_model=SourceAdapterCapabilitiesResponse,
+)
+async def list_source_adapter_capabilities():
+    """List operator-visible adapter-backed source capabilities for ingestion-v2."""
+    return SourceAdapterCapabilitiesResponse(items=_list_source_adapter_capabilities())
+
+
+@router.post(
+    "/run-source-adapter",
+    response_model=SourceAdapterRunResponse,
+)
+async def run_source_adapter(
+    body: SourceAdapterRunBody,
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger an ingestion-v2 source-adapter run via the existing public/auth workers."""
+    try:
+        capability = _build_source_adapter_capability(body.source_name)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported source adapter: {body.source_name}.",
+        ) from exc
+
+    if not capability.launch_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail=capability.launch_reason or f"{body.source_name} is not launchable.",
+        )
+
+    scrape_run = ScrapeRun(
+        source=body.source_name,
+        status=ScrapeRunStatus.RUNNING.value,
+        params_json={
+            "launch_mode": "source_adapter",
+            "source_name": body.source_name,
+            "source_family": capability.source_family,
+            "backend": capability.backend,
+            "max_results": body.max_results,
+        },
+    )
+    db.add(scrape_run)
+    await db.commit()
+    await db.refresh(scrape_run)
+
+    task_kwargs = {
+        "run_id": str(scrape_run.id),
+        "source_name": body.source_name,
+        "max_results": body.max_results or 25,
+    }
+    task_fn = (
+        run_auth_board_source.delay
+        if capability.source_family == "auth_board"
+        else run_public_board_source.delay
+    )
+    task = task_fn(**task_kwargs)
+    return SourceAdapterRunResponse(
+        run_id=str(scrape_run.id),
+        status=ScrapeRunStatus.RUNNING.value,
+        task_id=str(task.id),
+        source_name=body.source_name,
+        source_label=capability.source_label,
+        source_family=capability.source_family,
+        backend=capability.backend,
+    )
 
 
 @router.post("/run-ingestion")

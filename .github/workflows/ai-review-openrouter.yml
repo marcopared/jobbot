@@ -3,12 +3,12 @@ name: AI Review (OpenRouter)
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  push:
-    branches:
-      - main
-      - develop
-      - "feature/**"
-      - "f/**"
+  # push:
+  #   branches:
+  #     - main
+  #     - develop
+  #     - "feature/**"
+  #     - "f/**"
 
 concurrency:
   group: ai-review-openrouter-${{ github.ref }}

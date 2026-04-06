@@ -33,6 +33,13 @@ from core.db.models import (
 )
 from core.db.session import get_sync_session
 from core.dedup import canonicalize_apply_url, compute_dedup_hash
+from core.ingestion import get_source_policy, source_registry
+from core.ingestion.sources.base import SourceAdapter
+from core.ingestion.types import (
+    AcquisitionBatch,
+    AcquisitionRecord,
+    BackendPreference,
+)
 from core.observability import get_metrics, log_context
 from core.observability.metrics import TaskTimer
 from core.run_items import make_run_item
@@ -72,6 +79,46 @@ def _publish_discovery_log(level: str, message: str, run_id: str | None = None) 
         client.close()
     except Exception:
         logger.debug("Failed to publish discovery log to Redis", exc_info=True)
+
+
+def _setting_name_for_feature_flag(flag_key: str | None) -> str | None:
+    if not flag_key:
+        return None
+    return flag_key.lower()
+
+
+def _source_disabled_reason(source_name: str) -> str | None:
+    try:
+        policy = get_source_policy(source_name)
+    except KeyError:
+        return None
+    setting_name = _setting_name_for_feature_flag(policy.feature_flag_key)
+    if not setting_name:
+        return None
+    if getattr(settings, setting_name, True):
+        return None
+    return f"{policy.feature_flag_key}=false"
+
+
+def _backend_disabled_reason(source_name: str) -> str | None:
+    try:
+        policy = get_source_policy(source_name)
+    except KeyError:
+        return None
+    if policy.backend_preference != BackendPreference.BB_BROWSER.value:
+        return None
+    if settings.bb_browser_enabled:
+        return None
+    return "BB_BROWSER_ENABLED=false"
+
+
+def _skip_run_for_disabled_source(run_id: str, source_name: str) -> dict | None:
+    reason = _source_disabled_reason(source_name) or _backend_disabled_reason(source_name)
+    if reason is None:
+        return None
+    logger.info("Skipping %s discovery run_id=%s (%s)", source_name, run_id, reason)
+    mark_run_skipped(run_id, reason)
+    return {"status": "skipped", "reason": reason}
 
 
 def _run_discovery_persist(
@@ -305,6 +352,241 @@ def _run_discovery_persist(
     }
 
 
+def _finalize_failed_run(run_id: str, *, source_name: str, error: str) -> dict:
+    with get_sync_session() as session:
+        run = session.get(ScrapeRun, UUID(run_id))
+        if run:
+            run.status = ScrapeRunStatus.FAILED.value
+            run.finished_at = datetime.now(timezone.utc)
+            run.error_text = error
+            run.stats_json = {
+                "fetched": 0,
+                "inserted": 0,
+                "duplicates": 0,
+                "errors": 1,
+            }
+            run.items_json = []
+            session.commit()
+    return {"run_id": run_id, "status": "FAILED", "error": error}
+
+
+def _run_source_adapter_persist(
+    run_id: str,
+    *,
+    source_name: str,
+    source_adapter: SourceAdapter,
+    result: AcquisitionBatch,
+) -> dict:
+    if result.error and not result.records:
+        return _finalize_failed_run(run_id, source_name=source_name, error=result.error)
+
+    inserted = 0
+    duplicates = 0
+    inserted_job_ids: list[str] = []
+    run_items: list[dict] = []
+
+    with get_sync_session() as session:
+        apply_url_to_job_id: dict[str, UUID] = {}
+        for row in session.execute(
+            select(Job.id, Job.apply_url).where(Job.apply_url.isnot(None))
+        ).all():
+            job_id, apply_url = row[0], row[1]
+            if apply_url:
+                canonical_url = canonicalize_apply_url(apply_url)
+                if canonical_url and canonical_url not in apply_url_to_job_id:
+                    apply_url_to_job_id[canonical_url] = job_id
+
+        for index, acquired in enumerate(result.records, start=1):
+            canonical = source_adapter.normalize(acquired)
+            raw_payload = acquired.raw_payload if isinstance(acquired, AcquisitionRecord) else {}
+            raw_source_job_id = None
+            if isinstance(raw_payload, dict):
+                raw_source_job_id = raw_payload.get("external_id")
+
+            if canonical is None:
+                run_items.append(
+                    make_run_item(
+                        index=index,
+                        outcome="skipped",
+                        job_id=None,
+                        dedup_hash=None,
+                        source=source_name,
+                        source_job_id=str(raw_source_job_id) if raw_source_job_id else None,
+                        title=raw_payload.get("title") if isinstance(raw_payload, dict) else None,
+                        company_name=raw_payload.get("company") if isinstance(raw_payload, dict) else None,
+                        location=raw_payload.get("location") if isinstance(raw_payload, dict) else None,
+                        url=raw_payload.get("source_url") if isinstance(raw_payload, dict) else None,
+                        apply_url=raw_payload.get("apply_url") if isinstance(raw_payload, dict) else None,
+                        ats_type=source_name,
+                        raw_payload_json=raw_payload,
+                        reason="normalize_failed",
+                    )
+                )
+                continue
+
+            url_for_dedup = canonical.apply_url or canonical.source_url or ""
+            canonical_apply_url = canonicalize_apply_url(url_for_dedup)
+            dedup_hash = compute_dedup_hash(
+                normalized_company=canonical.normalized_company,
+                normalized_title=canonical.normalized_title,
+                normalized_location=canonical.normalized_location or "",
+                apply_url=url_for_dedup or None,
+            )
+            provenance = acquired.provenance
+            source_confidence = _compute_source_confidence(canonical, source_name)
+
+            job_id_for_source: UUID | None = None
+            inserted_job_id: UUID | None = None
+            existing_job: tuple | None = None
+            dedup_reason = "inserted"
+            if canonical_apply_url and canonical_apply_url in apply_url_to_job_id:
+                job_id_for_source = apply_url_to_job_id[canonical_apply_url]
+                dedup_reason = "exact_url"
+                existing_job = (job_id_for_source,)
+
+            if job_id_for_source is None:
+                stmt = (
+                    insert(Job)
+                    .values(
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        source_role=SourceRole.DISCOVERY.value,
+                        source_confidence=source_confidence,
+                        resolution_status=ResolutionStatus.PENDING.value,
+                        title=canonical.title,
+                        raw_title=canonical.title,
+                        normalized_title=canonical.normalized_title,
+                        raw_company=canonical.company,
+                        normalized_company=canonical.normalized_company,
+                        company_name_raw=canonical.company,
+                        raw_location=canonical.location,
+                        normalized_location=canonical.normalized_location,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url or "",
+                        apply_url=canonical.apply_url,
+                        description=canonical.description,
+                        posted_at=canonical.posted_at,
+                        ats_type="unknown",
+                        status="NEW",
+                        user_status="NEW",
+                        pipeline_status="INGESTED",
+                        score_total=0.0,
+                        source_payload_json=canonical.raw_payload,
+                        dedup_hash=dedup_hash,
+                    )
+                    .on_conflict_do_nothing(index_elements=["dedup_hash"])
+                    .returning(Job.id)
+                )
+                inserted_job_id = session.execute(stmt).scalar_one_or_none()
+                job_id_for_source = inserted_job_id
+                if inserted_job_id is None:
+                    existing_job = session.execute(
+                        select(Job.id).where(Job.dedup_hash == dedup_hash)
+                    ).first()
+                    if existing_job:
+                        job_id_for_source = existing_job[0]
+                        dedup_reason = "dedup_hash"
+
+            if job_id_for_source is not None:
+                provenance_meta = {
+                    "fetch_timestamp": provenance.fetch_timestamp,
+                    "source_url": provenance.source_url,
+                    "connector_version": provenance.connector_version,
+                    "capture_metadata": dict(acquired.capture_metadata or {}),
+                    "debug_metadata": dict(acquired.debug_metadata or {}),
+                }
+                session.execute(
+                    insert(JobSourceRecord)
+                    .values(
+                        job_id=job_id_for_source,
+                        source_name=source_name,
+                        external_id=canonical.external_id,
+                        raw_data=canonical.raw_payload,
+                        provenance_metadata=provenance_meta,
+                    )
+                    .on_conflict_do_nothing(index_elements=["source_name", "external_id"])
+                )
+
+            if inserted_job_id is not None:
+                inserted += 1
+                inserted_job_ids.append(str(inserted_job_id))
+                if canonical_apply_url and job_id_for_source:
+                    apply_url_to_job_id[canonical_apply_url] = job_id_for_source
+                run_items.append(
+                    make_run_item(
+                        index=index,
+                        outcome="inserted",
+                        job_id=str(inserted_job_id),
+                        dedup_hash=dedup_hash,
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type=source_name,
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                        source_confidence=source_confidence,
+                    )
+                )
+            else:
+                duplicates += 1
+                existing_job_id = str(existing_job[0]) if existing_job else None
+                run_items.append(
+                    make_run_item(
+                        index=index,
+                        outcome="duplicate",
+                        job_id=existing_job_id,
+                        dedup_hash=dedup_hash,
+                        source=source_name,
+                        source_job_id=canonical.external_id,
+                        title=canonical.title,
+                        company_name=canonical.company,
+                        location=canonical.location,
+                        url=canonical.source_url or canonical.apply_url,
+                        apply_url=canonical.apply_url,
+                        ats_type=source_name,
+                        raw_payload_json=canonical.raw_payload,
+                        dedup_reason=dedup_reason,
+                    )
+                )
+
+        run = session.get(ScrapeRun, UUID(run_id))
+        if run:
+            run.status = ScrapeRunStatus.SUCCESS.value
+            run.finished_at = datetime.now(timezone.utc)
+            run.stats_json = {
+                "fetched": result.stats.get("fetched", 0),
+                "inserted": inserted,
+                "duplicates": duplicates,
+                "errors": result.stats.get("errors", 0),
+            }
+            run.items_json = run_items
+            run.error_text = result.error
+            session.commit()
+
+    get_metrics().increment("jobs.discovered", value=inserted, tags=[f"source:{source_name}"])
+    get_metrics().increment("duplicates.suppressed", value=duplicates, tags=[f"source:{source_name}"])
+    if inserted_job_ids:
+        (
+            score_jobs.s(inserted_job_ids)
+            | classify_jobs.s()
+            | ats_match_resume.s()
+            | evaluate_generation_gate.s()
+        ).delay()
+    return {
+        "run_id": run_id,
+        "status": "SUCCESS",
+        "stats": {
+            "fetched": result.stats.get("fetched", 0),
+            "inserted": inserted,
+            "duplicates": duplicates,
+        },
+    }
+
+
 @celery_app.task(
     bind=True,
     max_retries=3,
@@ -448,3 +730,109 @@ def run_discovery(
             run_id=run_id,
         )
         return out
+
+
+@celery_app.task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    acks_late=True,
+)
+def run_public_board_source(
+    self,
+    run_id: str,
+    source_name: str,
+    max_results: int | None = 25,
+):
+    with log_context(run_id=run_id, source_name=source_name, task_name="run_public_board_source"):
+        return _run_source_adapter_task(
+            task_self=self,
+            run_id=run_id,
+            source_name=source_name,
+            max_results=max_results,
+            source_family="public-board",
+        )
+
+
+@celery_app.task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=60,
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    acks_late=True,
+)
+def run_auth_board_source(
+    self,
+    run_id: str,
+    source_name: str,
+    max_results: int | None = 25,
+):
+    with log_context(run_id=run_id, source_name=source_name, task_name="run_auth_board_source"):
+        return _run_source_adapter_task(
+            task_self=self,
+            run_id=run_id,
+            source_name=source_name,
+            max_results=max_results,
+            source_family="auth-board",
+        )
+
+
+def _run_source_adapter_task(
+    *,
+    task_self,
+    run_id: str,
+    source_name: str,
+    max_results: int | None,
+    source_family: str,
+) -> dict:
+    skip_result = _skip_run_for_disabled_source(run_id, source_name)
+    if skip_result is not None:
+        return skip_result
+
+    try:
+        source_adapter = source_registry.create(source_name)
+    except Exception as exc:
+        return _finalize_failed_run(
+            run_id,
+            source_name=source_name,
+            error=f"Unsupported {source_family} source: {source_name} ({exc})",
+        )
+
+    display_name = "Auth-board" if source_family == "auth-board" else "Public-board"
+    _publish_discovery_log(
+        "INFO",
+        f"{display_name} discovery started source={source_name}",
+        run_id=run_id,
+    )
+    try:
+        with TaskTimer("discovery.latency", tags=[f"source:{source_name}"]):
+            result = source_adapter.acquire(max_results=max_results or 25)
+    except Exception as exc:
+        get_metrics().increment("discovery.failure", tags=[f"source:{source_name}"])
+        _publish_discovery_log(
+            "ERROR",
+            f"{display_name} acquisition failed source={source_name}: {exc}",
+            run_id=run_id,
+        )
+        try:
+            raise task_self.retry(exc=exc)
+        except task_self.MaxRetriesExceededError:
+            return _finalize_failed_run(run_id, source_name=source_name, error=str(exc))
+
+    output = _run_source_adapter_persist(
+        run_id,
+        source_name=source_name,
+        source_adapter=source_adapter,
+        result=result,
+    )
+    _publish_discovery_log(
+        "INFO",
+        f"{display_name} discovery finished source={source_name} fetched={result.stats.get('fetched', 0)} inserted={output.get('stats', {}).get('inserted', 0)}",
+        run_id=run_id,
+    )
+    return output

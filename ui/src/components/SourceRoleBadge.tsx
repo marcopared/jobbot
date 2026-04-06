@@ -3,7 +3,9 @@ export function sourceRoleLabel(source: string | null): string | null {
   if (!source) return null;
   const s = source.toLowerCase();
   if (["greenhouse", "lever", "ashby"].includes(s)) return "Canonical ATS";
-  if (["agg1", "serp1", "jobspy", "wellfound", "builtinnyc", "yc"].includes(s))
+  if (
+    ["agg1", "serp1", "jobspy", "linkedin_jobs", "wellfound", "builtinnyc", "builtin_nyc", "yc"].includes(s)
+  )
     return "Discovery";
   return null;
 }

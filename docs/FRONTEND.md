@@ -6,6 +6,9 @@ The frontend is a thin operator console over the REST API. It helps the user ins
 ingestion paths, review pipeline results, and download artifacts. It does not contain core business
 logic.
 
+Approved ingestion-v2 work changes backend acquisition architecture, not the current route model or
+the frontend's responsibility as an operator console over existing API contracts.
+
 ## Current Routes
 
 Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
@@ -22,7 +25,7 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
 1. Render current job and run state.
 2. Trigger already-supported backend routes.
 3. Expose manual operator actions:
-   save, archive, applied, generate resume, run scrape/discovery/ingest, manual intake.
+   save, archive, applied, generate resume, run scrape/discovery/ingest/source-adapter, manual intake.
 4. Keep the user oriented around manual apply, not hidden automation.
 
 ## Important Components
@@ -57,6 +60,14 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
   - JobSpy scrape
   - discovery run
   - canonical ingestion
+  - source-adapter launch
+- the Source Adapters card is capability-driven:
+  - the UI reads family, backend, labels, and launch gating from `GET /api/jobs/run-source-adapter`
+  - the UI does not guess public vs portfolio vs auth families from ad hoc source-name parsing
+- current operator-facing adapter families are:
+  - public boards
+  - portfolio boards
+  - authenticated boards
 - lists runs and links into per-item inspection
 
 ### Job Detail
@@ -73,9 +84,11 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
 
 1. UI should not infer discovery vs canonical from new ad hoc rules.
    Use backend data or the existing constrained source mapping.
-2. Do not present automation that violates the manual-apply boundary.
-3. Avoid letting UI-only conveniences redefine backend contracts.
-4. Keep the API client shapes aligned with the run-item normalization contract.
+2. UI should not infer source-adapter family or backend semantics from string parsing when the
+   backend capability read model already provides them.
+3. Do not present automation that violates the manual-apply boundary.
+4. Avoid letting UI-only conveniences redefine backend contracts.
+5. Keep the API client shapes aligned with the run-item normalization contract.
 
 ## Known Frontend Gaps
 

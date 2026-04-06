@@ -9,13 +9,20 @@ JobBot is a local-first job discovery and decision-support system. It ingests jo
 ATS providers and lower-confidence discovery lanes, scores and classifies them, runs ATS analysis,
 generates grounded resume artifacts for eligible jobs, and stops at a manual ready-to-apply queue.
 
+The current approved architecture direction widens ingestion through source adapters and acquisition
+backends without changing the current product boundary. Scrapling is the default acquisition-backend
+direction for most non-API and non-auth-heavy sources. bb-browser is the selective authenticated
+browser/session backend direction for a small subset of auth-bound or browser-native ingestion
+sources. It is a capability layer only, not a product-logic layer.
+
 ## Hard Product Boundaries
 
-1. Manual apply is the final human step.
-2. Do not add auto-apply or browser automation for applications.
+1. Manual apply is the current implemented final human step.
+2. Do not add auto-apply or browser automation for application flows.
 3. Keep discovery sources distinct from canonical ATS sources.
 4. SERP1 is feature-flagged and lower-confidence than AGG-1 and canonical ATS.
 5. Follow current implemented behavior over aspirational plans.
+6. Keep acquisition infrastructure separate from scoring, trust policy, persistence rules, and other product logic.
 
 ## Repository Layout
 
@@ -38,24 +45,27 @@ docs/
 │   ├── source-lanes-and-manual-apply.md
 │   ├── ready-to-apply-operator-loop.md
 │   └── manual-intake-and-generation.md
-├── references/              <- Agent-friendly reference summaries
-├── DESIGN.md                <- System design baseline
-├── FRONTEND.md              <- UI surface and operator flow
-├── PLANS.md                 <- Plan index
-├── PRODUCT_SENSE.md         <- Product intent and boundaries
-├── QUALITY_SCORE.md         <- Current quality assessment
-├── RELIABILITY.md           <- Invariants, tests, and verification limits
-└── SECURITY.md              <- Security-relevant boundaries and controls
+├── references/               <- Agent-friendly reference summaries
+├── DESIGN.md                 <- System design baseline + approved ingestion-v2 direction
+├── FRONTEND.md               <- UI surface and operator flow
+├── PLANS.md                  <- Plan index
+├── PRODUCT_SENSE.md          <- Product intent and boundaries
+├── QUALITY_SCORE.md          <- Current quality assessment
+├── RELIABILITY.md            <- Invariants, tests, and verification limits
+└── SECURITY.md               <- Security-relevant boundaries and controls
 ```
 
 ## Read Order
 
 1. [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md)
-2. [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
-3. [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
-4. [docs/design-docs/index.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/index.md)
-5. [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md)
-6. [README.md](/Users/marcoparedes/dev/jobbot/README.md)
+2. [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md)
+3. [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
+4. [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
+5. [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md)
+6. [docs/design-docs/index.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/index.md)
+7. [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md)
+8. [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md)
+9. [README.md](/Users/marcoparedes/dev/jobbot/README.md)
 
 ## Change Rules
 
@@ -68,18 +78,27 @@ docs/
 4. Preserve run durability:
    `ScrapeRun` and `GenerationRun` rows should reach terminal states on success, skip, or failure.
 5. Keep resume generation grounded in inventory data, not freeform LLM output.
+6. For ingestion-v2 work:
+   - prefer widening the acquisition layer over rewriting persistence or downstream analysis
+   - use Scrapling as the default acquisition backend direction
+   - use bb-browser only for ingestion cases that truly require an authenticated browser/session
+   - do not let bb-browser own product/business logic
+7. Do not document approved direction as implemented runtime unless the code now does it.
 
 ## Where To Look
 
 | Need | Document |
 | --- | --- |
 | Runtime architecture and data flow | [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md) |
+| Design baseline and ingestion-v2 direction | [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md) |
 | Product boundaries and operating model | [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md) |
 | Reliability invariants and regression suites | [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md) |
+| Security and authenticated-browser ingestion boundaries | [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md) |
 | Active product specs | [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md) |
 | Current design beliefs | [docs/design-docs/core-beliefs.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/core-beliefs.md) |
 | UI pages and operator flow | [docs/FRONTEND.md](/Users/marcoparedes/dev/jobbot/docs/FRONTEND.md) |
 | Provider/reference summaries | [docs/references](/Users/marcoparedes/dev/jobbot/docs/references) |
+| Current active implementation plan | [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md) |
 
 ## Verification Minimum
 
