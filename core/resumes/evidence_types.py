@@ -78,6 +78,46 @@ class ResumeEvidenceItem:
 
 
 @dataclass(frozen=True)
+class ResumeEvidenceSource:
+    """Metadata for a single evidence source or targeting input."""
+
+    source_name: str
+    required: bool
+    present: bool
+    source_kind: str
+    format: str | None = None
+    path: str | None = None
+    content_hash: str | None = None
+    item_count: int = 0
+    used_for_facts: bool = True
+    used_for_targeting: bool = False
+    notes: tuple[str, ...] = ()
+    metadata: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.source_name.strip():
+            raise ValueError("ResumeEvidenceSource.source_name is required")
+        if not self.source_kind.strip():
+            raise ValueError("ResumeEvidenceSource.source_kind is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source_name": self.source_name,
+            "required": self.required,
+            "present": self.present,
+            "source_kind": self.source_kind,
+            "format": self.format,
+            "path": self.path,
+            "content_hash": self.content_hash,
+            "item_count": self.item_count,
+            "used_for_facts": self.used_for_facts,
+            "used_for_targeting": self.used_for_targeting,
+            "notes": list(self.notes),
+            "metadata": {key: value for key, value in self.metadata},
+        }
+
+
+@dataclass(frozen=True)
 class ResumeEvidenceRole:
     """Structured experience entry backed by evidence items."""
 
@@ -148,6 +188,9 @@ class ResumeEvidencePackage:
     roles: tuple[ResumeEvidenceRole, ...]
     projects: tuple[ResumeEvidenceProject, ...]
     items: tuple[ResumeEvidenceItem, ...]
+    source_metadata: tuple[ResumeEvidenceSource, ...] = ()
+    missing_optional_sources: tuple[str, ...] = ()
+    inputs_hash: str | None = None
     inventory_version_hash: str | None = None
     schema_version: str = "resume-evidence-package-v2"
     source_kind: str = "inventory-only"
@@ -158,6 +201,9 @@ class ResumeEvidencePackage:
             raise ValueError("ResumeEvidencePackage item ids must be unique")
         if not self.source_kind.strip():
             raise ValueError("ResumeEvidencePackage.source_kind is required")
+        source_names = {source.source_name for source in self.source_metadata}
+        if len(source_names) != len(self.source_metadata):
+            raise ValueError("ResumeEvidencePackage source names must be unique")
         for role in self.roles:
             missing = [bullet_id for bullet_id in role.bullet_ids if bullet_id not in item_ids]
             if missing:
@@ -186,6 +232,7 @@ class ResumeEvidencePackage:
         return {
             "schema_version": self.schema_version,
             "source_kind": self.source_kind,
+            "inputs_hash": self.inputs_hash,
             "inventory_version_hash": self.inventory_version_hash,
             "contact": self.contact.to_dict(),
             "summary_variants": dict(self.summary_variants),
@@ -194,6 +241,8 @@ class ResumeEvidencePackage:
             "roles": [role.to_dict() for role in self.roles],
             "projects": [project.to_dict() for project in self.projects],
             "items": [item.to_dict() for item in self.items],
+            "source_metadata": [source.to_dict() for source in self.source_metadata],
+            "missing_optional_sources": list(self.missing_optional_sources),
         }
 
     def compute_hash(self) -> str:

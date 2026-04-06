@@ -89,6 +89,20 @@ cd ui && npm run dev -- --host 127.0.0.1 --port 5173
 
 All paths run score → classify → ATS analysis. Resume generation: manual via `POST /api/jobs/{id}/generate-resume`, or automatic when `ENABLE_AUTO_RESUME_GENERATION=true` and the job passes the generation gate.
 
+### Local resume evidence inputs
+
+Resume generation still supports the existing required inventory file at
+`data/experience_inventory.yaml`. It may also read optional local-first supplemental evidence from
+`data/resume_inputs/`:
+
+- `current_resume.{md,txt,json,yaml,yml}`
+- `current_role.{md,txt,json,yaml,yml}`
+- `achievements.{md,txt,json,yaml,yml}`
+- `projects/` containing `md`, `txt`, `json`, or `yaml` files
+
+Missing optional sources are reported explicitly in internal generation metadata; they are not
+required for the inventory-only path to keep working. No live Jira integration is used.
+
 ## Known Issues / Verification Reality
 
 - The repo has focused regression coverage for several high-risk invariants, but that is not the same as full end-to-end provider verification.

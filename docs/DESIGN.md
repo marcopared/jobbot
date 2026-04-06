@@ -96,7 +96,8 @@ through it, and discovery resolution rewinds enriched jobs back into it.
 Artifact generation is deliberately conservative:
 
 - requires completed ATS analysis
-- uses the experience inventory YAML as the only content source
+- keeps the experience inventory YAML as the default required content source
+- may assemble additional grounded local file-backed evidence from user-side inputs
 - selects and lightly rewrites grounded bullets
 - renders HTML, then PDF via Playwright
 - ends in a ready-to-apply queue and external manual apply URL

@@ -46,5 +46,6 @@ Allowed only when:
 
 ### Grounding rule
 
-Resume generation must stay grounded in the experience inventory YAML and deterministic selection
-logic. It should not become a freeform narrative generation feature.
+Resume generation must stay grounded in the experience inventory YAML plus deterministic local
+user-side evidence inputs when present, with deterministic selection logic. It should not become a
+freeform narrative generation feature or a live external-source enrichment feature.

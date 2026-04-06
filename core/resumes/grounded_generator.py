@@ -15,14 +15,12 @@ from sqlalchemy.orm import Session
 
 from apps.api.settings import Settings
 from core.db.models import Artifact, ArtifactKind, Job, JobAnalysis, PipelineStatus
-from core.inventory.loader import compute_inventory_hash, load_inventory
-from core.inventory.types import ExperienceInventory
+from core.resumes.evidence_builder import build_resume_evidence_package
 from core.resumes.html_template import TEMPLATE_VERSION, render_html
 from core.resumes.pdf_renderer import render_html_to_pdf_bytes
 from core.resumes.v2_pipeline import (
     build_effective_input,
     build_fit_result,
-    build_inventory_evidence_package,
     build_layout_plan,
     build_resume_payload,
 )
@@ -110,7 +108,6 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
 
     target_keywords = _build_target_keywords(job, analysis)
 
-    # Load inventory
     inv_path = Path(settings.experience_inventory_path)
     if not inv_path.is_file():
         logger.warning("Experience inventory not found at %s", inv_path)
@@ -121,18 +118,18 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
         )
 
     try:
-        inventory: ExperienceInventory = load_inventory(inv_path)
+        evidence_package = build_resume_evidence_package(
+            job,
+            inventory_path=inv_path,
+            inputs_dir=settings.resume_inputs_dir,
+        )
     except Exception as e:
-        logger.exception("Failed to load experience inventory")
+        logger.exception("Failed to build resume evidence package")
         return GenerationResult(
             artifact=None,
             status="failed",
             error=str(e),
         )
-
-    inv_hash = compute_inventory_hash(inventory)
-
-    evidence_package = build_inventory_evidence_package(inventory, inv_hash)
 
     found_keywords = {
         keyword.lower() for keyword in (analysis.found_keywords or [])
@@ -207,7 +204,7 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
         format="pdf",
         version="1",
         template_version=TEMPLATE_VERSION,
-        inventory_version_hash=inv_hash,
+        inventory_version_hash=evidence_package.inventory_version_hash,
         generation_status="success",
         meta_json={
             "grounded": True,
@@ -220,9 +217,24 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
                 "fit_schema_version": fit_result.schema_version,
                 "layout_schema_version": layout_plan.schema_version,
                 "source_kind": evidence_package.source_kind,
+                "inputs_hash": evidence_package.inputs_hash,
                 "evidence_hash": evidence_package.compute_hash(),
                 "fit_hash": fit_result.compute_hash(),
                 "effective_input_hash": payload.effective_input_hash,
+                "missing_optional_sources": list(evidence_package.missing_optional_sources),
+                "source_metadata": [
+                    {
+                        "source_name": source.source_name,
+                        "required": source.required,
+                        "present": source.present,
+                        "source_kind": source.source_kind,
+                        "format": source.format,
+                        "item_count": source.item_count,
+                        "used_for_facts": source.used_for_facts,
+                        "used_for_targeting": source.used_for_targeting,
+                    }
+                    for source in evidence_package.source_metadata
+                ],
             },
         },
     )

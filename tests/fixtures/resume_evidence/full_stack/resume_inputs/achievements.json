@@ -1,0 +1,12 @@
+[
+  {
+    "text": "Exceeded quarterly reliability goals with zero Sev1 incidents.",
+    "tags": ["reliability"],
+    "metrics": ["0 Sev1"]
+  },
+  {
+    "text": "Recognized for mentoring engineers across two teams.",
+    "tags": ["leadership"],
+    "metrics": ["2 teams"]
+  }
+]

@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     ntfy_topic_url: str = ""
     master_skills_path: str = "./storage/master_skills.json"
     experience_inventory_path: str = "./data/experience_inventory.yaml"
+    resume_inputs_dir: str = "./data/resume_inputs"
 
     # Artifact storage: local | gcs
     artifact_storage_provider: str = "local"

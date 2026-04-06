@@ -181,7 +181,11 @@ Two generation entry points exist:
 Grounding model:
 
 - inventory file: [data/experience_inventory.yaml](/Users/marcoparedes/dev/jobbot/data/experience_inventory.yaml)
+- optional local-first supplemental inputs directory:
+  [data/resume_inputs](/Users/marcoparedes/dev/jobbot/data/resume_inputs)
 - selection logic: [core/resumes/selection.py](/Users/marcoparedes/dev/jobbot/core/resumes/selection.py)
+- evidence assembly:
+  [core/resumes/evidence_builder.py](/Users/marcoparedes/dev/jobbot/core/resumes/evidence_builder.py)
 - rendering:
   - HTML template
   - Playwright PDF render
