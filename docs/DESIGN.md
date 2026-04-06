@@ -97,11 +97,24 @@ Artifact generation is deliberately conservative:
 
 - requires completed ATS analysis
 - keeps the experience inventory YAML as the default required content source
-- may assemble additional grounded local file-backed evidence from user-side inputs
+- always includes `target_job_description` as a targeting-only required source
+- may assemble additional grounded local file-backed evidence from:
+  - `current_resume`
+  - `current_role`
+  - `achievements`
+  - `project_writeups`
 - selects and lightly rewrites grounded bullets
 - preserves the current Letter + 0.5in default geometry through shared layout constants
 - applies deterministic fit planning and bounded compaction before render
 - validates rendered PDFs for one-page fit before artifact success is recorded by default
+- records exact fit outcomes as `fit_success_one_page`, `fit_success_multi_page_fallback`, or
+  `fit_failed_overflow`
+- persists a three-file artifact bundle on success:
+  - primary PDF with `artifact_role=resume_pdf_primary`
+  - payload JSON with `artifact_role=resume_payload`
+  - diagnostics JSON with `artifact_role=resume_diagnostics`
+- attaches a shared `resume_v2` metadata envelope carrying `payload_schema_version`, `inputs_hash`,
+  `fit_outcome`, `fit_diagnostics`, and `evidence_completeness`
 - ends in a ready-to-apply queue and external manual apply URL
 
 ### Current operator surfaces
@@ -116,6 +129,12 @@ Artifact generation is deliberately conservative:
 - Run detail
 - Manual job intake
 
+Resume-v2 operator behavior is intentionally narrow:
+
+- the queue leads the user into Job Detail for artifact review and manual apply
+- Job Detail keeps the PDF primary and exposes the JSON sidecars as supporting files
+- artifact summaries surfaced to the UI come from backend metadata, not UI recomputation
+
 The UI is an operator console, not a consumer product and not an autonomous agent controller.
 
 ### Preserved contracts
@@ -125,6 +144,8 @@ The UI is an operator console, not a consumer product and not an autonomous agen
 3. Resolution enriches the existing discovery job instead of creating a second canonical job row.
 4. Discovery confidence is explicit and feeds generation gating.
 5. Signed artifact URLs are generated on demand for GCS-backed storage.
+6. Successful resume generation persists the primary PDF plus payload/diagnostics sidecars as one
+   logical artifact bundle.
 
 ## Approved Ingestion-V2 Direction
 

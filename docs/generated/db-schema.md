@@ -1,7 +1,7 @@
 # Database Schema Summary
 
 Generated-style summary of the current database model, based on
-[core/db/models.py](/Users/marcoparedes/dev/jobbot/core/db/models.py) and the Alembic migrations
+[core/db/models.py](../../core/db/models.py) and the Alembic migrations
 present on 2026-03-24.
 
 ## Primary Tables
@@ -164,4 +164,4 @@ Legacy intervention table retained for compatibility. Not part of the current pr
 2. `job_analyses` is the canonical persisted analysis table even though some mirrored fields still
    exist on `jobs`.
 3. `ScrapeRun.items_json` has a canonical normalization layer in
-   [core/run_items.py](/Users/marcoparedes/dev/jobbot/core/run_items.py).
+   [core/run_items.py](../../core/run_items.py).

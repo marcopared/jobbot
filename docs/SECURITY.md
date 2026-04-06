@@ -17,7 +17,7 @@ These are both product and safety constraints.
 ## Sensitive Inputs
 
 Secrets and credentials come from environment variables via
-[apps/api/settings.py](/Users/marcoparedes/dev/jobbot/apps/api/settings.py):
+[apps/api/settings.py](../apps/api/settings.py):
 
 - database and Redis URLs
 - Adzuna credentials
@@ -42,10 +42,10 @@ For GCS:
 
 Relevant files:
 
-- [core/storage/factory.py](/Users/marcoparedes/dev/jobbot/core/storage/factory.py)
-- [core/storage/local_store.py](/Users/marcoparedes/dev/jobbot/core/storage/local_store.py)
-- [core/storage/gcs_store.py](/Users/marcoparedes/dev/jobbot/core/storage/gcs_store.py)
-- [apps/api/routes/artifacts.py](/Users/marcoparedes/dev/jobbot/apps/api/routes/artifacts.py)
+- [core/storage/factory.py](../core/storage/factory.py)
+- [core/storage/local_store.py](../core/storage/local_store.py)
+- [core/storage/gcs_store.py](../core/storage/gcs_store.py)
+- [apps/api/routes/artifacts.py](../apps/api/routes/artifacts.py)
 
 ## Debug Surface
 
@@ -96,7 +96,7 @@ Security rules:
 ## Security-Relevant Follow-Ups
 
 Tracked in
-[docs/exec-plans/tech-debt-tracker.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/tech-debt-tracker.md):
+[docs/exec-plans/tech-debt-tracker.md](exec-plans/tech-debt-tracker.md):
 
 - lightweight docs/link linting
 - stronger reference automation

@@ -1,0 +1,14 @@
+{
+  "case_id": "platform_infra",
+  "label": "Platform and infra role",
+  "job_title": "Role",
+  "company_name": "Acme",
+  "description": "platform reliability terraform python go postgresql",
+  "persona": "PLATFORM_INFRA",
+  "target_keywords": ["platform", "reliability", "terraform", "python"],
+  "found_keywords": ["platform", "terraform"],
+  "missing_keywords": ["reliability"],
+  "inventory_path": "tests/fixtures/resume_evidence/full_stack/experience_inventory.yaml",
+  "inputs_dir": "tests/fixtures/resume_evidence/full_stack/resume_inputs",
+  "golden_payload_path": "tests/fixtures/resume_payloads/platform_full_stack.json"
+}

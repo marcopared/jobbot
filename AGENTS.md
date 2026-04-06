@@ -57,15 +57,15 @@ docs/
 
 ## Read Order
 
-1. [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md)
-2. [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md)
-3. [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
-4. [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
-5. [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md)
-6. [docs/design-docs/index.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/index.md)
-7. [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md)
-8. [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md)
-9. [README.md](/Users/marcoparedes/dev/jobbot/README.md)
+1. [ARCHITECTURE.md](ARCHITECTURE.md)
+2. [docs/DESIGN.md](docs/DESIGN.md)
+3. [docs/PRODUCT_SENSE.md](docs/PRODUCT_SENSE.md)
+4. [docs/RELIABILITY.md](docs/RELIABILITY.md)
+5. [docs/SECURITY.md](docs/SECURITY.md)
+6. [docs/design-docs/index.md](docs/design-docs/index.md)
+7. [docs/product-specs/index.md](docs/product-specs/index.md)
+8. [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md)
+9. [README.md](README.md)
 
 ## Change Rules
 
@@ -89,16 +89,16 @@ docs/
 
 | Need | Document |
 | --- | --- |
-| Runtime architecture and data flow | [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md) |
-| Design baseline and ingestion-v2 direction | [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md) |
-| Product boundaries and operating model | [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md) |
-| Reliability invariants and regression suites | [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md) |
-| Security and authenticated-browser ingestion boundaries | [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md) |
-| Active product specs | [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md) |
-| Current design beliefs | [docs/design-docs/core-beliefs.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/core-beliefs.md) |
-| UI pages and operator flow | [docs/FRONTEND.md](/Users/marcoparedes/dev/jobbot/docs/FRONTEND.md) |
-| Provider/reference summaries | [docs/references](/Users/marcoparedes/dev/jobbot/docs/references) |
-| Current active implementation plan | [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md) |
+| Runtime architecture and data flow | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Design baseline and ingestion-v2 direction | [docs/DESIGN.md](docs/DESIGN.md) |
+| Product boundaries and operating model | [docs/PRODUCT_SENSE.md](docs/PRODUCT_SENSE.md) |
+| Reliability invariants and regression suites | [docs/RELIABILITY.md](docs/RELIABILITY.md) |
+| Security and authenticated-browser ingestion boundaries | [docs/SECURITY.md](docs/SECURITY.md) |
+| Active product specs | [docs/product-specs/index.md](docs/product-specs/index.md) |
+| Current design beliefs | [docs/design-docs/core-beliefs.md](docs/design-docs/core-beliefs.md) |
+| UI pages and operator flow | [docs/FRONTEND.md](docs/FRONTEND.md) |
+| Provider/reference summaries | [docs/references](docs/references) |
+| Current active implementation plan | [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md) |
 
 ## Verification Minimum
 

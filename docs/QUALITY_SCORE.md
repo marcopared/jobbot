@@ -9,17 +9,18 @@ the documentation cleanup completed on 2026-03-24.
 | --- | --- | --- |
 | Intake connectors and source-role model | B+ | Canonical ATS, discovery, URL ingest, and manual intake are implemented with clear roles and targeted tests |
 | Pipeline durability and contracts | B | Strong invariants exist for run tracking, chain progression, and run-item schema, but full runtime verification is still partly manual |
-| Resume generation path | B | Grounded generation is well-bounded and durable, but still depends on Playwright and local credential/runtime setup |
-| API and operator contracts | B | Core routes are stable and tested, but list/detail schemas still carry some legacy shape decisions |
+| Resume generation path | B+ | Grounded generation now persists a deterministic PDF plus payload/diagnostics bundle with explicit fit outcomes and evidence summaries, but it still depends on Playwright and local runtime setup |
+| API and operator contracts | B | Core routes are stable and tested, and resume artifact summaries are now explicit, but list/detail schemas still carry some legacy shape decisions |
 | Frontend operator flow | B- | The UI covers the operator loop well enough, but it still relies on a few inferred labels and minimal presentation polish |
 | Security and product-boundary discipline | B | Manual apply, feature flags, signed URL handling, and debug gating are solid, but security is mostly convention plus small controls rather than a deep policy engine |
 | Documentation harness | A- | The repo now has a smaller, code-aligned, Harness-style docs graph instead of many stale historical notes |
 
 ## Evidence Behind The Grades
 
-- focused regression suites in [tests/README.md](/Users/marcoparedes/dev/jobbot/tests/README.md)
-- connector/provider tests under [tests](/Users/marcoparedes/dev/jobbot/tests)
+- focused regression suites in [tests/README.md](../tests/README.md)
+- connector/provider tests under [tests](../tests)
 - durable generation and run tracking through `ScrapeRun` and `GenerationRun`
+- resume-v2 artifact metadata surfaced through `GET /api/jobs/{id}` and `GET /api/jobs/{id}/artifacts`
 - operator-facing routes and UI pages implemented end to end
 
 ## Biggest Quality Risks

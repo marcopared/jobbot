@@ -14,23 +14,28 @@ JobBot is a local-first job discovery and decision-support tool.
 - **URL ingest:** supported ATS job URLs (Greenhouse, Lever, Ashby)
 - **Manual intake:** manual operator-entered jobs
 
-**Processing:** store, score, classify, ATS analysis; generation gate (auto-generate for eligible jobs when enabled)
+**Processing:** store, score, classify, ATS analysis; generation gate (auto-generate eligible jobs when enabled)
 
-**Output:** job-specific resume artifacts; ready-to-apply queue; manual apply via job URL
+**Output:** job-specific resume artifact bundles:
+- primary PDF artifact (`resume_pdf_primary`)
+- structured payload sidecar (`resume_payload`)
+- diagnostics sidecar (`resume_diagnostics`)
+- ready-to-apply queue and manual apply via the external job URL
 
 **Non-goals:** auto-apply, browser automation; final application step is always manual.
 
 ## Documentation
 
-- Agent entry point: [AGENTS.md](/Users/marcoparedes/dev/jobbot/AGENTS.md)
-- Runtime topology and subsystem map: [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md)
-- Product intent and operating boundaries: [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
-- System design baseline: [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md)
-- Reliability invariants and verification limits: [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
-- Product spec index: [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md)
-- Plan index and tracked follow-ups: [docs/PLANS.md](/Users/marcoparedes/dev/jobbot/docs/PLANS.md)
+- Agent entry point: [AGENTS.md](AGENTS.md)
+- Runtime topology and subsystem map: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Product intent and operating boundaries: [docs/PRODUCT_SENSE.md](docs/PRODUCT_SENSE.md)
+- System design baseline: [docs/DESIGN.md](docs/DESIGN.md)
+- Resume-generation v2 contract note: [docs/design-docs/resume-generation-v2.md](docs/design-docs/resume-generation-v2.md)
+- Reliability invariants and verification limits: [docs/RELIABILITY.md](docs/RELIABILITY.md)
+- Product spec index: [docs/product-specs/index.md](docs/product-specs/index.md)
+- Plan index and tracked follow-ups: [docs/PLANS.md](docs/PLANS.md)
 
-Use the harness-style docs tree under [`docs/`](/Users/marcoparedes/dev/jobbot/docs) as the
+Use the harness-style docs tree under [`docs/`](docs/) as the
 repo-local system of record. Historical PR/audit notes were removed in favor of fewer living docs.
 
 ## Prerequisites
@@ -87,7 +92,17 @@ cd ui && npm run dev -- --host 127.0.0.1 --port 5173
 | **Source adapters: launch** | `POST /api/jobs/run-source-adapter` | Discovery | Launches adapter-backed discovery runs for public boards, portfolio boards, and gated auth boards through the existing operator run model. |
 | **URL ingest** | `POST /api/jobs/ingest-url` | Canonical | Paste supported Greenhouse/Lever/Ashby job URL. Feature-flagged (`URL_INGEST_ENABLED`). |
 
-All paths run score → classify → ATS analysis. Resume generation: manual via `POST /api/jobs/{id}/generate-resume`, or automatic when `ENABLE_AUTO_RESUME_GENERATION=true` and the job passes the generation gate.
+All paths run `score -> classify -> ats_match -> generation_gate`.
+
+Resume generation paths:
+- manual: `POST /api/jobs/{id}/generate-resume`
+  - allowed only when `pipeline_status` is `ATS_ANALYZED` or `RESUME_READY`
+  - persists `GenerationRun(triggered_by="manual")`, commits it, queues the worker with the same `generation_run_id`, and returns that id
+- automatic: `evaluate_generation_gate`
+  - runs only when `ENABLE_AUTO_RESUME_GENERATION=true`
+  - canonical ATS and `url_ingest` jobs use the canonical score threshold
+  - discovery jobs use stricter score plus confidence/content checks
+  - SERP discovery stays ineligible by default unless explicitly overridden
 
 Resume-generation v2 fit policy:
 
@@ -95,8 +110,16 @@ Resume-generation v2 fit policy:
 - generation uses deterministic fit planning plus bounded compaction before render
 - rendered PDFs are validated for page count before artifact success is recorded
 - default overflow behavior is fail-closed
+- successful fit outcomes are exactly:
+  - `fit_success_one_page`
+  - `fit_success_multi_page_fallback`
+- overflow failure is recorded as `fit_failed_overflow`
 - set `RESUME_GENERATION_ALLOW_MULTI_PAGE_FALLBACK=true` only if you explicitly want multi-page
   renders to succeed as `fit_success_multi_page_fallback`
+- successful generations persist three artifacts through the existing storage backend:
+  primary resume PDF, payload JSON sidecar, and diagnostics JSON sidecar
+- artifact metadata carries a shared `resume_v2` envelope including `payload_schema_version`,
+  `inputs_hash`, `fit_outcome`, `fit_diagnostics`, and `evidence_completeness`
 
 ### Local resume evidence inputs
 
@@ -109,8 +132,18 @@ Resume generation still supports the existing required inventory file at
 - `achievements.{md,txt,json,yaml,yml}`
 - `projects/` containing `md`, `txt`, `json`, or `yaml` files
 
-Missing optional sources are reported explicitly in internal generation metadata; they are not
-required for the inventory-only path to keep working. No live Jira integration is used.
+The evidence package always includes:
+- required `inventory`
+- required `target_job_description`
+- optional `current_resume`, `current_role`, `achievements`, `project_writeups`
+
+Exact source-kind values are:
+- `inventory-only`
+- `inventory-plus-local-files`
+
+Missing optional sources are reported in `resume_v2.evidence_completeness` and
+`missing_optional_sources`; they are not required for the inventory-only path to work. No live Jira
+integration is used.
 
 Grounding notes:
 
@@ -124,7 +157,7 @@ Grounding notes:
 
 - The repo has focused regression coverage for several high-risk invariants, but that is not the same as full end-to-end provider verification.
 - Real provider credentials, ready-to-apply throughput, and PDF generation still need local/manual verification when those areas are touched.
-- Use [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md) and the listed focused suites as the baseline closeout checklist for backend changes.
+- Use [docs/RELIABILITY.md](docs/RELIABILITY.md) and the listed focused suites as the baseline closeout checklist for backend changes.
 
 ### Example: JobSpy scrape
 
@@ -205,12 +238,12 @@ Runs `POST /api/jobs/run-scrape` and waits for completion.
 |----------|---------|
 | `GET /api/health` | Health check |
 | `GET /api/jobs` | List jobs (supports user_status, pipeline_status, persona filters) |
-| `GET /api/jobs/ready-to-apply` | Jobs with artifact ready for manual apply (default operational view) |
+| `GET /api/jobs/ready-to-apply` | Jobs with `pipeline_status=RESUME_READY`, `artifact_ready_at` set, and `user_status=NEW` (default operational view) |
 | `GET /api/jobs/{id}` | Job detail with scores, persona, ATS gaps |
 | `PUT /api/jobs/{id}/status` | Update user workflow status (SAVED, APPLIED, ARCHIVED) |
 | `POST /api/jobs/{id}/resolve` | Trigger discovery-to-canonical resolution (discovery jobs only) |
-| `POST /api/jobs/{id}/generate-resume` | Trigger tailored resume generation (manual override) |
-| `GET /api/jobs/{id}/artifacts` | List artifacts for a job |
+| `POST /api/jobs/{id}/generate-resume` | Trigger tailored resume generation and return the persisted `generation_run_id` |
+| `GET /api/jobs/{id}/artifacts` | List the resume PDF first, then supporting JSON sidecars with `artifact_role`, `payload_version`, `inputs_hash`, `fit_status`, and `evidence_completeness` |
 | `GET /api/jobs/run-source-adapter` | List adapter-backed source capabilities and launch gating |
 | `POST /api/jobs/run-source-adapter` | Launch adapter-backed source run |
 | `GET /api/runs` | List scrape/ingest/discovery runs |

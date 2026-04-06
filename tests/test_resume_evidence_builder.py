@@ -131,3 +131,31 @@ def test_full_stack_package_hash_is_stable_and_reports_loaded_sources():
     assert current_resume_source.used_for_facts is False
     assert current_resume_source.used_for_preferences is True
     assert len([item for item in first.items if item.source_type == "project_writeups"]) == 5
+
+
+def test_targeting_and_preference_sources_do_not_become_factual_entries():
+    fixture_dir = FIXTURES_ROOT / "full_stack"
+    package = build_resume_evidence_package(
+        _make_job("Platform reliability role with Python APIs."),
+        inventory_path=fixture_dir / "experience_inventory.yaml",
+        inputs_dir=fixture_dir / "resume_inputs",
+    )
+
+    target_source = next(
+        source for source in package.source_metadata if source.source_name == "target_job_description"
+    )
+    current_resume_source = next(
+        source for source in package.source_metadata if source.source_name == "current_resume"
+    )
+
+    assert target_source.present is True
+    assert target_source.used_for_targeting is True
+    assert target_source.used_for_facts is False
+    assert current_resume_source.used_for_preferences is True
+    assert current_resume_source.used_for_facts is False
+    assert {entry.id for entry in package.supplemental_entries} == {
+        "current_role",
+        "achievements",
+        "project_writeups:ops_notes",
+        "project_writeups:payments_launch",
+    }

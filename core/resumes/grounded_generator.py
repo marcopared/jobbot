@@ -1,20 +1,28 @@
 """Grounded resume generation (EPIC 7).
 
-Load inventory, select content by job/ATS/persona, render HTML, render PDF.
-No freeform LLM output; all content from structured inventory.
+Load evidence, run authoritative resume-v2 selection semantics, render HTML,
+render PDF, and persist deterministic artifacts. No freeform LLM output; all
+content comes from grounded structured evidence.
 """
 
 import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from apps.api.settings import Settings
 from core.db.models import Artifact, ArtifactKind, Job, JobAnalysis, PipelineStatus
+from core.resumes._serialization import canonical_json_dumps
+from core.resumes.artifact_metadata import (
+    RESUME_ARTIFACT_ROLE_DIAGNOSTICS,
+    RESUME_ARTIFACT_ROLE_PAYLOAD,
+    RESUME_ARTIFACT_ROLE_PRIMARY,
+    build_resume_sidecar_documents,
+)
 from core.resumes.evidence_builder import build_resume_evidence_package
 from core.resumes.fit_planner import plan_resume_artifacts
 from core.resumes.effective_input import ResumeEffectiveInput
@@ -57,6 +65,20 @@ class ResumeGenerationArtifacts:
     payload: ResumePayloadV2
     layout_plan: LayoutPlan
     fit_diagnostics: FitDiagnostics
+
+
+@dataclass(frozen=True)
+class StoredResumeArtifact:
+    """Prepared storage payload for one persisted resume-generation artifact."""
+
+    role: str
+    kind: str
+    filename: str
+    content_type: str
+    format: str
+    version: str
+    data: bytes
+    meta_json: dict[str, object]
 
 
 def _get_job_analysis(session: Session, job_id: UUID) -> JobAnalysis | None:
@@ -121,13 +143,94 @@ def _build_generation_artifacts(
     )
 
 
+def _prepare_resume_artifacts(
+    *,
+    job_id: UUID,
+    persona: str,
+    analysis: JobAnalysis,
+    generation_artifacts: ResumeGenerationArtifacts,
+    fit_outcome: str,
+    fit_diagnostics: FitDiagnostics,
+    pdf_bytes: bytes,
+) -> list[StoredResumeArtifact]:
+    generated_at = datetime.now(UTC)
+    timestamp = generated_at.strftime("%Y%m%d_%H%M%S")
+    stem = f"{timestamp}_resume"
+    bundle_id = str(uuid4())
+    common_meta, payload_document, diagnostics_document = build_resume_sidecar_documents(
+        job_id=job_id,
+        persona=persona,
+        generated_at=generated_at,
+        artifact_bundle_id=bundle_id,
+        analysis=analysis,
+        evidence_package=generation_artifacts.evidence_package,
+        payload=generation_artifacts.payload,
+        fit_result=generation_artifacts.fit_result,
+        layout_plan=generation_artifacts.layout_plan,
+        fit_diagnostics=fit_diagnostics,
+        fit_outcome=fit_outcome,
+    )
+
+    payload_bytes = canonical_json_dumps(payload_document).encode("utf-8")
+    diagnostics_bytes = canonical_json_dumps(diagnostics_document).encode("utf-8")
+
+    return [
+        StoredResumeArtifact(
+            role=RESUME_ARTIFACT_ROLE_PRIMARY,
+            kind=ArtifactKind.PDF.value,
+            filename=f"{stem}.pdf",
+            content_type="application/pdf",
+            format="pdf",
+            version="1",
+            data=pdf_bytes,
+            meta_json={
+                **common_meta,
+                "artifact_role": RESUME_ARTIFACT_ROLE_PRIMARY,
+                "fit_outcome": fit_outcome,
+                "sidecar_filenames": {
+                    RESUME_ARTIFACT_ROLE_PAYLOAD: f"{stem}_payload.json",
+                    RESUME_ARTIFACT_ROLE_DIAGNOSTICS: f"{stem}_diagnostics.json",
+                },
+            },
+        ),
+        StoredResumeArtifact(
+            role=RESUME_ARTIFACT_ROLE_PAYLOAD,
+            kind=ArtifactKind.OTHER.value,
+            filename=f"{stem}_payload.json",
+            content_type="application/json",
+            format="json",
+            version="resume-payload-sidecar-v1",
+            data=payload_bytes,
+            meta_json={
+                **common_meta,
+                "artifact_role": RESUME_ARTIFACT_ROLE_PAYLOAD,
+                "fit_outcome": fit_outcome,
+            },
+        ),
+        StoredResumeArtifact(
+            role=RESUME_ARTIFACT_ROLE_DIAGNOSTICS,
+            kind=ArtifactKind.OTHER.value,
+            filename=f"{stem}_diagnostics.json",
+            content_type="application/json",
+            format="json",
+            version="resume-diagnostics-sidecar-v1",
+            data=diagnostics_bytes,
+            meta_json={
+                **common_meta,
+                "artifact_role": RESUME_ARTIFACT_ROLE_DIAGNOSTICS,
+                "fit_outcome": fit_outcome,
+            },
+        ),
+    ]
+
+
 def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult:
     """
     Generate a grounded PDF resume for a high-fit job.
 
     1. Load experience inventory from YAML
     2. Get job analysis (persona, ATS keywords)
-    3. Select content (roles, projects, skills)
+    3. Select content through the v2 fit planner/pipeline
     4. Render HTML and PDF
     5. Store artifact and metadata
 
@@ -245,16 +348,25 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
 
     # Store (storage backend: local or GCS)
     storage = get_artifact_storage()
-    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    # Relative key: backends apply the resumes/ prefix exactly once
-    relative_key = f"{job_id}/{timestamp}_resume.pdf"
+    stored_artifacts = _prepare_resume_artifacts(
+        job_id=job_id,
+        persona=persona,
+        analysis=analysis,
+        generation_artifacts=generation_artifacts,
+        fit_outcome=fit_outcome,
+        fit_diagnostics=fit_diagnostics,
+        pdf_bytes=pdf_bytes,
+    )
 
     try:
-        store_result = storage.store(
-            key=relative_key,
-            data=pdf_bytes,
-            content_type="application/pdf",
-        )
+        store_results = {
+            prepared.role: storage.store(
+                key=f"{job_id}/{prepared.filename}",
+                data=prepared.data,
+                content_type=prepared.content_type,
+            )
+            for prepared in stored_artifacts
+        }
     except Exception as e:
         logger.exception("Storage failed for job %s", job_id)
         return GenerationResult(
@@ -265,69 +377,34 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
             error=f"Storage failed: {e}",
         )
 
-    filename = f"{timestamp}_resume.pdf"
-    artifact = Artifact(
-        job_id=job_id,
-        kind=ArtifactKind.PDF.value,
-        filename=filename,
-        path=store_result.storage_key,
-        size_bytes=len(pdf_bytes),
-        persona_name=persona,
-        file_url=store_result.file_url,
-        format="pdf",
-        version="1",
-        template_version=TEMPLATE_VERSION,
-        inventory_version_hash=generation_artifacts.evidence_package.inventory_version_hash,
-        generation_status="success",
-        meta_json={
-            "grounded": True,
-            "persona": persona,
-            "ats_compatibility_score": analysis.ats_compatibility_score if analysis else None,
-            "generated_at": datetime.now(UTC).isoformat(),
-            "fit_outcome": fit_outcome,
-            "resume_v2": {
-                "evidence_schema_version": generation_artifacts.evidence_package.schema_version,
-                "payload_schema_version": generation_artifacts.payload.schema_version,
-                "fit_schema_version": generation_artifacts.fit_result.schema_version,
-                "layout_schema_version": generation_artifacts.layout_plan.schema_version,
-                "fit_diagnostics_schema_version": fit_diagnostics.schema_version,
-                "source_kind": generation_artifacts.evidence_package.source_kind,
-                "inputs_hash": generation_artifacts.evidence_package.inputs_hash,
-                "evidence_hash": generation_artifacts.evidence_package.compute_hash(),
-                "fit_hash": generation_artifacts.fit_result.compute_hash(),
-                "payload_hash": generation_artifacts.payload.compute_hash(),
-                "layout_hash": generation_artifacts.layout_plan.compute_hash(),
-                "effective_input_hash": generation_artifacts.payload.effective_input_hash,
-                "fit_outcome": fit_outcome,
-                "fit_diagnostics": fit_diagnostics.to_dict(),
-                "missing_optional_sources": list(
-                    generation_artifacts.evidence_package.missing_optional_sources
-                ),
-                "source_metadata": [
-                    {
-                        "source_name": source.source_name,
-                        "required": source.required,
-                        "present": source.present,
-                        "source_kind": source.source_kind,
-                        "format": source.format,
-                        "item_count": source.item_count,
-                        "used_for_facts": source.used_for_facts,
-                        "used_for_targeting": source.used_for_targeting,
-                        "used_for_preferences": source.used_for_preferences,
-                    }
-                    for source in generation_artifacts.evidence_package.source_metadata
-                ],
-            },
-        },
-    )
-    session.add(artifact)
+    persisted_artifacts: dict[str, Artifact] = {}
+    for prepared in stored_artifacts:
+        store_result = store_results[prepared.role]
+        artifact = Artifact(
+            job_id=job_id,
+            kind=prepared.kind,
+            filename=prepared.filename,
+            path=store_result.storage_key,
+            size_bytes=len(prepared.data),
+            persona_name=persona,
+            file_url=store_result.file_url,
+            format=prepared.format,
+            version=prepared.version,
+            template_version=TEMPLATE_VERSION,
+            inventory_version_hash=generation_artifacts.evidence_package.inventory_version_hash,
+            generation_status="success",
+            meta_json=prepared.meta_json,
+        )
+        session.add(artifact)
+        persisted_artifacts[prepared.role] = artifact
+
     session.flush()
 
     job.pipeline_status = PipelineStatus.RESUME_READY.value
     job.artifact_ready_at = datetime.now(UTC)
 
     return GenerationResult(
-        artifact=artifact,
+        artifact=persisted_artifacts[RESUME_ARTIFACT_ROLE_PRIMARY],
         status="success",
         fit_outcome=fit_outcome,
         fit_diagnostics=fit_diagnostics,

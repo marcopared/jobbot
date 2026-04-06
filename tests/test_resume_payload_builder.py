@@ -15,6 +15,7 @@ from core.resumes.v2_pipeline import (
     build_fit_result,
     build_resume_payload,
 )
+from core.resumes.v2_selection import prioritize_skills
 
 FIXTURES_ROOT = Path(__file__).parent / "fixtures"
 EVIDENCE_FIXTURES = FIXTURES_ROOT / "resume_evidence"
@@ -223,3 +224,49 @@ def test_effective_input_hash_is_stable_across_fixture_path_forms():
 
     assert absolute_package.compute_hash() == relative_package.compute_hash()
     assert absolute_effective_input.compute_hash() == relative_effective_input.compute_hash()
+
+
+def test_payload_builder_respects_skill_limit_while_preserving_keyword_priority():
+    fixture_dir = EVIDENCE_FIXTURES / "full_stack"
+    package = build_resume_evidence_package(
+        _make_job("platform reliability terraform python go postgresql"),
+        inventory_path=fixture_dir / "experience_inventory.yaml",
+        inputs_dir=fixture_dir / "resume_inputs",
+    )
+    fit_result = build_fit_result(
+        package,
+        persona="PLATFORM_INFRA",
+        target_keywords={"platform", "reliability", "terraform", "python"},
+        found_keywords={"platform", "terraform"},
+        missing_keywords={"reliability"},
+    )
+    effective_input = build_effective_input(package, fit_result, template_version="v1")
+    payload = build_resume_payload(package, fit_result, effective_input, max_skills=2).to_dict()
+
+    skills_section = next(section for section in payload["sections"] if section["id"] == "skills")
+    assert skills_section["lines"] == ["Python", "Terraform"]
+
+
+def test_payload_builder_skill_order_comes_from_shared_v2_selection_semantics():
+    fixture_dir = EVIDENCE_FIXTURES / "full_stack"
+    package = build_resume_evidence_package(
+        _make_job("platform reliability terraform python go postgresql"),
+        inventory_path=fixture_dir / "experience_inventory.yaml",
+        inputs_dir=fixture_dir / "resume_inputs",
+    )
+    fit_result = build_fit_result(
+        package,
+        persona="PLATFORM_INFRA",
+        target_keywords={"platform", "reliability", "terraform", "python"},
+        found_keywords={"platform", "terraform"},
+        missing_keywords={"reliability"},
+    )
+    effective_input = build_effective_input(package, fit_result, template_version="v1")
+    payload = build_resume_payload(package, fit_result, effective_input, max_skills=4).to_dict()
+
+    skills_section = next(section for section in payload["sections"] if section["id"] == "skills")
+    assert tuple(skills_section["lines"]) == prioritize_skills(
+        package.skills,
+        fit_result.target_keywords,
+        max_skills=4,
+    )

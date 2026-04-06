@@ -9,6 +9,8 @@ from core.db.models import Job
 from core.resumes.evidence_builder import build_resume_evidence_package
 from core.resumes.fit_planner import plan_resume_artifacts
 from core.resumes.html_template import TEMPLATE_VERSION
+from core.resumes.v2_pipeline import build_fit_result
+from core.resumes.v2_selection import score_text_tags
 
 FIXTURES_ROOT = Path(__file__).parent / "fixtures"
 FIT_FIXTURES = FIXTURES_ROOT / "resume_fit"
@@ -91,3 +93,54 @@ def test_planner_is_deterministic_across_repeated_runs():
     assert first.effective_input.compute_hash() == second.effective_input.compute_hash()
     assert first.payload.compute_hash() == second.payload.compute_hash()
     assert first.fit_diagnostics.to_dict() == second.fit_diagnostics.to_dict()
+
+
+def test_fit_logic_excludes_preference_only_sources_and_respects_entry_limit():
+    fixture_dir = EVIDENCE_FIXTURES / "full_stack"
+    package = build_resume_evidence_package(
+        _make_job("platform reliability terraform python go postgresql"),
+        inventory_path=fixture_dir / "experience_inventory.yaml",
+        inputs_dir=fixture_dir / "resume_inputs",
+    )
+
+    fit_result = build_fit_result(
+        package,
+        persona="PLATFORM_INFRA",
+        target_keywords={"platform", "reliability", "terraform", "python"},
+        found_keywords={"platform", "terraform"},
+        missing_keywords={"reliability"},
+        max_supplemental_entries=1,
+    )
+
+    assert len(fit_result.supplemental_selections) == 1
+    assert fit_result.supplemental_selections[0].entry_id != "current_resume"
+
+
+def test_v2_fit_result_is_the_authoritative_role_selection_path():
+    fixture_dir = EVIDENCE_FIXTURES / "inventory_only"
+    package = build_resume_evidence_package(
+        _make_job("backend python go api platform"),
+        inventory_path=fixture_dir / "experience_inventory.yaml",
+        inputs_dir=fixture_dir / "resume_inputs",
+    )
+
+    fit_result = build_fit_result(
+        package,
+        persona="BACKEND",
+        target_keywords={"python", "go", "api"},
+        found_keywords={"python"},
+        missing_keywords={"go"},
+    )
+
+    item_lookup = {item.id: item for item in package.items}
+    for selection in fit_result.role_selections:
+        ranked_ids = sorted(
+            selection.bullet_ids,
+            key=lambda bullet_id: -score_text_tags(
+                item_lookup[bullet_id].text,
+                item_lookup[bullet_id].tags,
+                {"python", "go", "api"},
+                "BACKEND",
+            ),
+        )
+        assert list(selection.bullet_ids) == ranked_ids

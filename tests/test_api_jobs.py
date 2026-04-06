@@ -8,6 +8,7 @@ asyncpg "another operation is in progress" errors with TestClient.
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -283,6 +284,78 @@ def _make_job_in_pipeline_state(
     return job_id
 
 
+def _attach_resume_artifact_bundle(job_id: uuid.UUID) -> None:
+    """Persist a PDF plus payload/diagnostics sidecars for artifact route tests."""
+    from core.db.models import Artifact, Job
+    from core.db.session import get_sync_session
+
+    resume_v2 = {
+        "payload_schema_version": "resume-payload-v2",
+        "inputs_hash": "abc123def4567890",
+        "fit_outcome": "fit_success_one_page",
+        "evidence_completeness": {
+            "summary": "required 1/1 present; optional 2/3 present; missing current_resume",
+            "source_kind": "inventory-plus-local",
+            "total_sources": 4,
+            "present_sources": 3,
+            "required_sources": 1,
+            "required_present": 1,
+            "optional_sources": 3,
+            "optional_present": 2,
+            "missing_optional_sources": ["current_resume"],
+        },
+    }
+
+    with get_sync_session() as session:
+        job = session.get(Job, job_id)
+        assert job is not None
+        job.artifact_ready_at = datetime.now(timezone.utc)
+        session.add_all(
+            [
+                Artifact(
+                    job_id=job_id,
+                    kind="pdf",
+                    filename="20250101_120000_resume.pdf",
+                    path=f"resumes/{job_id}/20250101_120000_resume.pdf",
+                    format="pdf",
+                    generation_status="success",
+                    persona_name="BACKEND",
+                    meta_json={
+                        "artifact_role": "resume_pdf_primary",
+                        "resume_v2": resume_v2,
+                    },
+                ),
+                Artifact(
+                    job_id=job_id,
+                    kind="other",
+                    filename="20250101_120000_resume_payload.json",
+                    path=f"resumes/{job_id}/20250101_120000_resume_payload.json",
+                    format="json",
+                    generation_status="success",
+                    persona_name="BACKEND",
+                    meta_json={
+                        "artifact_role": "resume_payload",
+                        "resume_v2": resume_v2,
+                    },
+                ),
+                Artifact(
+                    job_id=job_id,
+                    kind="other",
+                    filename="20250101_120000_resume_diagnostics.json",
+                    path=f"resumes/{job_id}/20250101_120000_resume_diagnostics.json",
+                    format="json",
+                    generation_status="success",
+                    persona_name="BACKEND",
+                    meta_json={
+                        "artifact_role": "resume_diagnostics",
+                        "resume_v2": resume_v2,
+                    },
+                ),
+            ]
+        )
+        session.flush()
+
+
 async def test_post_generate_resume_404(client):
     """POST /api/jobs/{id}/generate-resume returns 404 for non-existent job."""
     fake_id = uuid.uuid4()
@@ -423,6 +496,42 @@ async def test_artifact_preview_404(client):
     fake_id = uuid.uuid4()
     resp = await client.get(f"/api/artifacts/{fake_id}/preview")
     assert resp.status_code == 404
+
+
+async def test_get_artifacts_includes_sidecars_and_resume_v2_summary(client):
+    """GET /api/jobs/{id}/artifacts returns the PDF first plus JSON sidecars and summary fields."""
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="RESUME_READY",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+    _attach_resume_artifact_bundle(job_id)
+
+    resp = await client.get(f"/api/jobs/{job_id}/artifacts")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [item["artifact_role"] for item in data["items"]] == [
+        "resume_pdf_primary",
+        "resume_diagnostics",
+        "resume_payload",
+    ]
+    assert data["items"][0]["is_primary"] is True
+    assert data["items"][0]["payload_version"] == "resume-payload-v2"
+    assert data["items"][0]["inputs_hash"] == "abc123def4567890"
+    assert data["items"][0]["fit_status"] == "fit_success_one_page"
+    assert "missing current_resume" in data["items"][0]["evidence_completeness"]["summary"]
+    assert data["items"][1]["format"] == "json"
+    assert data["items"][2]["format"] == "json"
+
+    detail_resp = await client.get(f"/api/jobs/{job_id}")
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["artifact_availability"] is True
+    assert detail["latest_generation_run"] is None
+    assert detail["artifacts"][0]["artifact_role"] == "resume_pdf_primary"
+    assert detail["artifacts"][0]["evidence_completeness"]["missing_optional_sources"] == [
+        "current_resume"
+    ]
 
 
 async def test_run_ingestion_greenhouse_success(client):
@@ -1022,6 +1131,50 @@ async def test_manual_generate_resume_persists_and_returns_generation_run_id(
     assert captured["job_id"] == str(job_id)
     assert captured["generation_run_id"] == data["generation_run_id"]
     assert captured["triggered_by"] == "manual"
+
+    detail_resp = await client.get(f"/api/jobs/{job_id}")
+    assert detail_resp.status_code == 200
+    detail = detail_resp.json()
+    assert detail["latest_generation_run"]["id"] == data["generation_run_id"]
+    assert detail["latest_generation_run"]["status"] == "queued"
+    assert detail["latest_generation_run"]["triggered_by"] == "manual"
+    assert detail["latest_generation_run"]["artifact_id"] is None
+
+
+async def test_get_job_includes_latest_generation_run_summary(client):
+    """GET /api/jobs/{id} exposes the most recent GenerationRun summary for operator progress."""
+    from core.db.models import GenerationRun
+    from core.db.session import get_sync_session
+
+    job_id = _make_job_in_pipeline_state(
+        pipeline_status="RESUME_READY",
+        has_persona=True,
+        has_ats_keywords=True,
+    )
+
+    with get_sync_session() as session:
+        older = GenerationRun(
+            job_id=job_id,
+            status="failed",
+            triggered_by="manual",
+            failure_reason="Older failure",
+            created_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        )
+        latest = GenerationRun(
+            job_id=job_id,
+            status="running",
+            triggered_by="manual",
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add_all([older, latest])
+        session.commit()
+
+    resp = await client.get(f"/api/jobs/{job_id}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["latest_generation_run"]["status"] == "running"
+    assert data["latest_generation_run"]["triggered_by"] == "manual"
+    assert data["latest_generation_run"]["failure_reason"] is None
 
 
 async def test_manual_generate_resume_run_id_returned_for_resume_ready(client):

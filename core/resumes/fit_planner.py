@@ -1,4 +1,9 @@
-"""Deterministic fit planning and compaction for resume-generation v2."""
+"""Deterministic fit planning and compaction for resume-generation v2.
+
+Selection semantics are owned by ``core.resumes.v2_selection`` and applied
+through ``core.resumes.v2_pipeline.build_fit_result``. This planner only
+compacts the already-authoritative v2 selection output.
+"""
 
 from __future__ import annotations
 

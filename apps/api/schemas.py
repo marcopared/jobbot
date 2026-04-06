@@ -65,6 +65,18 @@ class PersonaInfo(BaseModel):
     persona_rationale: str | None = None
 
 
+class GenerationRunSummary(BaseModel):
+    """Latest generation-run summary for Job Detail progress visibility."""
+
+    id: str
+    status: str
+    triggered_by: str | None = None
+    created_at: str | None = None
+    finished_at: str | None = None
+    failure_reason: str | None = None
+    artifact_id: str | None = None
+
+
 class ArtifactMetadata(BaseModel):
     """Artifact metadata for detail view."""
 
@@ -76,6 +88,20 @@ class ArtifactMetadata(BaseModel):
     created_at: str | None = None
     download_url: str
     preview_url: str
+
+
+class EvidenceCompletenessSummary(BaseModel):
+    """Compact evidence completeness summary for resume-generation artifacts."""
+
+    summary: str
+    source_kind: str | None = None
+    total_sources: int = 0
+    present_sources: int = 0
+    required_sources: int = 0
+    required_present: int = 0
+    optional_sources: int = 0
+    optional_present: int = 0
+    missing_optional_sources: list[str] = Field(default_factory=list)
 
 
 class JobDetailResponse(BaseModel):
@@ -91,9 +117,11 @@ class JobDetailResponse(BaseModel):
     source: str | None = None
 
     score: float = 0.0
+    artifact_availability: bool = False
     score_breakdown: ScoreBreakdown | None = None
     ats_gaps: ATSGaps | None = None
     persona: PersonaInfo | None = None
+    latest_generation_run: GenerationRunSummary | None = None
     artifacts: list["ArtifactItem"] = Field(default_factory=list)
 
     pipeline_status: str
@@ -246,9 +274,16 @@ class ArtifactItem(BaseModel):
     id: str
     kind: str
     filename: str
+    format: str | None = None
     persona_name: str | None = None
     generation_status: str | None = None
     created_at: str | None = None
+    artifact_role: str | None = None
+    is_primary: bool = False
+    payload_version: str | None = None
+    inputs_hash: str | None = None
+    fit_status: str | None = None
+    evidence_completeness: EvidenceCompletenessSummary | None = None
     download_url: str
     preview_url: str
 

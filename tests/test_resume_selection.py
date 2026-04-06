@@ -1,4 +1,8 @@
-"""Tests for grounded bullet selection (EPIC 7)."""
+"""Tests for the legacy inventory-native selection adapter.
+
+Resume-v2 runtime selection goes through ``core.resumes.v2_pipeline``. These
+tests keep the adapter behavior aligned with the shared v2 semantics.
+"""
 
 import pytest
 
@@ -9,6 +13,7 @@ from core.resumes.selection import (
     select_projects,
     select_skills,
 )
+from core.resumes.v2_selection import score_text_tags
 
 
 def _make_inventory(roles=None, projects=None, skills=None):
@@ -37,6 +42,26 @@ def test_select_role_bullets_orders_by_keyword_match():
     assert len(result) == 2
     assert result[0] == "Built Y with Python and Go"
     assert result[1] == "Did X with Java"
+
+
+def test_legacy_role_selection_uses_shared_v2_scoring_semantics():
+    role = Role(
+        company="Acme",
+        title="Engineer",
+        bullets=[
+            RoleBullet(text="Built APIs in Go", tags=["go", "api"], metrics=[]),
+            RoleBullet(text="Maintained cron jobs", tags=["ops"], metrics=[]),
+        ],
+    )
+    keywords = {"go"}
+
+    selected = select_role_bullets(role, keywords, "BACKEND", max_bullets=2)
+    scored = sorted(
+        role.bullets,
+        key=lambda bullet: -score_text_tags(bullet.text, bullet.tags or [], keywords, "BACKEND"),
+    )
+
+    assert selected == [bullet.text for bullet in scored]
 
 
 def test_select_roles_returns_ordered_roles():

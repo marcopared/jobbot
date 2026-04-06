@@ -19,19 +19,27 @@ export default function JobDetailPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options?: { background?: boolean; suppressError?: boolean }) => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
+    if (!options?.background) {
+      setLoading(true);
+    }
+    if (!options?.suppressError) {
+      setError(null);
+    }
     try {
       const jobData = await fetchJob(id);
       setJob(jobData);
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to load job details";
-      setError(message);
-      notifyError(message);
+      if (!options?.suppressError) {
+        setError(message);
+        notifyError(message);
+      }
     } finally {
-      setLoading(false);
+      if (!options?.background) {
+        setLoading(false);
+      }
     }
   }, [id]);
 
@@ -39,14 +47,24 @@ export default function JobDetailPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const status = (job?.latest_generation_run?.status || "").toLowerCase();
+    if (status !== "queued" && status !== "running" && status !== "pending") {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => {
+      void load({ background: true, suppressError: true });
+    }, 1500);
+    return () => window.clearTimeout(timeoutId);
+  }, [job?.latest_generation_run?.id, job?.latest_generation_run?.status, load]);
+
   const handleGenerateResume = useCallback(async () => {
     if (!id) return;
     setGenerating(true);
     setError(null);
     try {
       await triggerGenerateResume(id);
-      // Refetch after a delay to show new artifact when ready
-      setTimeout(() => void load(), 5000);
+      await load({ background: true, suppressError: true });
     } catch (e) {
       const message = e instanceof Error ? e.message : "Resume generation failed";
       setError(message);
@@ -87,7 +105,7 @@ export default function JobDetailPage() {
 
   const readyToApply = job.artifact_availability && job.apply_url;
   const readyArtifact = job.artifacts?.find(
-    (a) => (a.generation_status || "").toLowerCase() === "success"
+    (a) => a.is_primary && (a.generation_status || "").toLowerCase() === "success"
   );
 
   return (
@@ -285,6 +303,7 @@ export default function JobDetailPage() {
 
       <ArtifactViewer
         artifacts={job.artifacts ?? []}
+        latestGenerationRun={job.latest_generation_run}
         onGenerateResume={handleGenerateResume}
         generating={generating}
         canGenerateResume={canGenerateResume}

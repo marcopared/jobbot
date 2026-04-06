@@ -23,16 +23,16 @@ preserving current runtime and product truth.
 
 ## Target Docs
 
-- [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md)
-- [docs/design-docs/core-beliefs.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/core-beliefs.md)
-- [docs/design-docs/index.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/index.md)
-- [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
-- [docs/product-specs/source-lanes-and-manual-apply.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/source-lanes-and-manual-apply.md)
-- [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md)
-- [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
-- [docs/FRONTEND.md](/Users/marcoparedes/dev/jobbot/docs/FRONTEND.md)
-- [docs/PLANS.md](/Users/marcoparedes/dev/jobbot/docs/PLANS.md)
-- [docs/exec-plans/active/README.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/README.md)
+- [docs/DESIGN.md](../../DESIGN.md)
+- [docs/design-docs/core-beliefs.md](../../design-docs/core-beliefs.md)
+- [docs/design-docs/index.md](../../design-docs/index.md)
+- [docs/PRODUCT_SENSE.md](../../PRODUCT_SENSE.md)
+- [docs/product-specs/source-lanes-and-manual-apply.md](../../product-specs/source-lanes-and-manual-apply.md)
+- [docs/SECURITY.md](../../SECURITY.md)
+- [docs/RELIABILITY.md](../../RELIABILITY.md)
+- [docs/FRONTEND.md](../../FRONTEND.md)
+- [docs/PLANS.md](../../PLANS.md)
+- [docs/exec-plans/active/README.md](README.md)
 
 ## Acceptance Criteria
 

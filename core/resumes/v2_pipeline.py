@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from core.inventory.types import ExperienceInventory
-from core.matching import keyword_in_text
 from core.resumes.effective_input import ResumeEffectiveInput
 from core.resumes.evidence_types import (
     ResumeContact,
@@ -23,6 +22,8 @@ from core.resumes.layout_types import (
 )
 from core.resumes.payload_builder import build_resume_payload
 from core.resumes.payload_types import ResumePayloadV2
+from core.resumes.v2_selection import persona_tag_match, score_text_tags
+
 
 def build_inventory_evidence_package(
     inventory: ExperienceInventory,
@@ -126,40 +127,8 @@ def build_inventory_evidence_package(
         source_kind="inventory-only",
     )
 
-
-def _persona_tag_match(tags: tuple[str, ...], persona: str) -> bool:
-    tags_lower = {tag.lower() for tag in tags}
-    persona_lower = persona.lower()
-    if "backend" in persona_lower and ("backend" in tags_lower or "api" in tags_lower):
-        return True
-    if "platform" in persona_lower or "infra" in persona_lower:
-        if any(
-            tag in tags_lower
-            for tag in ("platform", "infra", "kubernetes", "k8s", "ci/cd", "aws", "docker")
-        ):
-            return True
-    if "hybrid" in persona_lower:
-        return True
-    return False
-
-
-def _keyword_overlap(item: ResumeEvidenceItem, keywords: set[str]) -> int:
-    tags_lower = {tag.lower() for tag in item.tags}
-    overlap = 0
-    for keyword in keywords:
-        normalized = keyword.lower()
-        if keyword_in_text(item.text, normalized):
-            overlap += 1
-        elif normalized in tags_lower:
-            overlap += 1
-    return overlap
-
-
 def _score_item(item: ResumeEvidenceItem, target_keywords: set[str], persona: str) -> float:
-    score = float(_keyword_overlap(item, target_keywords)) * 2.0
-    if _persona_tag_match(item.tags, persona):
-        score += 5.0
-    return score
+    return score_text_tags(item.text, item.tags, target_keywords, persona)
 
 
 def _select_group(
@@ -207,7 +176,7 @@ def build_fit_result(
             persona,
             max_role_bullets,
         )
-        if _persona_tag_match(role.tags, persona):
+        if persona_tag_match(role.tags, persona):
             total_score += 3.0
         if selected_ids:
             role_candidates.append(

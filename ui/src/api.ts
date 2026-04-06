@@ -46,13 +46,39 @@ export interface JobDetail extends Omit<Job, "persona"> {
     persona_confidence?: number;
     persona_rationale?: string;
   } | null;
+  latest_generation_run: {
+    id: string;
+    status: string;
+    triggered_by: string | null;
+    created_at: string | null;
+    finished_at: string | null;
+    failure_reason: string | null;
+    artifact_id: string | null;
+  } | null;
   artifacts: {
     id: string;
     kind: string;
     filename: string;
+    format: string | null;
     persona_name: string | null;
     generation_status: string | null;
     created_at: string | null;
+    artifact_role: string | null;
+    is_primary: boolean;
+    payload_version: string | null;
+    inputs_hash: string | null;
+    fit_status: string | null;
+    evidence_completeness: {
+      summary: string;
+      source_kind: string | null;
+      total_sources: number;
+      present_sources: number;
+      required_sources: number;
+      required_present: number;
+      optional_sources: number;
+      optional_present: number;
+      missing_optional_sources: string[];
+    } | null;
     download_url: string;
     preview_url: string;
   }[];
@@ -216,9 +242,26 @@ export interface JobArtifact {
   id: string;
   kind: string;
   filename: string;
+  format: string | null;
   persona_name: string | null;
   generation_status: string | null;
   created_at: string | null;
+  artifact_role: string | null;
+  is_primary: boolean;
+  payload_version: string | null;
+  inputs_hash: string | null;
+  fit_status: string | null;
+  evidence_completeness: {
+    summary: string;
+    source_kind: string | null;
+    total_sources: number;
+    present_sources: number;
+    required_sources: number;
+    required_present: number;
+    optional_sources: number;
+    optional_present: number;
+    missing_optional_sources: string[];
+  } | null;
   download_url: string;
   preview_url: string;
 }

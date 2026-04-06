@@ -13,6 +13,7 @@ from core.resumes.payload_types import (
     ResumeSectionEntry,
 )
 from core.resumes.rewrite import apply_conservative_rewrite
+from core.resumes.v2_selection import prioritize_skills
 
 DEFAULT_SKILL_LIMIT = 20
 
@@ -23,10 +24,7 @@ def _select_skills(
     *,
     max_skills: int = DEFAULT_SKILL_LIMIT,
 ) -> tuple[str, ...]:
-    keyword_set = {keyword.lower() for keyword in target_keywords}
-    matched = [skill for skill in evidence.skills if skill.strip().lower() in keyword_set]
-    rest = [skill for skill in evidence.skills if skill.strip().lower() not in keyword_set]
-    return tuple((matched + rest)[:max_skills])
+    return prioritize_skills(evidence.skills, target_keywords, max_skills=max_skills)
 
 
 def _format_dates(start: str, end: str) -> str:

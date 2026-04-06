@@ -40,4 +40,4 @@ The documentation graph now follows the same pattern used in the Harness-style r
 ## Follow-Ups
 
 Tracked in
-[docs/exec-plans/tech-debt-tracker.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/tech-debt-tracker.md).
+[docs/exec-plans/tech-debt-tracker.md](../tech-debt-tracker.md).

@@ -4,9 +4,9 @@
 
 | Spec | Status | Purpose |
 | --- | --- | --- |
-| [source-lanes-and-manual-apply.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/source-lanes-and-manual-apply.md) | Active | Core product contract: source roles, trust model, and manual-apply boundary |
-| [ready-to-apply-operator-loop.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/ready-to-apply-operator-loop.md) | Active | The main operator workflow from artifact-ready job to manual apply |
-| [manual-intake-and-generation.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/manual-intake-and-generation.md) | Active | Fallback intake path and resume generation behavior |
+| [source-lanes-and-manual-apply.md](source-lanes-and-manual-apply.md) | Active | Core product contract: source roles, trust model, and manual-apply boundary |
+| [ready-to-apply-operator-loop.md](ready-to-apply-operator-loop.md) | Active | The main operator workflow from artifact-ready job to manual apply |
+| [manual-intake-and-generation.md](manual-intake-and-generation.md) | Active | Fallback intake path and resume generation behavior |
 
 ## How To Add A Spec
 
