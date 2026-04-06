@@ -36,6 +36,8 @@ Do not document the larger aspirational state machine as if it were implemented.
 4. Run-item payloads in `items_json` must remain backward-compatible with the UI contract.
 5. Discovery resolution must reprocess the enriched job through the downstream chain.
 6. Discovery, canonical ATS, and URL-ingest roles must remain distinct.
+7. Resume generation must not record artifact success when one-page fit is missed unless
+   `RESUME_GENERATION_ALLOW_MULTI_PAGE_FALLBACK=true`.
 
 ## Focused Regression Suites
 

@@ -14,26 +14,15 @@ from core.resumes.evidence_types import (
     ResumeEvidenceRole,
 )
 from core.resumes.layout_types import (
+    DEFAULT_LAYOUT_LIMITS,
     FitResult,
     FitSelection,
+    LayoutLimits,
     LayoutPlan,
     LayoutSectionPlan,
 )
-from core.resumes.payload_types import (
-    BulletProvenance,
-    ResumeBullet,
-    ResumePayloadV2,
-    ResumeSection,
-    ResumeSectionEntry,
-)
-from core.resumes.rewrite import apply_conservative_rewrite
-
-DEFAULT_ROLE_LIMIT = 4
-DEFAULT_ROLE_BULLET_LIMIT = 5
-DEFAULT_PROJECT_LIMIT = 2
-DEFAULT_PROJECT_BULLET_LIMIT = 3
-DEFAULT_SKILL_LIMIT = 20
-
+from core.resumes.payload_builder import build_resume_payload
+from core.resumes.payload_types import ResumePayloadV2
 
 def build_inventory_evidence_package(
     inventory: ExperienceInventory,
@@ -131,6 +120,7 @@ def build_inventory_evidence_package(
         ),
         roles=tuple(roles),
         projects=tuple(projects),
+        supplemental_entries=(),
         items=tuple(items),
         inventory_version_hash=inventory_hash,
         source_kind="inventory-only",
@@ -197,10 +187,12 @@ def build_fit_result(
     target_keywords: set[str],
     found_keywords: set[str] | None = None,
     missing_keywords: set[str] | None = None,
-    max_roles: int = DEFAULT_ROLE_LIMIT,
-    max_role_bullets: int = DEFAULT_ROLE_BULLET_LIMIT,
-    max_projects: int = DEFAULT_PROJECT_LIMIT,
-    max_project_bullets: int = DEFAULT_PROJECT_BULLET_LIMIT,
+    max_roles: int = DEFAULT_LAYOUT_LIMITS.max_roles,
+    max_role_bullets: int = DEFAULT_LAYOUT_LIMITS.max_role_bullets,
+    max_projects: int = DEFAULT_LAYOUT_LIMITS.max_projects,
+    max_project_bullets: int = DEFAULT_LAYOUT_LIMITS.max_project_bullets,
+    max_supplemental_entries: int = DEFAULT_LAYOUT_LIMITS.max_supplemental_entries,
+    max_supplemental_bullets: int = DEFAULT_LAYOUT_LIMITS.max_supplemental_bullets,
 ) -> FitResult:
     """Score evidence items and select deterministic experience/project content."""
     item_lookup = {item.id: item for item in evidence.items}
@@ -253,6 +245,33 @@ def build_fit_result(
             )
     project_candidates.sort(key=lambda candidate: (-candidate[0].score, candidate[1]))
 
+    source_lookup = {source.source_name: source for source in evidence.source_metadata}
+    supplemental_candidates: list[tuple[FitSelection, int]] = []
+    for index, entry in enumerate(evidence.supplemental_entries):
+        source_meta = source_lookup.get(entry.source_type)
+        if source_meta is not None and not source_meta.used_for_facts:
+            continue
+        selected_ids, total_score = _select_group(
+            entry.id,
+            entry.bullet_ids,
+            item_lookup,
+            target_keywords,
+            persona,
+            max_supplemental_bullets,
+        )
+        if selected_ids:
+            supplemental_candidates.append(
+                (
+                    FitSelection(
+                        entry_id=entry.id,
+                        bullet_ids=selected_ids,
+                        score=total_score,
+                    ),
+                    index,
+                )
+            )
+    supplemental_candidates.sort(key=lambda candidate: (-candidate[0].score, candidate[1]))
+
     return FitResult(
         target_persona=persona,
         target_keywords=tuple(sorted(keyword.lower() for keyword in target_keywords)),
@@ -262,6 +281,9 @@ def build_fit_result(
         ),
         role_selections=tuple(selection for selection, _ in role_candidates[:max_roles]),
         project_selections=tuple(selection for selection, _ in project_candidates[:max_projects]),
+        supplemental_selections=tuple(
+            selection for selection, _ in supplemental_candidates[:max_supplemental_entries]
+        ),
     )
 
 
@@ -282,160 +304,49 @@ def build_effective_input(
     )
 
 
-def _select_skills(
-    evidence: ResumeEvidencePackage,
-    target_keywords: tuple[str, ...],
-    *,
-    max_skills: int = DEFAULT_SKILL_LIMIT,
-) -> tuple[str, ...]:
-    keyword_set = {keyword.lower() for keyword in target_keywords}
-    matched = [skill for skill in evidence.skills if skill.strip().lower() in keyword_set]
-    rest = [skill for skill in evidence.skills if skill.strip().lower() not in keyword_set]
-    return tuple((matched + rest)[:max_skills])
-
-
-def _format_dates(start: str, end: str) -> str:
-    if not start and not end:
-        return ""
-    return f"{start or '?'} – {end or 'present'}"
-
-
-def build_resume_payload(
-    evidence: ResumeEvidencePackage,
-    fit_result: FitResult,
-    effective_input: ResumeEffectiveInput,
-) -> ResumePayloadV2:
-    """Build the structured v2 payload from evidence and fit selections."""
-    role_lookup = {role.id: role for role in evidence.roles}
-    project_lookup = {project.id: project for project in evidence.projects}
-    item_lookup = {item.id: item for item in evidence.items}
-    missing_keywords = set(fit_result.missing_keywords)
-
-    experience_entries = []
-    for selection in fit_result.role_selections:
-        role = role_lookup[selection.entry_id]
-        bullets = tuple(
-            ResumeBullet(
-                id=f"payload:{bullet_id}",
-                text=apply_conservative_rewrite(item_lookup[bullet_id].text, missing_keywords),
-                provenance=(
-                    BulletProvenance(
-                        evidence_id=bullet_id,
-                        source_type=item_lookup[bullet_id].source_type,
-                    ),
-                ),
-            )
-            for bullet_id in selection.bullet_ids
-        )
-        experience_entries.append(
-            ResumeSectionEntry(
-                id=role.id,
-                heading=role.title,
-                subheading=role.company,
-                dates=_format_dates(role.start, role.end),
-                bullets=bullets,
-            )
-        )
-
-    project_entries = []
-    for selection in fit_result.project_selections:
-        project = project_lookup[selection.entry_id]
-        bullets = tuple(
-            ResumeBullet(
-                id=f"payload:{bullet_id}",
-                text=apply_conservative_rewrite(item_lookup[bullet_id].text, missing_keywords),
-                provenance=(
-                    BulletProvenance(
-                        evidence_id=bullet_id,
-                        source_type=item_lookup[bullet_id].source_type,
-                    ),
-                ),
-            )
-            for bullet_id in selection.bullet_ids
-        )
-        project_entries.append(
-            ResumeSectionEntry(
-                id=project.id,
-                heading=project.name,
-                subheading="",
-                dates="",
-                bullets=bullets,
-            )
-        )
-
-    education_lines = tuple(
-        f"{record.degree} — {record.school} ({record.year})"
-        for record in evidence.education
-    )
-
-    sections = (
-        ResumeSection(
-            id="summary",
-            kind="summary",
-            title="Summary",
-            body=evidence.summary_for_persona(fit_result.target_persona),
-        ),
-        ResumeSection(
-            id="skills",
-            kind="skills",
-            title="Skills",
-            lines=_select_skills(evidence, fit_result.target_keywords),
-        ),
-        ResumeSection(
-            id="experience",
-            kind="experience",
-            title="Experience",
-            entries=tuple(experience_entries),
-        ),
-        ResumeSection(
-            id="projects",
-            kind="projects",
-            title="Projects",
-            entries=tuple(project_entries),
-        ),
-        ResumeSection(
-            id="education",
-            kind="education",
-            title="Education",
-            lines=education_lines,
-        ),
-    )
-
-    return ResumePayloadV2(
-        contact=evidence.contact,
-        sections=sections,
-        target_persona=fit_result.target_persona,
-        effective_input_hash=effective_input.compute_hash(),
-        inventory_version_hash=evidence.inventory_version_hash,
-    )
-
-
 def build_layout_plan(
     payload: ResumePayloadV2,
     *,
     template_version: str,
+    limits: LayoutLimits = DEFAULT_LAYOUT_LIMITS,
 ) -> LayoutPlan:
     """Build the static render-time layout plan for the current template."""
-    return LayoutPlan(
-        effective_input_hash=payload.effective_input_hash,
-        template_version=template_version,
-        sections=(
-            LayoutSectionPlan(section_id="summary", order=1, title="Summary"),
-            LayoutSectionPlan(section_id="skills", order=2, title="Skills"),
+    section_ids = {section.id for section in payload.sections}
+    sections = [LayoutSectionPlan(section_id="summary", order=1, title="Summary")]
+    next_order = 2
+    if "highlights" in section_ids:
+        sections.append(
+            LayoutSectionPlan(
+                section_id="highlights",
+                order=next_order,
+                title="Highlights",
+                max_entries=limits.max_supplemental_entries,
+                max_bullets_per_entry=limits.max_supplemental_bullets,
+            )
+        )
+        next_order += 1
+    sections.extend(
+        [
+            LayoutSectionPlan(section_id="skills", order=next_order, title="Skills"),
             LayoutSectionPlan(
                 section_id="experience",
-                order=3,
+                order=next_order + 1,
                 title="Experience",
-                max_entries=DEFAULT_ROLE_LIMIT,
-                max_bullets_per_entry=DEFAULT_ROLE_BULLET_LIMIT,
+                max_entries=limits.max_roles,
+                max_bullets_per_entry=limits.max_role_bullets,
             ),
             LayoutSectionPlan(
                 section_id="projects",
-                order=4,
+                order=next_order + 2,
                 title="Projects",
-                max_entries=DEFAULT_PROJECT_LIMIT,
-                max_bullets_per_entry=DEFAULT_PROJECT_BULLET_LIMIT,
+                max_entries=limits.max_projects,
+                max_bullets_per_entry=limits.max_project_bullets,
             ),
-            LayoutSectionPlan(section_id="education", order=5, title="Education"),
-        ),
+            LayoutSectionPlan(section_id="education", order=next_order + 3, title="Education"),
+        ]
+    )
+    return LayoutPlan(
+        effective_input_hash=payload.effective_input_hash,
+        template_version=template_version,
+        sections=tuple(sections),
     )

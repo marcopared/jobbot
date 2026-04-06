@@ -187,8 +187,9 @@ Grounding model:
 - evidence assembly:
   [core/resumes/evidence_builder.py](/Users/marcoparedes/dev/jobbot/core/resumes/evidence_builder.py)
 - rendering:
-  - HTML template
-  - Playwright PDF render
+  - centralized Letter + 0.5in default page geometry
+  - deterministic fit planning with bounded compaction
+  - Playwright PDF render plus rendered page-count validation
   - artifact storage backend
 
 ## 7. Resolution Model

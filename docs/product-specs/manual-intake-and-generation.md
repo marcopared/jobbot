@@ -49,3 +49,24 @@ Allowed only when:
 Resume generation must stay grounded in the experience inventory YAML plus deterministic local
 user-side evidence inputs when present, with deterministic selection logic. It should not become a
 freeform narrative generation feature or a live external-source enrichment feature.
+
+Additional grounding constraints:
+
+- the target job description is a targeting signal only and must not become a source of candidate
+  facts
+- emitted resume bullets must carry provenance back to factual evidence
+- `current_resume` may influence preference-level behavior such as phrasing or ordering, but it is
+  not a standalone fact source unless backed by other grounded evidence
+
+### Fit and artifact trust
+
+- the default template keeps Letter page size with 0.5in margins
+- resume generation includes deterministic fit planning with bounded compaction passes
+- required contact/header/core sections are not dropped during compaction
+- optional highlights and projects are trimmed before experience bullets and role count
+- fit outcomes are explicit:
+  - `fit_success_one_page`
+  - `fit_failed_overflow`
+  - `fit_success_multi_page_fallback` only when explicitly enabled
+- default behavior is fail-closed on overflow; a multi-page render must not be recorded as a
+  successful artifact unless `RESUME_GENERATION_ALLOW_MULTI_PAGE_FALLBACK=true`

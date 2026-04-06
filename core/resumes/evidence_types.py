@@ -76,6 +76,20 @@ class ResumeEvidenceItem:
             "attributes": {key: value for key, value in self.attributes},
         }
 
+    def to_hash_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "source_type": self.source_type,
+            "item_type": self.item_type,
+            "text": self.text,
+            "tags": list(self.tags),
+            "metrics": list(self.metrics),
+            "parent_id": self.parent_id,
+            "attributes": {
+                key: value for key, value in self.attributes if key != "path"
+            },
+        }
+
 
 @dataclass(frozen=True)
 class ResumeEvidenceSource:
@@ -91,6 +105,7 @@ class ResumeEvidenceSource:
     item_count: int = 0
     used_for_facts: bool = True
     used_for_targeting: bool = False
+    used_for_preferences: bool = False
     notes: tuple[str, ...] = ()
     metadata: tuple[tuple[str, str], ...] = ()
 
@@ -112,6 +127,23 @@ class ResumeEvidenceSource:
             "item_count": self.item_count,
             "used_for_facts": self.used_for_facts,
             "used_for_targeting": self.used_for_targeting,
+            "used_for_preferences": self.used_for_preferences,
+            "notes": list(self.notes),
+            "metadata": {key: value for key, value in self.metadata},
+        }
+
+    def to_hash_dict(self) -> dict[str, object]:
+        return {
+            "source_name": self.source_name,
+            "required": self.required,
+            "present": self.present,
+            "source_kind": self.source_kind,
+            "format": self.format,
+            "content_hash": self.content_hash,
+            "item_count": self.item_count,
+            "used_for_facts": self.used_for_facts,
+            "used_for_targeting": self.used_for_targeting,
+            "used_for_preferences": self.used_for_preferences,
             "notes": list(self.notes),
             "metadata": {key: value for key, value in self.metadata},
         }
@@ -178,6 +210,36 @@ class ResumeEvidenceProject:
 
 
 @dataclass(frozen=True)
+class ResumeEvidenceSupplementalEntry:
+    """Grouped factual local evidence that may emit payload bullets."""
+
+    id: str
+    source_type: str
+    heading: str
+    subheading: str = ""
+    dates: str = ""
+    bullet_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("ResumeEvidenceSupplementalEntry.id is required")
+        if not self.source_type.strip():
+            raise ValueError("ResumeEvidenceSupplementalEntry.source_type is required")
+        if not self.heading.strip():
+            raise ValueError("ResumeEvidenceSupplementalEntry.heading is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "source_type": self.source_type,
+            "heading": self.heading,
+            "subheading": self.subheading,
+            "dates": self.dates,
+            "bullet_ids": list(self.bullet_ids),
+        }
+
+
+@dataclass(frozen=True)
 class ResumeEvidencePackage:
     """Aggregated evidence set for deterministic payload generation."""
 
@@ -187,6 +249,7 @@ class ResumeEvidencePackage:
     education: tuple[ResumeEducationRecord, ...]
     roles: tuple[ResumeEvidenceRole, ...]
     projects: tuple[ResumeEvidenceProject, ...]
+    supplemental_entries: tuple[ResumeEvidenceSupplementalEntry, ...]
     items: tuple[ResumeEvidenceItem, ...]
     source_metadata: tuple[ResumeEvidenceSource, ...] = ()
     missing_optional_sources: tuple[str, ...] = ()
@@ -216,6 +279,13 @@ class ResumeEvidencePackage:
                 raise ValueError(
                     f"ResumeEvidenceProject {project.id} references unknown evidence ids: {missing}"
                 )
+        for entry in self.supplemental_entries:
+            missing = [bullet_id for bullet_id in entry.bullet_ids if bullet_id not in item_ids]
+            if missing:
+                raise ValueError(
+                    "ResumeEvidenceSupplementalEntry "
+                    f"{entry.id} references unknown evidence ids: {missing}"
+                )
 
     def summary_for_persona(self, persona: str) -> str:
         normalized = persona.strip().upper()
@@ -240,10 +310,28 @@ class ResumeEvidencePackage:
             "education": [record.to_dict() for record in self.education],
             "roles": [role.to_dict() for role in self.roles],
             "projects": [project.to_dict() for project in self.projects],
+            "supplemental_entries": [entry.to_dict() for entry in self.supplemental_entries],
             "items": [item.to_dict() for item in self.items],
             "source_metadata": [source.to_dict() for source in self.source_metadata],
             "missing_optional_sources": list(self.missing_optional_sources),
         }
 
     def compute_hash(self) -> str:
-        return canonical_json_hash(self.to_dict())
+        return canonical_json_hash(
+            {
+                "schema_version": self.schema_version,
+                "source_kind": self.source_kind,
+                "inputs_hash": self.inputs_hash,
+                "inventory_version_hash": self.inventory_version_hash,
+                "contact": self.contact.to_dict(),
+                "summary_variants": dict(self.summary_variants),
+                "skills": list(self.skills),
+                "education": [record.to_dict() for record in self.education],
+                "roles": [role.to_dict() for role in self.roles],
+                "projects": [project.to_dict() for project in self.projects],
+                "supplemental_entries": [entry.to_dict() for entry in self.supplemental_entries],
+                "items": [item.to_hash_dict() for item in self.items],
+                "source_metadata": [source.to_hash_dict() for source in self.source_metadata],
+                "missing_optional_sources": list(self.missing_optional_sources),
+            }
+        )

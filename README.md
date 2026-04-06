@@ -89,6 +89,15 @@ cd ui && npm run dev -- --host 127.0.0.1 --port 5173
 
 All paths run score → classify → ATS analysis. Resume generation: manual via `POST /api/jobs/{id}/generate-resume`, or automatic when `ENABLE_AUTO_RESUME_GENERATION=true` and the job passes the generation gate.
 
+Resume-generation v2 fit policy:
+
+- the default template keeps Letter page size with 0.5in margins
+- generation uses deterministic fit planning plus bounded compaction before render
+- rendered PDFs are validated for page count before artifact success is recorded
+- default overflow behavior is fail-closed
+- set `RESUME_GENERATION_ALLOW_MULTI_PAGE_FALLBACK=true` only if you explicitly want multi-page
+  renders to succeed as `fit_success_multi_page_fallback`
+
 ### Local resume evidence inputs
 
 Resume generation still supports the existing required inventory file at
@@ -102,6 +111,14 @@ Resume generation still supports the existing required inventory file at
 
 Missing optional sources are reported explicitly in internal generation metadata; they are not
 required for the inventory-only path to keep working. No live Jira integration is used.
+
+Grounding notes:
+
+- the target job description is used for ATS/persona targeting only, not as a source of candidate
+  facts
+- emitted bullets are built from structured evidence with provenance
+- `current_resume` is treated as preference context, while factual supplemental bullets come from
+  grounded inventory/current-role/achievements/project inputs
 
 ## Known Issues / Verification Reality
 

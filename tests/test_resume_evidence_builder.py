@@ -125,4 +125,9 @@ def test_full_stack_package_hash_is_stable_and_reports_loaded_sources():
         "achievements",
         "project_writeups",
     }
+    current_resume_source = next(
+        source for source in first.source_metadata if source.source_name == "current_resume"
+    )
+    assert current_resume_source.used_for_facts is False
+    assert current_resume_source.used_for_preferences is True
     assert len([item for item in first.items if item.source_type == "project_writeups"]) == 5

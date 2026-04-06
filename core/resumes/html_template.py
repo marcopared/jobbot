@@ -1,6 +1,6 @@
 """Deterministic HTML resume template (EPIC 7)."""
 
-from core.resumes.layout_types import LayoutPlan
+from core.resumes.layout_types import DEFAULT_PAGE_GEOMETRY, LayoutPlan
 from core.resumes.payload_types import ResumePayloadV2, ResumeSection
 
 
@@ -47,6 +47,29 @@ def _render_section_body(section: ResumeSection) -> str:
                     <span class="role-dates">{dates}</span>
                 </div>
                 <ul class="role-bullets">{bullets_html}</ul>
+            </div>
+            """
+            )
+        return "\n".join(entries_html)
+    if section.kind == "highlights":
+        entries_html = []
+        for entry in section.entries:
+            heading = _escape_html(entry.heading)
+            subheading = _escape_html(entry.subheading)
+            dates = _escape_html(entry.dates)
+            bullets_html = "".join(
+                f'<li>{_escape_html(bullet.text)}</li>' for bullet in entry.bullets
+            )
+            meta_bits = " ".join(part for part in (subheading, dates) if part)
+            meta_html = f'<span class="highlight-meta">{meta_bits}</span>' if meta_bits else ""
+            entries_html.append(
+                f"""
+            <div class="highlight">
+                <div class="highlight-header">
+                    <span class="highlight-title">{heading}</span>
+                    {meta_html}
+                </div>
+                <ul class="highlight-bullets">{bullets_html}</ul>
             </div>
             """
             )
@@ -102,14 +125,20 @@ def render_html(payload: ResumePayloadV2, layout_plan: LayoutPlan) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume — {name}</title>
     <style>
-        @page {{ size: letter; margin: 0.5in; }}
-        body {{ font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.35; margin: 0.5in; color: #222; }}
+        @page {{ size: {DEFAULT_PAGE_GEOMETRY.css_page_size}; margin: {DEFAULT_PAGE_GEOMETRY.margin_top_in}in {DEFAULT_PAGE_GEOMETRY.margin_right_in}in {DEFAULT_PAGE_GEOMETRY.margin_bottom_in}in {DEFAULT_PAGE_GEOMETRY.margin_left_in}in; }}
+        body {{ font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.35; margin: {DEFAULT_PAGE_GEOMETRY.margin_top_in}in {DEFAULT_PAGE_GEOMETRY.margin_right_in}in {DEFAULT_PAGE_GEOMETRY.margin_bottom_in}in {DEFAULT_PAGE_GEOMETRY.margin_left_in}in; color: #222; }}
         h1 {{ font-size: 18pt; font-weight: bold; margin: 0 0 4px 0; }}
         .contact {{ font-size: 10pt; color: #444; margin-bottom: 12px; }}
         .contact span {{ margin-right: 12px; }}
         h2 {{ font-size: 12pt; font-weight: bold; margin: 12px 0 6px 0; border-bottom: 1px solid #ccc; padding-bottom: 2px; }}
         .summary {{ margin-bottom: 12px; }}
         .skills {{ margin-bottom: 12px; }}
+        .highlight {{ margin-bottom: 10px; }}
+        .highlight-header {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }}
+        .highlight-title {{ font-weight: bold; }}
+        .highlight-meta {{ color: #555; font-size: 10pt; }}
+        .highlight-bullets {{ margin: 4px 0 0 16px; padding: 0; }}
+        .highlight-bullets li {{ margin-bottom: 3px; }}
         .role {{ margin-bottom: 10px; }}
         .role-header {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }}
         .role-title {{ font-weight: bold; }}

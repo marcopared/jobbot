@@ -13,6 +13,7 @@ from core.resumes.evidence_types import (
     ResumeEvidenceItem,
     ResumeEvidencePackage,
     ResumeEvidenceSource,
+    ResumeEvidenceSupplementalEntry,
 )
 from core.resumes.local_inputs import (
     SUPPORTED_INPUT_EXTENSIONS,
@@ -30,6 +31,15 @@ OPTIONAL_SOURCE_NAMES = (
     "achievements",
     "project_writeups",
 )
+
+SUPPLEMENTAL_ENTRY_HEADINGS = {
+    "current_role": "Current Role Highlights",
+    "achievements": "Selected Achievements",
+}
+
+
+def _titleize_identifier(value: str) -> str:
+    return " ".join(part.capitalize() for part in value.replace("_", " ").split())
 
 
 def build_resume_evidence_package(
@@ -93,6 +103,7 @@ def build_resume_evidence_package(
     )
 
     extra_items: list[ResumeEvidenceItem] = []
+    supplemental_entries: list[ResumeEvidenceSupplementalEntry] = []
 
     for source_name in ("current_resume", "current_role", "achievements"):
         path = find_optional_input_file(inputs_root, source_name)
@@ -107,8 +118,9 @@ def build_resume_evidence_package(
                     path=str(inputs_root / source_name),
                     content_hash=None,
                     item_count=0,
-                    used_for_facts=True,
+                    used_for_facts=source_name != "current_resume",
                     used_for_targeting=False,
+                    used_for_preferences=source_name == "current_resume",
                     notes=(
                         "optional source not found",
                         f"supported extensions: {','.join(SUPPORTED_INPUT_EXTENSIONS)}",
@@ -117,10 +129,13 @@ def build_resume_evidence_package(
             )
             continue
         document = load_local_input_document(path)
+        bullet_ids: list[str] = []
         for index, record in enumerate(document.records):
+            item_id = f"{source_name}:{index}"
+            bullet_ids.append(item_id)
             extra_items.append(
                 ResumeEvidenceItem(
-                    id=f"{source_name}:{index}",
+                    id=item_id,
                     source_type=source_name,
                     item_type="supplemental_text",
                     text=record.text,
@@ -141,10 +156,20 @@ def build_resume_evidence_package(
                 path=str(document.path),
                 content_hash=document.content_hash,
                 item_count=len(document.records),
-                used_for_facts=True,
+                used_for_facts=source_name != "current_resume",
                 used_for_targeting=False,
+                used_for_preferences=source_name == "current_resume",
             )
         )
+        if source_name != "current_resume" and bullet_ids:
+            supplemental_entries.append(
+                ResumeEvidenceSupplementalEntry(
+                    id=source_name,
+                    source_type=source_name,
+                    heading=SUPPLEMENTAL_ENTRY_HEADINGS[source_name],
+                    bullet_ids=tuple(bullet_ids),
+                )
+            )
 
     project_dir = inputs_root / "projects"
     project_file = find_optional_input_file(inputs_root, "projects")
@@ -178,10 +203,13 @@ def build_resume_evidence_package(
         for file_index, path in enumerate(project_files):
             document = load_local_input_document(path)
             project_hashes.append(document.content_hash)
+            entry_heading = _titleize_identifier(path.stem)
+            bullet_ids: list[str] = []
             for record_index, record in enumerate(document.records):
+                item_id = f"project_writeups:{file_index}:{record_index}"
                 extra_items.append(
                     ResumeEvidenceItem(
-                        id=f"project_writeups:{file_index}:{record_index}",
+                        id=item_id,
                         source_type="project_writeups",
                         item_type="supplemental_text",
                         text=record.text,
@@ -192,7 +220,22 @@ def build_resume_evidence_package(
                         + (("path", str(document.path)), ("format", document.format)),
                     )
                 )
+                if not (
+                    record_index == 0
+                    and document.format == "md"
+                    and record.text.strip().lower() == entry_heading.lower()
+                ):
+                    bullet_ids.append(item_id)
             project_item_count += len(document.records)
+            if bullet_ids:
+                supplemental_entries.append(
+                    ResumeEvidenceSupplementalEntry(
+                        id=f"project_writeups:{path.stem}",
+                        source_type="project_writeups",
+                        heading=entry_heading,
+                        bullet_ids=tuple(bullet_ids),
+                    )
+                )
         source_metadata.append(
             ResumeEvidenceSource(
                 source_name="project_writeups",
@@ -229,6 +272,7 @@ def build_resume_evidence_package(
                     "item_count": source.item_count,
                     "used_for_facts": source.used_for_facts,
                     "used_for_targeting": source.used_for_targeting,
+                    "used_for_preferences": source.used_for_preferences,
                     "notes": list(source.notes),
                 }
                 for source in sorted_source_metadata
@@ -253,6 +297,7 @@ def build_resume_evidence_package(
         education=base_package.education,
         roles=base_package.roles,
         projects=base_package.projects,
+        supplemental_entries=tuple(supplemental_entries),
         items=base_package.items + tuple(extra_items),
         source_metadata=sorted_source_metadata,
         missing_optional_sources=missing_optional_sources,

@@ -1,0 +1,2 @@
+- Led backend reliability work across Python APIs, Celery jobs, PostgreSQL persistence, and operator workflows.
+- Coordinated rollout plans for schema, queue, and doc changes that needed deterministic closeout.

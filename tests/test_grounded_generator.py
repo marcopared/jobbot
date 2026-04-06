@@ -6,13 +6,28 @@ Run: pytest tests/test_grounded_generator.py
 """
 
 import uuid
+from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
-from core.db.models import Company, Job, JobAnalysis, PipelineStatus
+from core.db.models import Artifact, Company, Job, JobAnalysis, PipelineStatus
 from core.db.session import get_sync_session
 from core.dedup import compute_dedup_hash_from_raw, normalize_company, normalize_title
 from core.resumes.grounded_generator import generate_grounded_resume
+from core.resumes.layout_types import (
+    FIT_OUTCOME_FAILED_OVERFLOW,
+    FIT_OUTCOME_SUCCESS_MULTI_PAGE_FALLBACK,
+)
+
+FIT_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@dataclass
+class _FakeStoreResult:
+    storage_key: str
+    file_url: str | None = None
 
 
 def _make_job(
@@ -169,3 +184,102 @@ def test_resume_ready_with_analysis_persona_succeeds():
         assert result.artifact.meta_json["resume_v2"]["payload_schema_version"] == "resume-payload-v2"
         persona = result.artifact.persona_name
     assert persona == "HYBRID"
+
+
+def test_multi_page_overflow_fails_closed_by_default(monkeypatch, tmp_path):
+    """Two-page renders do not persist artifact success when fallback is disabled."""
+
+    job_id = _make_job(
+        pipeline_status=PipelineStatus.ATS_ANALYZED.value,
+        with_analysis=True,
+        matched_persona="BACKEND",
+        has_ats_keywords=True,
+    )
+    import core.resumes.grounded_generator as generator_module
+
+    monkeypatch.setattr(
+        generator_module.settings,
+        "experience_inventory_path",
+        str(FIT_FIXTURES / "resume_fit" / "overflow_inventory" / "experience_inventory.yaml"),
+    )
+    monkeypatch.setattr(
+        generator_module.settings,
+        "resume_inputs_dir",
+        str(tmp_path / "resume_inputs"),
+    )
+    monkeypatch.setattr(generator_module.settings, "resume_generation_allow_multi_page_fallback", False)
+    monkeypatch.setattr(generator_module, "render_html_to_pdf_bytes", lambda html, timeout_ms: b"%PDF-1.4")
+    monkeypatch.setattr(generator_module, "count_pdf_pages", lambda pdf_bytes: 2)
+
+    def _unexpected_storage():
+        raise AssertionError("storage should not be reached when overflow fails closed")
+
+    monkeypatch.setattr(generator_module, "get_artifact_storage", _unexpected_storage)
+
+    with get_sync_session() as session:
+        result = generate_grounded_resume(session=session, job_id=job_id)
+        session.rollback()
+
+    assert result.status == "failed"
+    assert result.fit_outcome == FIT_OUTCOME_FAILED_OVERFLOW
+    assert result.artifact is None
+    assert result.fit_diagnostics is not None
+    assert result.fit_diagnostics.actual_page_count == 2
+
+    with get_sync_session() as session:
+        job = session.get(Job, job_id)
+        assert job.pipeline_status == PipelineStatus.ATS_ANALYZED.value
+        assert job.artifact_ready_at is None
+        artifact_count = session.execute(
+            select(Artifact).where(Artifact.job_id == job_id)
+        ).scalars().all()
+        assert artifact_count == []
+
+
+def test_multi_page_fallback_succeeds_when_enabled(monkeypatch, tmp_path):
+    """Explicit fallback allows persistence and records the multi-page fit outcome."""
+
+    job_id = _make_job(
+        pipeline_status=PipelineStatus.ATS_ANALYZED.value,
+        with_analysis=True,
+        matched_persona="BACKEND",
+        has_ats_keywords=True,
+    )
+    import core.resumes.grounded_generator as generator_module
+
+    monkeypatch.setattr(
+        generator_module.settings,
+        "experience_inventory_path",
+        str(FIT_FIXTURES / "resume_fit" / "overflow_inventory" / "experience_inventory.yaml"),
+    )
+    monkeypatch.setattr(
+        generator_module.settings,
+        "resume_inputs_dir",
+        str(tmp_path / "resume_inputs"),
+    )
+    monkeypatch.setattr(generator_module.settings, "resume_generation_allow_multi_page_fallback", True)
+    monkeypatch.setattr(generator_module, "render_html_to_pdf_bytes", lambda html, timeout_ms: b"%PDF-1.4")
+    monkeypatch.setattr(generator_module, "count_pdf_pages", lambda pdf_bytes: 2)
+
+    class _FakeStorage:
+        def store(self, key: str, data: bytes, content_type: str):
+            assert key.endswith("_resume.pdf")
+            assert data == b"%PDF-1.4"
+            assert content_type == "application/pdf"
+            return _FakeStoreResult(storage_key=f"resumes/{key}")
+
+    monkeypatch.setattr(generator_module, "get_artifact_storage", lambda: _FakeStorage())
+
+    with get_sync_session() as session:
+        result = generate_grounded_resume(session=session, job_id=job_id)
+        assert result.status == "success"
+        assert result.fit_outcome == FIT_OUTCOME_SUCCESS_MULTI_PAGE_FALLBACK
+        assert result.artifact is not None
+        assert result.artifact.meta_json["fit_outcome"] == FIT_OUTCOME_SUCCESS_MULTI_PAGE_FALLBACK
+        assert result.artifact.meta_json["resume_v2"]["fit_diagnostics"]["actual_page_count"] == 2
+        session.commit()
+
+    with get_sync_session() as session:
+        job = session.get(Job, job_id)
+        assert job.pipeline_status == PipelineStatus.RESUME_READY.value
+        assert job.artifact_ready_at is not None

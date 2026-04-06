@@ -99,7 +99,9 @@ Artifact generation is deliberately conservative:
 - keeps the experience inventory YAML as the default required content source
 - may assemble additional grounded local file-backed evidence from user-side inputs
 - selects and lightly rewrites grounded bullets
-- renders HTML, then PDF via Playwright
+- preserves the current Letter + 0.5in default geometry through shared layout constants
+- applies deterministic fit planning and bounded compaction before render
+- validates rendered PDFs for one-page fit before artifact success is recorded by default
 - ends in a ready-to-apply queue and external manual apply URL
 
 ### Current operator surfaces

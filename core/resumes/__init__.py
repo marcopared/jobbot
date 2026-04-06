@@ -6,6 +6,7 @@ from core.resumes.evidence_types import (
     ResumeEvidenceItem,
     ResumeEvidencePackage,
     ResumeEvidenceSource,
+    ResumeEvidenceSupplementalEntry,
 )
 from core.resumes.layout_types import FitResult, LayoutPlan
 from core.resumes.payload_types import (
@@ -13,6 +14,7 @@ from core.resumes.payload_types import (
     ResumePayloadV2,
     ResumeSection,
 )
+from core.resumes.payload_builder import build_resume_payload
 
 __all__ = [
     "FitResult",
@@ -22,7 +24,9 @@ __all__ = [
     "ResumeEvidenceItem",
     "ResumeEvidencePackage",
     "ResumeEvidenceSource",
+    "ResumeEvidenceSupplementalEntry",
     "ResumePayloadV2",
     "ResumeSection",
     "build_resume_evidence_package",
+    "build_resume_payload",
 ]

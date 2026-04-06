@@ -1,0 +1,76 @@
+version: 1
+contact:
+  name: "Planner Candidate"
+  email: "planner@example.com"
+  location: "Chicago, IL"
+summary_variants:
+  BACKEND: "Backend engineer focused on Python services, platform reliability, observability, delivery quality, and operator-facing internal tooling."
+  HYBRID: "Hybrid engineer focused on backend systems, workflow tooling, and reliable delivery."
+skills:
+  - Python
+  - PostgreSQL
+  - Terraform
+  - Docker
+  - Kubernetes
+  - AWS
+  - Redis
+  - Celery
+  - FastAPI
+  - SQLAlchemy
+  - CI/CD
+  - Observability
+  - Prometheus
+  - Datadog
+  - Playwright
+roles:
+  - company: "Acme"
+    title: "Senior Backend Engineer"
+    start: "2022-01"
+    end: "present"
+    tags: [backend, platform]
+    bullets:
+      - text: "Built Python APIs and asynchronous worker flows for operator tooling, reducing manual queue review latency while keeping auditability and deterministic failure visibility intact."
+        tags: [backend, python, fastapi, celery]
+        metrics: []
+      - text: "Improved deployment safety with Terraform, Docker, CI/CD guardrails, and structured runtime checks that reduced broken preview promotions and made rollback decisions faster."
+        tags: [platform, terraform, docker, ci/cd]
+        metrics: []
+      - text: "Expanded observability with Datadog dashboards, queue metrics, and error triage summaries so delivery regressions were caught before they reached operator-facing workflows."
+        tags: [observability, datadog, platform]
+        metrics: []
+  - company: "Beta"
+    title: "Platform Engineer"
+    start: "2019-03"
+    end: "2021-12"
+    tags: [platform, infra]
+    bullets:
+      - text: "Owned Kubernetes workloads, Redis-backed background processing, and release automation for internal services that handled compliance-sensitive workflows."
+        tags: [platform, kubernetes, redis]
+        metrics: []
+      - text: "Refined PostgreSQL migrations, SQLAlchemy data flows, and production incident review loops to keep schema changes predictable and reversible."
+        tags: [postgresql, sqlalchemy, backend]
+        metrics: []
+      - text: "Partnered with engineering leads on SLOs, instrumentation, and deployment readiness checklists for multi-team releases."
+        tags: [observability, platform]
+        metrics: []
+projects:
+  - name: "Incident Review Console"
+    bullets:
+      - text: "Built a reliability review console that consolidated queue failures, incident tags, and ownership notes for faster follow-up."
+        tags: [python, observability]
+        metrics: []
+      - text: "Added targeted filters and export tooling so operators could share concrete failure slices without manual spreadsheet cleanup."
+        tags: [backend, python]
+        metrics: []
+  - name: "Runtime Contract Linter"
+    bullets:
+      - text: "Created a contract linter that flagged route drift, worker-payload mismatches, and stale docs before merge."
+        tags: [python, ci/cd]
+        metrics: []
+      - text: "Published deterministic summaries for schema-impacting diffs so reviewers could verify compatibility quickly."
+        tags: [platform, observability]
+        metrics: []
+education:
+  - school: "MIT"
+    degree: "BS CS"
+    year: "2015"

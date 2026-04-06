@@ -1,0 +1,164 @@
+{
+  "contact": {
+    "email": "jane@example.com",
+    "linkedin_url": null,
+    "location": "Chicago, IL",
+    "name": "Jane Engineer"
+  },
+  "effective_input_hash": "15ad9dc7de66a554",
+  "inventory_version_hash": "28542ce2a884de42",
+  "schema_version": "resume-payload-v2",
+  "sections": [
+    {
+      "body": "Hybrid engineer summary",
+      "entries": [],
+      "id": "summary",
+      "kind": "summary",
+      "lines": [],
+      "title": "Summary"
+    },
+    {
+      "body": "",
+      "entries": [
+        {
+          "bullets": [
+            {
+              "id": "payload:current_role:0",
+              "provenance": [
+                {
+                  "evidence_id": "current_role:0",
+                  "source_type": "current_role"
+                }
+              ],
+              "text": "Leading the migration of service APIs to a shared platform."
+            },
+            {
+              "id": "payload:current_role:1",
+              "provenance": [
+                {
+                  "evidence_id": "current_role:1",
+                  "source_type": "current_role"
+                }
+              ],
+              "text": "Partnering with product and design on operator workflow improvements."
+            }
+          ],
+          "dates": "",
+          "heading": "Current Role Highlights",
+          "id": "current_role",
+          "subheading": ""
+        },
+        {
+          "bullets": [
+            {
+              "id": "payload:achievements:0",
+              "provenance": [
+                {
+                  "evidence_id": "achievements:0",
+                  "source_type": "achievements"
+                }
+              ],
+              "text": "Exceeded quarterly reliability goals with zero Sev1 incidents."
+            },
+            {
+              "id": "payload:achievements:1",
+              "provenance": [
+                {
+                  "evidence_id": "achievements:1",
+                  "source_type": "achievements"
+                }
+              ],
+              "text": "Recognized for mentoring engineers across two teams."
+            }
+          ],
+          "dates": "",
+          "heading": "Selected Achievements",
+          "id": "achievements",
+          "subheading": ""
+        }
+      ],
+      "id": "highlights",
+      "kind": "highlights",
+      "lines": [],
+      "title": "Highlights"
+    },
+    {
+      "body": "",
+      "entries": [],
+      "id": "skills",
+      "kind": "skills",
+      "lines": [
+        "Python",
+        "Terraform",
+        "Go",
+        "PostgreSQL"
+      ],
+      "title": "Skills"
+    },
+    {
+      "body": "",
+      "entries": [
+        {
+          "bullets": [
+            {
+              "id": "payload:role:0:bullet:0",
+              "provenance": [
+                {
+                  "evidence_id": "role:0:bullet:0",
+                  "source_type": "inventory"
+                }
+              ],
+              "text": "Built Python APIs for internal tooling."
+            }
+          ],
+          "dates": "2020-01 \u2013 present",
+          "heading": "Senior Engineer",
+          "id": "role:0",
+          "subheading": "Acme"
+        }
+      ],
+      "id": "experience",
+      "kind": "experience",
+      "lines": [],
+      "title": "Experience"
+    },
+    {
+      "body": "",
+      "entries": [
+        {
+          "bullets": [
+            {
+              "id": "payload:project:0:bullet:0",
+              "provenance": [
+                {
+                  "evidence_id": "project:0:bullet:0",
+                  "source_type": "inventory"
+                }
+              ],
+              "text": "Built a Go deployment CLI."
+            }
+          ],
+          "dates": "",
+          "heading": "Deploy CLI",
+          "id": "project:0",
+          "subheading": ""
+        }
+      ],
+      "id": "projects",
+      "kind": "projects",
+      "lines": [],
+      "title": "Projects"
+    },
+    {
+      "body": "",
+      "entries": [],
+      "id": "education",
+      "kind": "education",
+      "lines": [
+        "BS CS \u2014 MIT (2015)"
+      ],
+      "title": "Education"
+    }
+  ],
+  "target_persona": "PLATFORM_INFRA"
+}
