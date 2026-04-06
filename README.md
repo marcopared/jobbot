@@ -139,6 +139,25 @@ The response includes operator-facing metadata such as `source_label`, `source_f
 Underdog.io, and VentureLoop appear as unavailable in capability metadata rather than being treated
 as fully live.
 
+### Source-adapter flags and backend config
+
+- Public boards:
+  `STARTUPJOBS_NYC_ENABLED`, `BUILTIN_NYC_ENABLED`, `WELCOME_TO_THE_JUNGLE_ENABLED`
+- Portfolio boards:
+  `TECHNYC_ENABLED`, `PRIMARY_VC_ENABLED`, `GREYCROFT_ENABLED`, `USV_ENABLED`
+- Registered but unavailable by default:
+  `TRUEUP_ENABLED`, `UNDERDOG_ENABLED`, `VENTURELOOP_ENABLED`
+- Auth boards:
+  `LINKEDIN_JOBS_ENABLED`, `WELLFOUND_ENABLED`, `YC_ENABLED`
+- Auth-board backend:
+  `BB_BROWSER_ENABLED`, `BB_BROWSER_BASE_URL`, `BB_BROWSER_CAPTURE_PATH`,
+  `BB_BROWSER_API_KEY`, `BB_BROWSER_TIMEOUT_MS`, `BB_BROWSER_CONNECT_TIMEOUT_MS`,
+  `BB_BROWSER_SESSION_NAME`, `BB_BROWSER_VERIFY_SSL`
+
+If a source is disabled or unsupported, `GET /api/jobs/run-source-adapter` exposes
+`launch_enabled=false` plus a `launch_reason`, and `POST /api/jobs/run-source-adapter` returns
+`403`.
+
 ### Seed data (quick start)
 
 With API + worker running:

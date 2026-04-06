@@ -79,6 +79,9 @@ Security rules:
 - bb-browser must not own JobBot business logic, trust policy, scoring, classification, or
   persistence rules.
 - bb-browser must not be framed as a CAPTCHA, anti-bot, or guaranteed bypass strategy.
+- auth-board launch capability must remain explicitly gated by both source flags and
+  `BB_BROWSER_ENABLED`, with unavailable sources surfaced as non-launchable in capability metadata
+  rather than silently attempted.
 - session-derived payloads should still flow through the normal JobBot provenance and `raw_payload`
   handling discipline.
 - browser-session capability for ingestion does not change the boundary that JobBot does not

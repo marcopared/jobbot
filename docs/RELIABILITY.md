@@ -60,6 +60,11 @@ That script covers:
 - connector/provider behavior:
   [tests/test_connectors_agg1.py](/Users/marcoparedes/dev/jobbot/tests/test_connectors_agg1.py),
   [tests/test_connectors_serp.py](/Users/marcoparedes/dev/jobbot/tests/test_connectors_serp.py)
+- source-adapter launch matrix and run durability:
+  [tests/test_api_jobs.py](/Users/marcoparedes/dev/jobbot/tests/test_api_jobs.py),
+  [tests/test_source_run_public_boards.py](/Users/marcoparedes/dev/jobbot/tests/test_source_run_public_boards.py),
+  [tests/test_source_run_portfolio_boards.py](/Users/marcoparedes/dev/jobbot/tests/test_source_run_portfolio_boards.py),
+  [tests/test_source_run_auth_boards.py](/Users/marcoparedes/dev/jobbot/tests/test_source_run_auth_boards.py)
 - ready-to-apply contract:
   [tests/test_automation_ready_to_apply.py](/Users/marcoparedes/dev/jobbot/tests/test_automation_ready_to_apply.py)
 - end-to-end chain coverage:

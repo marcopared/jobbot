@@ -714,6 +714,29 @@ async def test_list_source_adapter_capabilities_exposes_operator_families(
     assert items["linkedin_jobs"]["launch_enabled"] is True
 
 
+async def test_list_source_adapter_capabilities_marks_disabled_and_unsupported_sources(
+    client, monkeypatch
+):
+    """GET /api/jobs/run-source-adapter exposes correct launch gating for disabled and unsupported sources."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "startupjobs_nyc_enabled", False)
+    monkeypatch.setattr(jobs_route.settings, "trueup_enabled", True)
+
+    resp = await client.get("/api/jobs/run-source-adapter")
+    assert resp.status_code == 200
+    items = {item["source_name"]: item for item in resp.json()["items"]}
+
+    assert items["startupjobs_nyc"]["source_family"] == "public_board"
+    assert items["startupjobs_nyc"]["launch_enabled"] is False
+    assert items["startupjobs_nyc"]["launch_reason"] == "STARTUPJOBS_NYC_ENABLED=false"
+
+    assert items["trueup"]["source_family"] == "public_board"
+    assert items["trueup"]["backend"] == "scrapling"
+    assert items["trueup"]["launch_enabled"] is False
+    assert "unsupported" in (items["trueup"]["launch_reason"] or "").lower()
+
+
 async def test_run_source_adapter_portfolio_board_returns_200(client, monkeypatch):
     """POST /api/jobs/run-source-adapter launches a portfolio-board adapter run via the public worker."""
     from apps.api.routes import jobs as jobs_route
@@ -803,6 +826,34 @@ async def test_run_source_adapter_returns_403_when_backend_disabled(client, monk
     )
     assert resp.status_code == 403
     assert "BB_BROWSER_ENABLED=false" in resp.json()["detail"]
+
+
+async def test_run_source_adapter_returns_403_when_public_source_disabled(client, monkeypatch):
+    """POST /api/jobs/run-source-adapter rejects disabled public-board launches."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "startupjobs_nyc_enabled", False)
+
+    resp = await client.post(
+        "/api/jobs/run-source-adapter",
+        json={"source_name": "startupjobs_nyc"},
+    )
+    assert resp.status_code == 403
+    assert "STARTUPJOBS_NYC_ENABLED=false" in resp.json()["detail"]
+
+
+async def test_run_source_adapter_returns_403_when_source_is_unsupported(client, monkeypatch):
+    """POST /api/jobs/run-source-adapter rejects unsupported public-board launches."""
+    from apps.api.routes import jobs as jobs_route
+
+    monkeypatch.setattr(jobs_route.settings, "trueup_enabled", True)
+
+    resp = await client.post(
+        "/api/jobs/run-source-adapter",
+        json={"source_name": "trueup"},
+    )
+    assert resp.status_code == 403
+    assert "unsupported" in resp.json()["detail"].lower()
 
 
 # --- Manual ingest route tests ---

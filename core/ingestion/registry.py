@@ -62,6 +62,9 @@ class BackendRegistry:
     def has(self, name: str) -> bool:
         return name in self._factories
 
+    def keys(self) -> tuple[str, ...]:
+        return tuple(self._factories.keys())
+
 
 class SourceAdapterRegistry:
     def __init__(self) -> None:
@@ -81,6 +84,9 @@ class SourceAdapterRegistry:
 
     def has(self, source_name: str) -> bool:
         return source_name in self._factories
+
+    def keys(self) -> tuple[str, ...]:
+        return tuple(self._factories.keys())
 
 
 def build_default_backend_registry() -> BackendRegistry:

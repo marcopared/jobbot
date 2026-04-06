@@ -190,6 +190,16 @@ def test_backend_registry_lookup_returns_compatibility_backends():
     assert bb_browser_backend.name == "bb_browser"
 
 
+def test_registries_expose_registered_keys_for_startup_sanity():
+    source_registry = build_default_source_registry()
+    backend_registry = build_default_backend_registry()
+
+    assert "startupjobs_nyc" in source_registry.keys()
+    assert "linkedin_jobs" in source_registry.keys()
+    assert "scrapling" in backend_registry.keys()
+    assert "bb_browser" in backend_registry.keys()
+
+
 def test_canonical_connector_compatibility_adapter_preserves_contract():
     adapter = CanonicalConnectorSourceAdapter(_FakeCanonicalConnector())
 

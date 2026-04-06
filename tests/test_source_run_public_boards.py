@@ -24,6 +24,7 @@ from core.db.models import (
 from core.db.session import get_sync_session
 from core.ingestion.backends.scrapling_backend import ScraplingFetchBackend
 from core.ingestion.sources.public_boards.builtin_nyc import BuiltInNYCSourceAdapter
+from core.ingestion.sources.public_boards.common import UnsupportedPublicBoardSourceAdapter
 from core.ingestion.sources.public_boards.startupjobs_nyc import StartupJobsNYCSourceAdapter
 from core.ingestion.sources.public_boards.welcome_to_the_jungle import (
     WelcomeToTheJungleSourceAdapter,
@@ -212,3 +213,55 @@ def test_public_board_run_persists_jobs_and_keeps_pipeline_compatible(monkeypatc
         job = session.get(Job, uuid.UUID(job_id))
         assert job is not None
         assert job.pipeline_status == PipelineStatus.ATS_ANALYZED.value
+
+
+def test_public_board_run_skips_when_source_flag_disabled():
+    from apps.worker.tasks import discovery as discovery_module
+
+    run_id = _create_running_discovery_run("startupjobs_nyc")
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(discovery_module.settings, "startupjobs_nyc_enabled", False)
+        result = run_public_board_source.run(
+            run_id=run_id,
+            source_name="startupjobs_nyc",
+            max_results=1,
+        )
+
+    assert result["status"] == "skipped"
+    assert result["reason"] == "STARTUPJOBS_NYC_ENABLED=false"
+
+    with get_sync_session() as session:
+        run = session.get(ScrapeRun, uuid.UUID(run_id))
+        assert run is not None
+        assert run.status == ScrapeRunStatus.SKIPPED.value
+        assert run.items_json == []
+
+
+def test_public_board_run_fails_durably_when_adapter_is_unsupported(monkeypatch):
+    from apps.worker.tasks import discovery as discovery_module
+
+    run_id = _create_running_discovery_run("trueup")
+    adapter = UnsupportedPublicBoardSourceAdapter(
+        source_name="trueup",
+        reason="Source adapter is registered but currently unsupported.",
+    )
+
+    monkeypatch.setattr(discovery_module.settings, "trueup_enabled", True)
+    monkeypatch.setattr(discovery_module.source_registry, "create", lambda name: adapter)
+
+    result = run_public_board_source.run(
+        run_id=run_id,
+        source_name="trueup",
+        max_results=1,
+    )
+
+    assert result["status"] == "FAILED"
+    assert "unsupported" in result["error"].lower()
+
+    with get_sync_session() as session:
+        run = session.get(ScrapeRun, uuid.UUID(run_id))
+        assert run is not None
+        assert run.status == ScrapeRunStatus.FAILED.value
+        assert run.items_json == []
+        assert "unsupported" in (run.error_text or "").lower()
