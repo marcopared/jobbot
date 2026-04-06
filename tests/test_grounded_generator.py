@@ -141,6 +141,7 @@ def test_ats_analyzed_with_analysis_persona_succeeds():
         assert result.status == "success"
         assert result.artifact is not None
         assert "resumes/resumes/" not in (result.artifact.path or "")
+        assert result.artifact.meta_json["resume_v2"]["effective_input_hash"]
         persona = result.artifact.persona_name
     assert persona == "BACKEND"
 
@@ -165,5 +166,6 @@ def test_resume_ready_with_analysis_persona_succeeds():
         assert result.status == "success"
         assert result.artifact is not None
         assert "resumes/resumes/" not in (result.artifact.path or "")
+        assert result.artifact.meta_json["resume_v2"]["payload_schema_version"] == "resume-payload-v2"
         persona = result.artifact.persona_name
     assert persona == "HYBRID"

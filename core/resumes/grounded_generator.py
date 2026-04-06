@@ -17,13 +17,14 @@ from apps.api.settings import Settings
 from core.db.models import Artifact, ArtifactKind, Job, JobAnalysis, PipelineStatus
 from core.inventory.loader import compute_inventory_hash, load_inventory
 from core.inventory.types import ExperienceInventory
-from core.resumes.html_template import RenderedResumeData, TEMPLATE_VERSION, render_html
+from core.resumes.html_template import TEMPLATE_VERSION, render_html
 from core.resumes.pdf_renderer import render_html_to_pdf_bytes
-from core.resumes.rewrite import apply_conservative_rewrite
-from core.resumes.selection import (
-    select_projects,
-    select_roles,
-    select_skills,
+from core.resumes.v2_pipeline import (
+    build_effective_input,
+    build_fit_result,
+    build_inventory_evidence_package,
+    build_layout_plan,
+    build_resume_payload,
 )
 from core.storage.factory import get_artifact_storage
 
@@ -59,12 +60,6 @@ def _build_target_keywords(job: Job, analysis: JobAnalysis | None) -> set[str]:
         for kw in job.ats_match_breakdown_json.get("missing_keywords") or []:
             keywords.add(kw.lower())
     return keywords
-
-
-def _format_dates(start: str, end: str) -> str:
-    if not start and not end:
-        return ""
-    return f"{start or '?'} – {end or 'present'}"
 
 
 def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult:
@@ -137,52 +132,38 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
 
     inv_hash = compute_inventory_hash(inventory)
 
-    # Select content
-    selected_roles = select_roles(inventory, target_keywords, persona)
-    selected_projects = select_projects(inventory, target_keywords, persona)
-    selected_skills = select_skills(inventory, target_keywords)
+    evidence_package = build_inventory_evidence_package(inventory, inv_hash)
 
-    summary = inventory.summary_variants.get(persona) or inventory.summary_variants.get(
-        "HYBRID"
-    ) or ""
+    found_keywords = {
+        keyword.lower() for keyword in (analysis.found_keywords or [])
+    }
+    if job.ats_match_breakdown_json:
+        for keyword in job.ats_match_breakdown_json.get("found_keywords") or []:
+            found_keywords.add(str(keyword).lower())
 
-    missing_kw = set()
-    if analysis and analysis.missing_keywords:
-        missing_kw = {k.lower() for k in analysis.missing_keywords}
-    elif job.ats_match_breakdown_json:
-        for k in job.ats_match_breakdown_json.get("missing_keywords") or []:
-            missing_kw.add(k.lower())
+    missing_keywords = {
+        keyword.lower() for keyword in (analysis.missing_keywords or [])
+    }
+    if job.ats_match_breakdown_json:
+        for keyword in job.ats_match_breakdown_json.get("missing_keywords") or []:
+            missing_keywords.add(str(keyword).lower())
 
-    # Build role/project structures for template
-    roles_data = []
-    for role, bullets in selected_roles:
-        rewritten = [apply_conservative_rewrite(b, missing_kw) for b in bullets]
-        roles_data.append(
-            {
-                "company": role.company,
-                "title": role.title,
-                "dates": _format_dates(role.start, role.end),
-                "bullets": rewritten,
-            }
-        )
-
-    projects_data = []
-    for proj, bullets in selected_projects:
-        rewritten = [apply_conservative_rewrite(b, missing_kw) for b in bullets]
-        projects_data.append({"name": proj.name, "bullets": rewritten})
-
-    resume_data = RenderedResumeData(
-        contact_name=inventory.contact.name,
-        contact_email=inventory.contact.email,
-        contact_location=inventory.contact.location,
-        summary=summary,
-        skills=selected_skills,
-        roles=roles_data,
-        projects=projects_data,
-        education=inventory.education or [],
+    fit_result = build_fit_result(
+        evidence_package,
+        persona=persona,
+        target_keywords=target_keywords,
+        found_keywords=found_keywords,
+        missing_keywords=missing_keywords,
     )
+    effective_input = build_effective_input(
+        evidence_package,
+        fit_result,
+        template_version=TEMPLATE_VERSION,
+    )
+    payload = build_resume_payload(evidence_package, fit_result, effective_input)
+    layout_plan = build_layout_plan(payload, template_version=TEMPLATE_VERSION)
 
-    html = render_html(resume_data)
+    html = render_html(payload, layout_plan)
 
     try:
         pdf_bytes = render_html_to_pdf_bytes(html, timeout_ms=settings.playwright_timeout_ms)
@@ -233,6 +214,16 @@ def generate_grounded_resume(session: Session, job_id: UUID) -> GenerationResult
             "persona": persona,
             "ats_compatibility_score": analysis.ats_compatibility_score if analysis else None,
             "generated_at": datetime.now(UTC).isoformat(),
+            "resume_v2": {
+                "evidence_schema_version": evidence_package.schema_version,
+                "payload_schema_version": payload.schema_version,
+                "fit_schema_version": fit_result.schema_version,
+                "layout_schema_version": layout_plan.schema_version,
+                "source_kind": evidence_package.source_kind,
+                "evidence_hash": evidence_package.compute_hash(),
+                "fit_hash": fit_result.compute_hash(),
+                "effective_input_hash": payload.effective_input_hash,
+            },
         },
     )
     session.add(artifact)
