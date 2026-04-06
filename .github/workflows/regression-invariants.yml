@@ -1,10 +1,10 @@
 name: Regression Invariants
 
 on:
-  push:
-    branches:
-      - main
-      - "codex/**"
+  # push:
+  #   branches:
+  #     - main
+  #     - "codex/**"
   pull_request:
 
 jobs:
