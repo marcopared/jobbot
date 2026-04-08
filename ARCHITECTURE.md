@@ -104,7 +104,8 @@ Responsibility:
 
 Rules:
 - domain logic should be deterministic unless a provider API is inherently remote
-- generated resumes are grounded in structured inventory data
+- generated resumes are grounded in user-side evidence:
+  required inventory, optional local supplemental files, and a targeting-only job description
 
 ### Data/model layer
 
@@ -181,7 +182,7 @@ Two generation entry points exist:
 
 Grounding model:
 
-- inventory file: [data/experience_inventory.yaml](data/experience_inventory.yaml)
+- required inventory file: [data/experience_inventory.yaml](data/experience_inventory.yaml)
 - optional local-first supplemental inputs directory: `data/resume_inputs`
 - exact optional sources:
   - `current_resume`

@@ -4,6 +4,8 @@
 
 These are the living design documents for JobBot. They are intentionally few. If a question can be
 answered by current code, current code wins.
+If surrounding repo context contains older pasted snapshots or duplicate doc copies, these current
+checked-in indexed docs are the source of truth.
 
 Read them in this order:
 

@@ -90,7 +90,12 @@ Security rules:
 ## Data Handling Notes
 
 - Job payloads and artifacts may contain sensitive personal job-search context.
-- Resume generation uses a local YAML inventory file and should remain grounded to that file.
+- Resume generation must stay grounded in local user-side evidence.
+- The inventory file is the required base evidence source.
+- Optional local supplemental evidence may come from `current_resume`, `current_role`,
+  `achievements`, and `project_writeups`.
+- The target job description is targeting-only and must not become a source of candidate facts.
+- Do not add live external evidence enrichment to the generation path.
 - Failure logs intentionally avoid storing raw Celery args/kwargs in full.
 
 ## Security-Relevant Follow-Ups

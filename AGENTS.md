@@ -2,6 +2,8 @@
 
 > Start here. This file is intentionally short.
 > Treat implemented code as the source of truth when older documentation disagrees.
+> If surrounding task context includes pasted snapshots or older doc copies, prefer the current
+> checked-in indexed docs in this repo.
 
 ## What JobBot Is
 
@@ -77,7 +79,10 @@ docs/
    `POST /api/jobs/{id}/generate-resume` must persist a `GenerationRun` before queueing the worker.
 4. Preserve run durability:
    `ScrapeRun` and `GenerationRun` rows should reach terminal states on success, skip, or failure.
-5. Keep resume generation grounded in inventory data, not freeform LLM output.
+5. Keep resume generation grounded in user-side evidence:
+   required inventory as the base source, optional local supplemental inputs
+   (`current_resume`, `current_role`, `achievements`, `project_writeups`) when present,
+   target job description as targeting-only, and no freeform LLM output.
 6. For ingestion-v2 work:
    - prefer widening the acquisition layer over rewriting persistence or downstream analysis
    - use Scrapling as the default acquisition backend direction

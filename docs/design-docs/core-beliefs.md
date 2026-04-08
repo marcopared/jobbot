@@ -36,8 +36,9 @@ system behaved correctly.
 
 ## Belief 7: Resume Generation Must Stay Grounded
 
-The resume path should stay tied to the structured experience inventory and explicit selection
-logic. Freeform generation would reduce trust and debuggability.
+The resume path should stay tied to user-side evidence and explicit selection logic: required
+inventory, optional local supplemental files, and a targeting-only job description. Freeform
+generation would reduce trust and debuggability.
 
 ## Belief 8: Reliability Lives In Invariants, Not In Victory Notes
 

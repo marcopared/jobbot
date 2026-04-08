@@ -1,9 +1,12 @@
 JobBot REST API summary
-Last reviewed: 2026-03-24
+Repo-authored current implementation summary, not generated OpenAPI.
+Last reviewed: 2026-04-07
 
 Core routes
 
 Jobs
+- GET /api/jobs/run-source-adapter
+- POST /api/jobs/run-source-adapter
 - POST /api/jobs/run-scrape
 - POST /api/jobs/run-ingestion
 - POST /api/jobs/run-discovery
@@ -35,6 +38,11 @@ Health
 
 Important contract notes
 - manual generation returns generation_run_id
+- GET /api/jobs/{id} includes latest_generation_run for queued/running/failed generation progress
+- job detail artifact items surface backend metadata summary fields:
+  artifact_role, payload_version, inputs_hash, fit_status, evidence_completeness
 - ready-to-apply returns only artifact-ready NEW jobs
+- GET /api/jobs/run-source-adapter is the operator capability read model for adapter-backed launch
+- POST /api/jobs/run-source-adapter launches the selected adapter-backed run
 - run items are normalized through core/run_items.py
 - debug data in job detail is gated behind DEBUG_ENDPOINTS_ENABLED

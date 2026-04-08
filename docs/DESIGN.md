@@ -18,7 +18,7 @@ The implemented system is intentionally narrow:
 
 1. Broad discovery, narrow generation.
 2. Discovery is coverage; canonical ATS is truth.
-3. Resume generation must be grounded in structured inventory, not freeform LLM output.
+3. Resume generation must be grounded in user-side evidence, not freeform LLM output.
 4. Manual apply is the current implemented product boundary.
 5. Current code beats stale phase narratives.
 6. Tests and persisted run records are part of the product contract.

@@ -75,8 +75,11 @@ Defined in [ui/src/App.tsx](../ui/src/App.tsx):
 ### Job Detail
 
 - shows score, ATS details, persona, description, and artifacts
+- reads `latest_generation_run` from `GET /api/jobs/{id}` for operator-visible generation progress
+- uses lightweight delayed refetch from Job Detail for queued/running/failed visibility rather than
+  a dedicated run-status stream
 - keeps the resume PDF as the primary operator-facing artifact
-- exposes payload/diagnostics sidecars as optional supporting files
+- exposes payload/diagnostics sidecars as optional supporting files, not as a replacement workflow
 - surfaces backend-provided artifact summary fields:
   - `artifact_role`
   - `payload_version`
@@ -108,7 +111,7 @@ Defined in [ui/src/App.tsx](../ui/src/App.tsx):
   not currently expose `source_role`
 - the visual design is functional, not opinionated
 - there is no dedicated verification/status surface beyond runs and toasts
-- generation status polling is still lightweight; Job Detail does a delayed refetch rather than a
-  dedicated run-status stream
+- generation status polling is still lightweight; Job Detail relies on `latest_generation_run`
+  plus a delayed refetch rather than a dedicated run-status stream
 
 Those are follow-ups, not documentation debt.
