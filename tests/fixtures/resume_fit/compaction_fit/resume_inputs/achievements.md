@@ -1,0 +1,2 @@
+- Cut incident triage time by standardizing runbook links, ownership tags, and failure fingerprints across queues.
+- Shipped policy-driven validation for operator-facing PDFs so generated artifacts could not silently degrade.

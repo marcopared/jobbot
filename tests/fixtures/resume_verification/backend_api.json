@@ -1,0 +1,14 @@
+{
+  "case_id": "backend_api",
+  "label": "Backend-oriented API role",
+  "job_title": "Role",
+  "company_name": "Acme",
+  "description": "platform reliability terraform python go postgresql",
+  "persona": "BACKEND",
+  "target_keywords": ["python", "go", "postgresql"],
+  "found_keywords": ["python"],
+  "missing_keywords": ["postgresql"],
+  "inventory_path": "tests/fixtures/resume_evidence/inventory_only/experience_inventory.yaml",
+  "inputs_dir": "tests/fixtures/resume_evidence/inventory_only/resume_inputs",
+  "golden_payload_path": "tests/fixtures/resume_payloads/backend_inventory_only.json"
+}

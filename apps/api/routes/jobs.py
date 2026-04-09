@@ -50,6 +50,7 @@ from core.connectors.url_provider import parse_supported_url
 from core.dedup import compute_dedup_hash, normalize_company, normalize_location, normalize_title
 from core.db.models import (
     Artifact,
+    GenerationRun,
     Job,
     JobAnalysis,
     PipelineStatus,
@@ -64,6 +65,10 @@ from core.ingestion.source_policies import SOURCE_POLICIES, get_source_policy
 from core.ingestion.sources.public_boards.common import UnsupportedPublicBoardSourceAdapter
 from core.ingestion.types import BackendPreference, SourceKind
 from core.job_status import legacy_status_from_canonical
+from core.resumes.artifact_metadata import (
+    extract_resume_artifact_summary,
+    is_primary_resume_artifact,
+)
 from core.run_items import make_run_item
 
 settings = Settings()
@@ -194,7 +199,11 @@ def _job_to_list_item(j: Job) -> JobListItem:
     if j.analyses:
         persona = j.analyses[0].matched_persona
     artifact_availability = any(
-        a.generation_status == "success" or (a.file_url or a.path)
+        is_primary_resume_artifact(a.kind, a.meta_json)
+        and (
+            a.generation_status == "success"
+            or (a.file_url or a.path)
+        )
         for a in (j.artifacts or [])
     )
     return JobListItem(
@@ -250,7 +259,10 @@ def _build_ats_gaps(j: Job, analysis: JobAnalysis | None) -> ATSGaps | None:
 
 
 def _job_to_detail_response(
-    j: Job, artifacts: list[Artifact], debug: bool = False
+    j: Job,
+    artifacts: list[Artifact],
+    latest_generation_run: GenerationRun | None = None,
+    debug: bool = False,
 ) -> JobDetailResponse:
     """Build detail response from Job (expects analyses loaded)."""
     analysis = j.analyses[0] if j.analyses else None
@@ -261,19 +273,12 @@ def _job_to_detail_response(
             persona_confidence=analysis.persona_confidence,
             persona_rationale=analysis.persona_rationale,
         )
-    artifact_items = [
-        ArtifactItem(
-            id=str(a.id),
-            kind=a.kind or "pdf",
-            filename=a.filename or "resume.pdf",
-            persona_name=a.persona_name,
-            generation_status=a.generation_status,
-            created_at=a.created_at.isoformat() if a.created_at else None,
-            download_url=f"/api/artifacts/{a.id}/download",
-            preview_url=f"/api/artifacts/{a.id}/preview",
-        )
+    artifact_items = [_artifact_to_item(a) for a in artifacts]
+    artifact_availability = any(
+        is_primary_resume_artifact(a.kind, a.meta_json)
+        and (a.generation_status == "success" or (a.file_url or a.path))
         for a in artifacts
-    ]
+    )
     debug_data = None
     if debug:
         debug_data = {
@@ -290,9 +295,11 @@ def _job_to_detail_response(
         apply_url=j.apply_url,
         source=j.source,
         score=j.score_total or 0.0,
+        artifact_availability=artifact_availability,
         score_breakdown=_build_score_breakdown(j),
         ats_gaps=_build_ats_gaps(j, analysis),
         persona=persona,
+        latest_generation_run=_generation_run_to_summary(latest_generation_run),
         artifacts=artifact_items,
         pipeline_status=j.pipeline_status or "INGESTED",
         user_status=j.user_status or "NEW",
@@ -303,6 +310,41 @@ def _job_to_detail_response(
         posted_at=j.posted_at.isoformat() if j.posted_at else None,
         remote_flag=j.remote_flag or False,
         debug_data=debug_data,
+    )
+
+
+def _generation_run_to_summary(run: GenerationRun | None):
+    if run is None:
+        return None
+    return {
+        "id": str(run.id),
+        "status": run.status,
+        "triggered_by": run.triggered_by,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "failure_reason": run.failure_reason,
+        "artifact_id": str(run.artifact_id) if run.artifact_id else None,
+    }
+
+
+def _artifact_to_item(artifact: Artifact) -> ArtifactItem:
+    summary = extract_resume_artifact_summary(artifact.meta_json)
+    return ArtifactItem(
+        id=str(artifact.id),
+        kind=artifact.kind or "pdf",
+        filename=artifact.filename or "resume.pdf",
+        format=artifact.format,
+        persona_name=artifact.persona_name,
+        generation_status=artifact.generation_status,
+        created_at=artifact.created_at.isoformat() if artifact.created_at else None,
+        artifact_role=summary.get("artifact_role"),
+        is_primary=is_primary_resume_artifact(artifact.kind, artifact.meta_json),
+        payload_version=summary.get("payload_version"),
+        inputs_hash=summary.get("inputs_hash"),
+        fit_status=summary.get("fit_status"),
+        evidence_completeness=summary.get("evidence_completeness"),
+        download_url=f"/api/artifacts/{artifact.id}/download",
+        preview_url=f"/api/artifacts/{artifact.id}/preview",
     )
 
 
@@ -951,12 +993,27 @@ async def get_job(
         raise HTTPException(status_code=404, detail="Job not found")
     artifacts = sorted(
         job.artifacts or [],
-        key=lambda a: a.created_at.timestamp() if a.created_at else 0.0,
-        reverse=True,
+        key=lambda a: (
+            -(a.created_at.timestamp() if a.created_at else 0.0),
+            0 if is_primary_resume_artifact(a.kind, a.meta_json) else 1,
+            a.filename or "",
+        ),
     )
+    latest_generation_run_result = await db.execute(
+        select(GenerationRun)
+        .where(GenerationRun.job_id == job_id)
+        .order_by(GenerationRun.created_at.desc(), GenerationRun.id.desc())
+        .limit(1)
+    )
+    latest_generation_run = latest_generation_run_result.scalar_one_or_none()
     # Gate debug_data behind debug_endpoints_enabled (same as /api/debug/*)
     effective_debug = debug and settings.debug_endpoints_enabled
-    return _job_to_detail_response(job, artifacts, debug=effective_debug)
+    return _job_to_detail_response(
+        job,
+        artifacts,
+        latest_generation_run=latest_generation_run,
+        debug=effective_debug,
+    )
 
 
 @router.post("/{job_id}/resolve", response_model=ResolveJobResponse)
@@ -1066,17 +1123,13 @@ async def list_job_artifacts(job_id: UUID, db: AsyncSession = Depends(get_db)):
         .order_by(Artifact.created_at.desc())
     )
     artifacts = result.scalars().all()
-    items = [
-        ArtifactItem(
-            id=str(a.id),
-            kind=a.kind or "pdf",
-            filename=a.filename or "resume.pdf",
-            persona_name=a.persona_name,
-            generation_status=a.generation_status,
-            created_at=a.created_at.isoformat() if a.created_at else None,
-            download_url=f"/api/artifacts/{a.id}/download",
-            preview_url=f"/api/artifacts/{a.id}/preview",
-        )
-        for a in artifacts
-    ]
+    artifacts = sorted(
+        artifacts,
+        key=lambda a: (
+            -(a.created_at.timestamp() if a.created_at else 0.0),
+            0 if is_primary_resume_artifact(a.kind, a.meta_json) else 1,
+            a.filename or "",
+        ),
+    )
+    items = [_artifact_to_item(a) for a in artifacts]
     return ArtifactsResponse(items=items)

@@ -1,0 +1,4 @@
+Jane Engineer
+
+Designed and shipped backend APIs in Python and Go.
+Improved database performance for critical reporting queries.

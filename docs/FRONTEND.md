@@ -11,7 +11,7 @@ the frontend's responsibility as an operator console over existing API contracts
 
 ## Current Routes
 
-Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
+Defined in [ui/src/App.tsx](../ui/src/App.tsx):
 
 - `/ready` — ready-to-apply queue
 - `/jobs` — all jobs view
@@ -31,13 +31,13 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
 ## Important Components
 
 - layout shell:
-  [ui/src/components/Layout.tsx](/Users/marcoparedes/dev/jobbot/ui/src/components/Layout.tsx)
+  [ui/src/components/Layout.tsx](../ui/src/components/Layout.tsx)
 - job table:
-  [ui/src/components/JobTable.tsx](/Users/marcoparedes/dev/jobbot/ui/src/components/JobTable.tsx)
+  [ui/src/components/JobTable.tsx](../ui/src/components/JobTable.tsx)
 - artifact actions:
-  [ui/src/components/ArtifactViewer.tsx](/Users/marcoparedes/dev/jobbot/ui/src/components/ArtifactViewer.tsx)
+  [ui/src/components/ArtifactViewer.tsx](../ui/src/components/ArtifactViewer.tsx)
 - score and ATS display:
-  [ui/src/components/ScoreBreakdown.tsx](/Users/marcoparedes/dev/jobbot/ui/src/components/ScoreBreakdown.tsx)
+  [ui/src/components/ScoreBreakdown.tsx](../ui/src/components/ScoreBreakdown.tsx)
 
 ## Current Interaction Model
 
@@ -46,7 +46,9 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
 - default landing route
 - shows only `RESUME_READY` jobs with `artifact_ready_at` and `user_status=NEW`
 - supports bulk save/archive/applied actions
-- routes the user to job detail for download and outbound apply
+- the Apply column routes the user to Job Detail for artifact review and outbound apply
+- URL ingest and manual intake shortcuts are available from the page header, but the final apply
+  step remains manual
 
 ### All Jobs
 
@@ -73,7 +75,20 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
 ### Job Detail
 
 - shows score, ATS details, persona, description, and artifacts
-- exposes manual resume generation only when the backend allows it
+- reads `latest_generation_run` from `GET /api/jobs/{id}` for operator-visible generation progress
+- uses lightweight delayed refetch from Job Detail for queued/running/failed visibility rather than
+  a dedicated run-status stream
+- keeps the resume PDF as the primary operator-facing artifact
+- exposes payload/diagnostics sidecars as optional supporting files, not as a replacement workflow
+- surfaces backend-provided artifact summary fields:
+  - `artifact_role`
+  - `payload_version`
+  - `inputs_hash`
+  - `fit_status`
+  - `evidence_completeness`
+- exposes manual resume generation only when `pipeline_status` is `ATS_ANALYZED` or
+  `RESUME_READY`
+- keeps Preview/Download/Open Application together inside the manual apply workflow
 
 ### Manual Intake
 
@@ -96,5 +111,7 @@ Defined in [ui/src/App.tsx](/Users/marcoparedes/dev/jobbot/ui/src/App.tsx):
   not currently expose `source_role`
 - the visual design is functional, not opinionated
 - there is no dedicated verification/status surface beyond runs and toasts
+- generation status polling is still lightweight; Job Detail relies on `latest_generation_run`
+  plus a delayed refetch rather than a dedicated run-status stream
 
 Those are follow-ups, not documentation debt.

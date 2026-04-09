@@ -1,0 +1,32 @@
+version: 1
+contact:
+  name: "Jane Engineer"
+  email: "jane@example.com"
+  location: "Chicago, IL"
+summary_variants:
+  BACKEND: "Backend engineer summary"
+  HYBRID: "Hybrid engineer summary"
+skills:
+  - Python
+  - Go
+  - PostgreSQL
+roles:
+  - company: "Acme"
+    title: "Senior Engineer"
+    start: "2020-01"
+    end: "present"
+    tags: [backend]
+    bullets:
+      - text: "Built Python APIs for internal tooling."
+        tags: [backend, python]
+        metrics: []
+projects:
+  - name: "Deploy CLI"
+    bullets:
+      - text: "Built a Go deployment CLI."
+        tags: [go]
+        metrics: []
+education:
+  - school: "MIT"
+    degree: "BS CS"
+    year: "2015"

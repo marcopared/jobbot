@@ -1,8 +1,10 @@
-"""Grounded bullet selection for resume generation (EPIC 7).
+"""Legacy inventory-native selection helpers.
 
-Selects content from structured inventory based on job score, ATS analysis,
-and persona. No freeform LLM output; all content is from inventory.
-Uses word-boundary matching for keyword overlap to avoid false positives.
+This module is not the authoritative resume-v2 execution path. Resume-v2
+selection semantics are owned by ``core.resumes.v2_selection`` and are applied
+at runtime via ``core.resumes.v2_pipeline.build_fit_result``. The helpers here
+remain as inventory-native adapters for legacy callers and focused unit tests,
+but they delegate their scoring/ordering rules to the shared v2 semantics.
 """
 
 from core.inventory.types import (
@@ -12,40 +14,20 @@ from core.inventory.types import (
     ProjectBullet,
     Project,
 )
-from core.matching import keyword_in_text
+from core.resumes.v2_selection import persona_tag_match, prioritize_skills, score_text_tags
 
 
 def _bullet_keyword_overlap(bullet: RoleBullet | ProjectBullet, keywords: set[str]) -> int:
     """Count overlap between bullet text/tags and target keywords (normalized).
     Text uses word-boundary matching; tags use exact set membership."""
-    tags_lower = {t.lower() for t in (bullet.tags or [])}
-    overlap = 0
-    for kw in keywords:
-        kw_lower = kw.lower()
-        if keyword_in_text(bullet.text, kw_lower):
-            overlap += 1
-        elif kw_lower in tags_lower:
-            overlap += 1
-    return overlap
+    from core.resumes.v2_selection import keyword_overlap
+
+    return keyword_overlap(bullet.text, bullet.tags or [], keywords)
 
 
 def _persona_tag_match(bullet: RoleBullet | ProjectBullet, persona: str) -> bool:
     """True if bullet has tags aligning with the job's persona."""
-    if not bullet.tags:
-        return False
-    tags_lower = {t.lower() for t in bullet.tags}
-    persona_lower = persona.lower()
-    if "backend" in persona_lower and ("backend" in tags_lower or "api" in tags_lower):
-        return True
-    if "platform" in persona_lower or "infra" in persona_lower:
-        if any(
-            t in tags_lower
-            for t in ("platform", "infra", "kubernetes", "k8s", "ci/cd", "aws", "docker")
-        ):
-            return True
-    if "hybrid" in persona_lower:
-        return True
-    return False
+    return persona_tag_match(bullet.tags or [], persona)
 
 
 def _score_bullet(
@@ -55,12 +37,13 @@ def _score_bullet(
     prefer_persona: bool = True,
 ) -> float:
     """Score a bullet for relevance. Higher = better fit."""
-    keyword_overlap = _bullet_keyword_overlap(bullet, target_keywords)
-    persona_match = 1.0 if _persona_tag_match(bullet, persona) else 0.0
-    base = float(keyword_overlap) * 2.0
-    if prefer_persona and persona_match:
-        base += 5.0
-    return base
+    return score_text_tags(
+        bullet.text,
+        bullet.tags or [],
+        target_keywords,
+        persona,
+        prefer_persona=prefer_persona,
+    )
 
 
 def select_role_bullets(
@@ -169,8 +152,4 @@ def select_skills(
     all_skills = inventory.skills or []
     if not all_skills:
         return []
-    kw_lower = {k.lower() for k in target_keywords}
-    matched = [s for s in all_skills if s.strip().lower() in kw_lower]
-    rest = [s for s in all_skills if s.strip().lower() not in kw_lower]
-    combined = matched + rest
-    return combined[:max_skills]
+    return list(prioritize_skills(all_skills, target_keywords, max_skills=max_skills))

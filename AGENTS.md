@@ -2,6 +2,8 @@
 
 > Start here. This file is intentionally short.
 > Treat implemented code as the source of truth when older documentation disagrees.
+> If surrounding task context includes pasted snapshots or older doc copies, prefer the current
+> checked-in indexed docs in this repo.
 
 ## What JobBot Is
 
@@ -57,15 +59,15 @@ docs/
 
 ## Read Order
 
-1. [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md)
-2. [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md)
-3. [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md)
-4. [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md)
-5. [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md)
-6. [docs/design-docs/index.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/index.md)
-7. [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md)
-8. [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md)
-9. [README.md](/Users/marcoparedes/dev/jobbot/README.md)
+1. [ARCHITECTURE.md](ARCHITECTURE.md)
+2. [docs/DESIGN.md](docs/DESIGN.md)
+3. [docs/PRODUCT_SENSE.md](docs/PRODUCT_SENSE.md)
+4. [docs/RELIABILITY.md](docs/RELIABILITY.md)
+5. [docs/SECURITY.md](docs/SECURITY.md)
+6. [docs/design-docs/index.md](docs/design-docs/index.md)
+7. [docs/product-specs/index.md](docs/product-specs/index.md)
+8. [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md)
+9. [README.md](README.md)
 
 ## Change Rules
 
@@ -77,7 +79,10 @@ docs/
    `POST /api/jobs/{id}/generate-resume` must persist a `GenerationRun` before queueing the worker.
 4. Preserve run durability:
    `ScrapeRun` and `GenerationRun` rows should reach terminal states on success, skip, or failure.
-5. Keep resume generation grounded in inventory data, not freeform LLM output.
+5. Keep resume generation grounded in user-side evidence:
+   required inventory as the base source, optional local supplemental inputs
+   (`current_resume`, `current_role`, `achievements`, `project_writeups`) when present,
+   target job description as targeting-only, and no freeform LLM output.
 6. For ingestion-v2 work:
    - prefer widening the acquisition layer over rewriting persistence or downstream analysis
    - use Scrapling as the default acquisition backend direction
@@ -89,16 +94,16 @@ docs/
 
 | Need | Document |
 | --- | --- |
-| Runtime architecture and data flow | [ARCHITECTURE.md](/Users/marcoparedes/dev/jobbot/ARCHITECTURE.md) |
-| Design baseline and ingestion-v2 direction | [docs/DESIGN.md](/Users/marcoparedes/dev/jobbot/docs/DESIGN.md) |
-| Product boundaries and operating model | [docs/PRODUCT_SENSE.md](/Users/marcoparedes/dev/jobbot/docs/PRODUCT_SENSE.md) |
-| Reliability invariants and regression suites | [docs/RELIABILITY.md](/Users/marcoparedes/dev/jobbot/docs/RELIABILITY.md) |
-| Security and authenticated-browser ingestion boundaries | [docs/SECURITY.md](/Users/marcoparedes/dev/jobbot/docs/SECURITY.md) |
-| Active product specs | [docs/product-specs/index.md](/Users/marcoparedes/dev/jobbot/docs/product-specs/index.md) |
-| Current design beliefs | [docs/design-docs/core-beliefs.md](/Users/marcoparedes/dev/jobbot/docs/design-docs/core-beliefs.md) |
-| UI pages and operator flow | [docs/FRONTEND.md](/Users/marcoparedes/dev/jobbot/docs/FRONTEND.md) |
-| Provider/reference summaries | [docs/references](/Users/marcoparedes/dev/jobbot/docs/references) |
-| Current active implementation plan | [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](/Users/marcoparedes/dev/jobbot/docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md) |
+| Runtime architecture and data flow | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Design baseline and ingestion-v2 direction | [docs/DESIGN.md](docs/DESIGN.md) |
+| Product boundaries and operating model | [docs/PRODUCT_SENSE.md](docs/PRODUCT_SENSE.md) |
+| Reliability invariants and regression suites | [docs/RELIABILITY.md](docs/RELIABILITY.md) |
+| Security and authenticated-browser ingestion boundaries | [docs/SECURITY.md](docs/SECURITY.md) |
+| Active product specs | [docs/product-specs/index.md](docs/product-specs/index.md) |
+| Current design beliefs | [docs/design-docs/core-beliefs.md](docs/design-docs/core-beliefs.md) |
+| UI pages and operator flow | [docs/FRONTEND.md](docs/FRONTEND.md) |
+| Provider/reference summaries | [docs/references](docs/references) |
+| Current active implementation plan | [docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md](docs/exec-plans/active/2026-04-02-ingestion-v2-docs-and-architecture.md) |
 
 ## Verification Minimum
 

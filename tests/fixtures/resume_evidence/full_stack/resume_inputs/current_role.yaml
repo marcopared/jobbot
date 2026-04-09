@@ -1,0 +1,7 @@
+items:
+  - text: "Leading the migration of service APIs to a shared platform."
+    tags: [backend, platform]
+    metrics: ["12 services"]
+  - text: "Partnering with product and design on operator workflow improvements."
+    tags: [cross-functional]
+    metrics: []

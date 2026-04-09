@@ -1,0 +1,84 @@
+version: 1
+contact:
+  name: "Overflow Candidate"
+  email: "overflow@example.com"
+  location: "Chicago, IL"
+summary_variants:
+  BACKEND: "Backend engineer with extensive experience across delivery systems, platform reliability, compliance-sensitive operations, audit trails, queue processing, developer tooling, observability, migrations, release safety, operator-facing workflow design, long-form policy communication, release review support, and detailed operational handoff expectations."
+  HYBRID: "Hybrid engineer with extensive experience across backend systems, platform reliability, delivery operations, workflow tooling, release controls, and long-form operator documentation."
+skills:
+  - Python
+  - PostgreSQL
+  - Terraform
+  - Docker
+  - Kubernetes
+  - AWS
+  - Redis
+  - Celery
+  - FastAPI
+  - SQLAlchemy
+  - CI/CD
+  - Observability
+  - Prometheus
+  - Datadog
+  - Playwright
+  - Reliability
+  - Incident Response
+  - Background Jobs
+  - Internal Tooling
+  - API Design
+roles:
+  - company: "Gamma"
+    title: "Principal Backend Engineer"
+    start: "2021-01"
+    end: "present"
+    tags: [backend, platform]
+    bullets:
+      - text: "Designed and maintained a broad internal platform for workflow orchestration, multi-queue operations, audit-safe document generation, event tracing, release qualification, and operator review loops across several compliance-heavy product surfaces, coordinating technical decisions with engineering, product, support, and operations stakeholders over multiple years while also writing implementation notes, design clarifications, issue follow-through material, reviewer-ready summaries, and policy explanation documents needed for careful operator review and release qualification."
+        tags: [backend, python, platform, observability]
+        metrics: []
+      - text: "Reworked asynchronous processing, persistence boundaries, and observability standards across long-running systems that combined API traffic, background workers, scheduled runs, storage operations, and review tooling, while also driving architecture reviews, rollout plans, after-action remediation, documentation updates, release sign-off notes, cross-team operational follow-through, approval checklists, exception handling guidance, reviewer training material, and escalation-path definitions for recurring delivery risks that required careful policy interpretation."
+        tags: [backend, python, platform, observability]
+        metrics: []
+      - text: "Built deeply detailed operator tooling that surfaced diagnostics, provenance, policy traces, delivery decisions, structured rationale, and follow-up expectations so every generated artifact, queue transition, operational escalation, and release review could be understood and defended without reconstructing state manually from logs, dashboards, partial run records, and fragmented handoff notes."
+        tags: [backend, celery, postgresql, observability]
+        metrics: []
+      - text: "Maintained extensive migration-readiness tooling, policy-check output, queue validation summaries, and release annotations for operator-facing systems where regressions could create silent trust breaks or force expensive manual recovery work across multiple downstream teams."
+        tags: [backend, python, observability, platform]
+        metrics: []
+  - company: "Delta"
+    title: "Staff Platform Engineer"
+    start: "2018-02"
+    end: "2020-12"
+    tags: [platform, infra]
+    bullets:
+      - text: "Led platform programs spanning infrastructure, container orchestration, migration safety, deployment validation, incident review, compliance-minded runtime controls, and operator handoff quality, writing both implementation code and the supporting review artifacts required for teams to move cautiously through high-risk changes that crossed several services, approval boundaries, review checkpoints, operator sign-off expectations, release councils, and long-tail operational follow-up requirements."
+        tags: [platform, kubernetes, terraform, docker]
+        metrics: []
+      - text: "Standardized high-volume queue processing, schema migrations, structured logging, release gating, and policy validation across services that served multiple internal teams and operator groups, pairing implementation work with detailed design documentation, rollout expectations, incident review materials, operational training notes, reviewer-facing summaries, readiness narratives, go-live briefing material, and rollback communication plans to keep delivery quality high."
+        tags: [platform, postgresql, redis, ci/cd]
+        metrics: []
+      - text: "Implemented comprehensive observability, reliability, and guardrail tooling around asynchronous systems, background jobs, dashboards, alerts, failure triage processes, and operator escalation flows, with an emphasis on preserving trustworthy outputs under stress, during incident recovery, and throughout rollout windows that required careful comparison of generated artifacts against policy expectations."
+        tags: [observability, datadog, prometheus, celery]
+        metrics: []
+projects:
+  - name: "Audit Workflow Console"
+    bullets:
+      - text: "Created a large operator console for review queues, task diagnostics, provenance links, policy explanations, and delivery sign-off evidence."
+        tags: [python, fastapi, observability]
+        metrics: []
+      - text: "Added export pipelines, data recovery helpers, and artifact trace views that expanded the breadth of operator context available during release reviews."
+        tags: [backend, platform]
+        metrics: []
+  - name: "Runtime Safety Toolkit"
+    bullets:
+      - text: "Built linting, validation, and workflow audit tools for migrations, asynchronous processing, generation policies, and artifact trust boundaries."
+        tags: [python, ci/cd, observability]
+        metrics: []
+      - text: "Maintained detailed policy reports and evidence summaries for release managers and operators overseeing risky workflow changes."
+        tags: [platform, reliability]
+        metrics: []
+education:
+  - school: "Stanford"
+    degree: "MS CS"
+    year: "2014"

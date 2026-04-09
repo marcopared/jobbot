@@ -1,0 +1,337 @@
+"""Typed evidence models for resume-generation v2."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from core.resumes._serialization import canonical_json_hash
+
+
+@dataclass(frozen=True)
+class ResumeContact:
+    """Contact information carried into the payload/render stages."""
+
+    name: str
+    email: str
+    location: str
+    linkedin_url: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "name": self.name,
+            "email": self.email,
+            "location": self.location,
+            "linkedin_url": self.linkedin_url,
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEducationRecord:
+    """Education line carried through the payload/render stages."""
+
+    school: str
+    degree: str
+    year: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "school": self.school,
+            "degree": self.degree,
+            "year": self.year,
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEvidenceItem:
+    """A single evidence record with a stable id for provenance."""
+
+    id: str
+    source_type: str
+    item_type: str
+    text: str
+    tags: tuple[str, ...] = ()
+    metrics: tuple[str, ...] = ()
+    parent_id: str | None = None
+    attributes: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("ResumeEvidenceItem.id is required")
+        if not self.source_type.strip():
+            raise ValueError("ResumeEvidenceItem.source_type is required")
+        if not self.item_type.strip():
+            raise ValueError("ResumeEvidenceItem.item_type is required")
+        if not self.text.strip():
+            raise ValueError("ResumeEvidenceItem.text is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "source_type": self.source_type,
+            "item_type": self.item_type,
+            "text": self.text,
+            "tags": list(self.tags),
+            "metrics": list(self.metrics),
+            "parent_id": self.parent_id,
+            "attributes": {key: value for key, value in self.attributes},
+        }
+
+    def to_hash_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "source_type": self.source_type,
+            "item_type": self.item_type,
+            "text": self.text,
+            "tags": list(self.tags),
+            "metrics": list(self.metrics),
+            "parent_id": self.parent_id,
+            "attributes": {
+                key: value for key, value in self.attributes if key != "path"
+            },
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEvidenceSource:
+    """Metadata for a single evidence source or targeting input."""
+
+    source_name: str
+    required: bool
+    present: bool
+    source_kind: str
+    format: str | None = None
+    path: str | None = None
+    content_hash: str | None = None
+    item_count: int = 0
+    used_for_facts: bool = True
+    used_for_targeting: bool = False
+    used_for_preferences: bool = False
+    notes: tuple[str, ...] = ()
+    metadata: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.source_name.strip():
+            raise ValueError("ResumeEvidenceSource.source_name is required")
+        if not self.source_kind.strip():
+            raise ValueError("ResumeEvidenceSource.source_kind is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "source_name": self.source_name,
+            "required": self.required,
+            "present": self.present,
+            "source_kind": self.source_kind,
+            "format": self.format,
+            "path": self.path,
+            "content_hash": self.content_hash,
+            "item_count": self.item_count,
+            "used_for_facts": self.used_for_facts,
+            "used_for_targeting": self.used_for_targeting,
+            "used_for_preferences": self.used_for_preferences,
+            "notes": list(self.notes),
+            "metadata": {key: value for key, value in self.metadata},
+        }
+
+    def to_hash_dict(self) -> dict[str, object]:
+        return {
+            "source_name": self.source_name,
+            "required": self.required,
+            "present": self.present,
+            "source_kind": self.source_kind,
+            "format": self.format,
+            "content_hash": self.content_hash,
+            "item_count": self.item_count,
+            "used_for_facts": self.used_for_facts,
+            "used_for_targeting": self.used_for_targeting,
+            "used_for_preferences": self.used_for_preferences,
+            "notes": list(self.notes),
+            "metadata": {key: value for key, value in self.metadata},
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEvidenceRole:
+    """Structured experience entry backed by evidence items."""
+
+    id: str
+    company: str
+    title: str
+    location: str = ""
+    start: str = ""
+    end: str = "present"
+    tags: tuple[str, ...] = ()
+    bullet_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("ResumeEvidenceRole.id is required")
+        if not self.company.strip():
+            raise ValueError("ResumeEvidenceRole.company is required")
+        if not self.title.strip():
+            raise ValueError("ResumeEvidenceRole.title is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "company": self.company,
+            "title": self.title,
+            "location": self.location,
+            "start": self.start,
+            "end": self.end,
+            "tags": list(self.tags),
+            "bullet_ids": list(self.bullet_ids),
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEvidenceProject:
+    """Structured project entry backed by evidence items."""
+
+    id: str
+    name: str
+    description: str = ""
+    url: str | None = None
+    bullet_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("ResumeEvidenceProject.id is required")
+        if not self.name.strip():
+            raise ValueError("ResumeEvidenceProject.name is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "url": self.url,
+            "bullet_ids": list(self.bullet_ids),
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEvidenceSupplementalEntry:
+    """Grouped factual local evidence that may emit payload bullets."""
+
+    id: str
+    source_type: str
+    heading: str
+    subheading: str = ""
+    dates: str = ""
+    bullet_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.id.strip():
+            raise ValueError("ResumeEvidenceSupplementalEntry.id is required")
+        if not self.source_type.strip():
+            raise ValueError("ResumeEvidenceSupplementalEntry.source_type is required")
+        if not self.heading.strip():
+            raise ValueError("ResumeEvidenceSupplementalEntry.heading is required")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "source_type": self.source_type,
+            "heading": self.heading,
+            "subheading": self.subheading,
+            "dates": self.dates,
+            "bullet_ids": list(self.bullet_ids),
+        }
+
+
+@dataclass(frozen=True)
+class ResumeEvidencePackage:
+    """Aggregated evidence set for deterministic payload generation."""
+
+    contact: ResumeContact
+    summary_variants: tuple[tuple[str, str], ...]
+    skills: tuple[str, ...]
+    education: tuple[ResumeEducationRecord, ...]
+    roles: tuple[ResumeEvidenceRole, ...]
+    projects: tuple[ResumeEvidenceProject, ...]
+    supplemental_entries: tuple[ResumeEvidenceSupplementalEntry, ...]
+    items: tuple[ResumeEvidenceItem, ...]
+    source_metadata: tuple[ResumeEvidenceSource, ...] = ()
+    missing_optional_sources: tuple[str, ...] = ()
+    inputs_hash: str | None = None
+    inventory_version_hash: str | None = None
+    schema_version: str = "resume-evidence-package-v2"
+    source_kind: str = "inventory-only"
+
+    def __post_init__(self) -> None:
+        item_ids = {item.id for item in self.items}
+        if len(item_ids) != len(self.items):
+            raise ValueError("ResumeEvidencePackage item ids must be unique")
+        if not self.source_kind.strip():
+            raise ValueError("ResumeEvidencePackage.source_kind is required")
+        source_names = {source.source_name for source in self.source_metadata}
+        if len(source_names) != len(self.source_metadata):
+            raise ValueError("ResumeEvidencePackage source names must be unique")
+        for role in self.roles:
+            missing = [bullet_id for bullet_id in role.bullet_ids if bullet_id not in item_ids]
+            if missing:
+                raise ValueError(
+                    f"ResumeEvidenceRole {role.id} references unknown evidence ids: {missing}"
+                )
+        for project in self.projects:
+            missing = [bullet_id for bullet_id in project.bullet_ids if bullet_id not in item_ids]
+            if missing:
+                raise ValueError(
+                    f"ResumeEvidenceProject {project.id} references unknown evidence ids: {missing}"
+                )
+        for entry in self.supplemental_entries:
+            missing = [bullet_id for bullet_id in entry.bullet_ids if bullet_id not in item_ids]
+            if missing:
+                raise ValueError(
+                    "ResumeEvidenceSupplementalEntry "
+                    f"{entry.id} references unknown evidence ids: {missing}"
+                )
+
+    def summary_for_persona(self, persona: str) -> str:
+        normalized = persona.strip().upper()
+        summaries = dict(self.summary_variants)
+        return summaries.get(normalized) or summaries.get("HYBRID") or ""
+
+    def get_item(self, evidence_id: str) -> ResumeEvidenceItem:
+        for item in self.items:
+            if item.id == evidence_id:
+                return item
+        raise KeyError(f"Unknown evidence id: {evidence_id}")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.schema_version,
+            "source_kind": self.source_kind,
+            "inputs_hash": self.inputs_hash,
+            "inventory_version_hash": self.inventory_version_hash,
+            "contact": self.contact.to_dict(),
+            "summary_variants": dict(self.summary_variants),
+            "skills": list(self.skills),
+            "education": [record.to_dict() for record in self.education],
+            "roles": [role.to_dict() for role in self.roles],
+            "projects": [project.to_dict() for project in self.projects],
+            "supplemental_entries": [entry.to_dict() for entry in self.supplemental_entries],
+            "items": [item.to_dict() for item in self.items],
+            "source_metadata": [source.to_dict() for source in self.source_metadata],
+            "missing_optional_sources": list(self.missing_optional_sources),
+        }
+
+    def compute_hash(self) -> str:
+        return canonical_json_hash(
+            {
+                "schema_version": self.schema_version,
+                "source_kind": self.source_kind,
+                "inputs_hash": self.inputs_hash,
+                "inventory_version_hash": self.inventory_version_hash,
+                "contact": self.contact.to_dict(),
+                "summary_variants": dict(self.summary_variants),
+                "skills": list(self.skills),
+                "education": [record.to_dict() for record in self.education],
+                "roles": [role.to_dict() for role in self.roles],
+                "projects": [project.to_dict() for project in self.projects],
+                "supplemental_entries": [entry.to_dict() for entry in self.supplemental_entries],
+                "items": [item.to_hash_dict() for item in self.items],
+                "source_metadata": [source.to_hash_dict() for source in self.source_metadata],
+                "missing_optional_sources": list(self.missing_optional_sources),
+            }
+        )

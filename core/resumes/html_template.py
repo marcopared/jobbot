@@ -1,20 +1,7 @@
 """Deterministic HTML resume template (EPIC 7)."""
 
-from dataclasses import dataclass
-
-
-@dataclass
-class RenderedResumeData:
-    """Data structure for template injection."""
-
-    contact_name: str
-    contact_email: str
-    contact_location: str
-    summary: str
-    skills: list[str]
-    roles: list[dict]  # [{company, title, dates, bullets}]
-    projects: list[dict]  # [{name, bullets}]
-    education: list[dict]  # [{school, degree, year}]
+from core.resumes.layout_types import DEFAULT_PAGE_GEOMETRY, LayoutPlan
+from core.resumes.payload_types import ResumePayloadV2, ResumeSection
 
 
 TEMPLATE_VERSION = "v1"
@@ -29,28 +16,30 @@ def _escape_html(s: str) -> str:
     )
 
 
-def render_html(data: RenderedResumeData) -> str:
-    """
-    Render a deterministic HTML resume from structured data.
-    """
-    name = _escape_html(data.contact_name)
-    email = _escape_html(data.contact_email)
-    location = _escape_html(data.contact_location)
-    summary = _escape_html(data.summary).replace("\n", "<br>")
+def _find_section(payload: ResumePayloadV2, section_id: str) -> ResumeSection:
+    for section in payload.sections:
+        if section.id == section_id:
+            return section
+    raise KeyError(f"Missing payload section: {section_id}")
 
-    skills_html = ", ".join(_escape_html(s) for s in data.skills)
 
-    roles_html_parts = []
-    for r in data.roles:
-        company = _escape_html(r.get("company", ""))
-        title = _escape_html(r.get("title", ""))
-        dates = _escape_html(r.get("dates", ""))
-        bullets = r.get("bullets", [])
-        bullets_html = "".join(
-            f'<li>{_escape_html(b)}</li>' for b in bullets
-        )
-        roles_html_parts.append(
-            f"""
+def _render_section_body(section: ResumeSection) -> str:
+    if section.kind == "summary":
+        return f'<div class="summary">{_escape_html(section.body).replace("\n", "<br>")}</div>'
+    if section.kind == "skills":
+        skills_html = ", ".join(_escape_html(skill) for skill in section.lines)
+        return f'<div class="skills">{skills_html}</div>'
+    if section.kind == "experience":
+        entries_html = []
+        for entry in section.entries:
+            company = _escape_html(entry.subheading)
+            title = _escape_html(entry.heading)
+            dates = _escape_html(entry.dates)
+            bullets_html = "".join(
+                f'<li>{_escape_html(bullet.text)}</li>' for bullet in entry.bullets
+            )
+            entries_html.append(
+                f"""
             <div class="role">
                 <div class="role-header">
                     <span class="role-title">{title}</span>
@@ -60,35 +49,73 @@ def render_html(data: RenderedResumeData) -> str:
                 <ul class="role-bullets">{bullets_html}</ul>
             </div>
             """
-        )
-    roles_section = "\n".join(roles_html_parts) if roles_html_parts else ""
-
-    projects_html_parts = []
-    for p in data.projects:
-        name_ = _escape_html(p.get("name", ""))
-        bullets = p.get("bullets", [])
-        bullets_html = "".join(
-            f'<li>{_escape_html(b)}</li>' for b in bullets
-        )
-        projects_html_parts.append(
-            f"""
+            )
+        return "\n".join(entries_html)
+    if section.kind == "highlights":
+        entries_html = []
+        for entry in section.entries:
+            heading = _escape_html(entry.heading)
+            subheading = _escape_html(entry.subheading)
+            dates = _escape_html(entry.dates)
+            bullets_html = "".join(
+                f'<li>{_escape_html(bullet.text)}</li>' for bullet in entry.bullets
+            )
+            meta_bits = " ".join(part for part in (subheading, dates) if part)
+            meta_html = f'<span class="highlight-meta">{meta_bits}</span>' if meta_bits else ""
+            entries_html.append(
+                f"""
+            <div class="highlight">
+                <div class="highlight-header">
+                    <span class="highlight-title">{heading}</span>
+                    {meta_html}
+                </div>
+                <ul class="highlight-bullets">{bullets_html}</ul>
+            </div>
+            """
+            )
+        return "\n".join(entries_html)
+    if section.kind == "projects":
+        entries_html = []
+        for entry in section.entries:
+            name = _escape_html(entry.heading)
+            bullets_html = "".join(
+                f'<li>{_escape_html(bullet.text)}</li>' for bullet in entry.bullets
+            )
+            entries_html.append(
+                f"""
             <div class="project">
-                <div class="project-name">{name_}</div>
+                <div class="project-name">{name}</div>
                 <ul class="project-bullets">{bullets_html}</ul>
             </div>
             """
+            )
+        return "\n".join(entries_html)
+    if section.kind == "education":
+        lines_html = "".join(
+            f'<div class="edu-line">{_escape_html(line)}</div>' for line in section.lines
         )
-    projects_section = "\n".join(projects_html_parts) if projects_html_parts else ""
+        return f'<div class="education">{lines_html}</div>'
+    raise ValueError(f"Unsupported section kind: {section.kind}")
 
-    education_html_parts = []
-    for e in data.education:
-        school = _escape_html(e.get("school", ""))
-        degree = _escape_html(e.get("degree", ""))
-        year = _escape_html(e.get("year", ""))
-        education_html_parts.append(
-            f'<div class="edu-line">{degree} — {school} ({year})</div>'
+
+def render_html(payload: ResumePayloadV2, layout_plan: LayoutPlan) -> str:
+    """
+    Render a deterministic HTML resume from structured data.
+    """
+    name = _escape_html(payload.contact.name)
+    email = _escape_html(payload.contact.email)
+    location = _escape_html(payload.contact.location)
+    ordered_sections = sorted(layout_plan.sections, key=lambda section: section.order)
+    rendered_sections = []
+    for section_plan in ordered_sections:
+        section = _find_section(payload, section_plan.section_id)
+        rendered_sections.append(
+            f"""
+    <h2>{_escape_html(section_plan.title)}</h2>
+    {_render_section_body(section)}
+            """
         )
-    education_section = "\n".join(education_html_parts) if education_html_parts else ""
+    body_sections = "\n".join(rendered_sections)
 
     html = f"""
 <!DOCTYPE html>
@@ -98,14 +125,20 @@ def render_html(data: RenderedResumeData) -> str:
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resume — {name}</title>
     <style>
-        @page {{ size: letter; margin: 0.5in; }}
-        body {{ font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.35; margin: 0.5in; color: #222; }}
+        @page {{ size: {DEFAULT_PAGE_GEOMETRY.css_page_size}; margin: {DEFAULT_PAGE_GEOMETRY.margin_top_in}in {DEFAULT_PAGE_GEOMETRY.margin_right_in}in {DEFAULT_PAGE_GEOMETRY.margin_bottom_in}in {DEFAULT_PAGE_GEOMETRY.margin_left_in}in; }}
+        body {{ font-family: Georgia, "Times New Roman", serif; font-size: 11pt; line-height: 1.35; margin: {DEFAULT_PAGE_GEOMETRY.margin_top_in}in {DEFAULT_PAGE_GEOMETRY.margin_right_in}in {DEFAULT_PAGE_GEOMETRY.margin_bottom_in}in {DEFAULT_PAGE_GEOMETRY.margin_left_in}in; color: #222; }}
         h1 {{ font-size: 18pt; font-weight: bold; margin: 0 0 4px 0; }}
         .contact {{ font-size: 10pt; color: #444; margin-bottom: 12px; }}
         .contact span {{ margin-right: 12px; }}
         h2 {{ font-size: 12pt; font-weight: bold; margin: 12px 0 6px 0; border-bottom: 1px solid #ccc; padding-bottom: 2px; }}
         .summary {{ margin-bottom: 12px; }}
         .skills {{ margin-bottom: 12px; }}
+        .highlight {{ margin-bottom: 10px; }}
+        .highlight-header {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }}
+        .highlight-title {{ font-weight: bold; }}
+        .highlight-meta {{ color: #555; font-size: 10pt; }}
+        .highlight-bullets {{ margin: 4px 0 0 16px; padding: 0; }}
+        .highlight-bullets li {{ margin-bottom: 3px; }}
         .role {{ margin-bottom: 10px; }}
         .role-header {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }}
         .role-title {{ font-weight: bold; }}
@@ -125,20 +158,7 @@ def render_html(data: RenderedResumeData) -> str:
         <span>{location}</span>
     </div>
 
-    <h2>Summary</h2>
-    <div class="summary">{summary}</div>
-
-    <h2>Skills</h2>
-    <div class="skills">{skills_html}</div>
-
-    <h2>Experience</h2>
-    {roles_section}
-
-    <h2>Projects</h2>
-    {projects_section}
-
-    <h2>Education</h2>
-    <div class="education">{education_section}</div>
+    {body_sections}
 </body>
 </html>
 """

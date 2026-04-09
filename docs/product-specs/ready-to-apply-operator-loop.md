@@ -15,20 +15,24 @@ A job appears in the queue when:
 Current implementation:
 - route: `GET /api/jobs/ready-to-apply`
 - UI page: `/ready`
+- default sort: `artifact_ready_at desc`
 
 ## Operator Actions
 
 From this loop, the user should be able to:
 
 1. inspect the job detail
-2. preview or download the artifact
-3. open the job detail and then the external apply URL
-4. mark the job as saved, archived, or applied
+2. move from the queue into Job Detail via the Apply action
+3. preview or download the primary PDF artifact from Job Detail
+4. optionally inspect the payload/diagnostics JSON sidecars
+5. open the external apply URL and apply manually
+6. mark the job as saved, archived, or applied
 
 ## Non-Goals
 
 - no hidden apply automation
-- no bypass of the job detail or artifact review step
+- no hidden submission from the queue itself
+- no bypass of the job detail and artifact review step
 - no claim that ready-to-apply means “already applied”
 
 ## Why This Surface Matters

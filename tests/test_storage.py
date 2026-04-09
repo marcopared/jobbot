@@ -60,6 +60,35 @@ def test_local_storage_without_prefix():
         assert (Path(tmp) / relative_key).is_file()
 
 
+def test_local_storage_resume_bundle_sidecars_use_consistent_keys():
+    """PDF and JSON sidecars share the same stem and live under one job directory."""
+    with tempfile.TemporaryDirectory() as tmp:
+        store = LocalArtifactStorage(root_dir=tmp, prefix="resumes")
+        job_id = "11111111-1111-1111-1111-111111111111"
+        filenames = (
+            "20250101_120000_resume.pdf",
+            "20250101_120000_resume_payload.json",
+            "20250101_120000_resume_diagnostics.json",
+        )
+
+        storage_keys = [
+            store.store(
+                key=f"{job_id}/{filename}",
+                data=b"{}" if filename.endswith(".json") else b"%PDF-1.4",
+                content_type="application/json" if filename.endswith(".json") else "application/pdf",
+            ).storage_key
+            for filename in filenames
+        ]
+
+        assert storage_keys == [
+            "resumes/11111111-1111-1111-1111-111111111111/20250101_120000_resume.pdf",
+            "resumes/11111111-1111-1111-1111-111111111111/20250101_120000_resume_payload.json",
+            "resumes/11111111-1111-1111-1111-111111111111/20250101_120000_resume_diagnostics.json",
+        ]
+        for storage_key in storage_keys:
+            assert (Path(tmp) / storage_key).is_file()
+
+
 def test_local_storage_get_signed_url_returns_none():
     """Local storage returns None for get_signed_url (serve from disk)."""
     with tempfile.TemporaryDirectory() as tmp:
