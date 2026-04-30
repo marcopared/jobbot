@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable, Mapping
+
+from bs4 import BeautifulSoup
 
 from core.ingestion.backends.base import AcquisitionBackend
 from core.ingestion.sources.portfolio_boards.common import (
@@ -17,6 +20,8 @@ from core.ingestion.sources.public_boards.common import (
     parse_date,
 )
 from core.ingestion.types import AcquisitionRecord, SourcePolicy
+
+_GETRO_JOB_LINK_RE = re.compile(r"/companies/([^/]+)/jobs/([^/?#]+)")
 
 
 class GetroLikePortfolioBoardSourceAdapter(BasePublicBoardSourceAdapter):
@@ -45,10 +50,20 @@ class GetroLikePortfolioBoardSourceAdapter(BasePublicBoardSourceAdapter):
         initial_state = extract_initial_state(html)
         jobs_state = initial_state.get("jobs")
         if not isinstance(jobs_state, Mapping):
+            yield from self._extract_listing_links(
+                html=html,
+                page_record=page_record,
+                max_results=int(params.get("max_results", 25)),
+            )
             return
 
         jobs = jobs_state.get("found")
         if not isinstance(jobs, list):
+            yield from self._extract_listing_links(
+                html=html,
+                page_record=page_record,
+                max_results=int(params.get("max_results", 25)),
+            )
             return
 
         max_results = int(params.get("max_results", 25))
@@ -81,6 +96,51 @@ class GetroLikePortfolioBoardSourceAdapter(BasePublicBoardSourceAdapter):
                 detail_url=detail_url,
                 raw_listing=dict(job),
             )
+
+    def _extract_listing_links(
+        self,
+        *,
+        html: str,
+        page_record: AcquisitionRecord,
+        max_results: int,
+    ) -> Iterable[PublicBoardCandidate]:
+        soup = BeautifulSoup(html, "html.parser")
+        seen: set[str] = set()
+        count = 0
+        for anchor in soup.find_all("a", href=True):
+            href = clean_text(anchor.get("href"))
+            if not href:
+                continue
+            match = _GETRO_JOB_LINK_RE.search(href)
+            if match is None or href in seen:
+                continue
+            seen.add(href)
+
+            org_slug, job_slug = match.groups()
+            detail_url = absolutize_url(page_record.provenance.source_url, href)
+            if not detail_url:
+                continue
+
+            title = clean_text(anchor.get_text(" ", strip=True)) or clean_text(job_slug.replace("-", " "))
+            company = clean_text(org_slug.replace("-", " "))
+            external_id = job_slug.split("-", 1)[0] or job_slug
+            yield PublicBoardCandidate(
+                external_id=external_id,
+                source_url=detail_url,
+                title=title,
+                company=company,
+                detail_url=detail_url,
+                raw_listing={
+                    "href": href,
+                    "title": title,
+                    "company_slug": org_slug,
+                    "job_slug": job_slug,
+                    "extraction_strategy": "listing_link_fallback",
+                },
+            )
+            count += 1
+            if count >= max_results:
+                break
 
     def enrich_candidate(
         self,

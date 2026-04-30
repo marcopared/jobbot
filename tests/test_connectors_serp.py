@@ -39,6 +39,23 @@ def _task_post_response(task_id: str) -> MagicMock:
     return resp
 
 
+def _task_post_invalid_response(task_id: str) -> MagicMock:
+    resp = MagicMock()
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {
+        "status_code": 20000,
+        "tasks": [
+            {
+                "id": task_id,
+                "status_code": 40501,
+                "status_message": "Invalid Field: 'location_name'.",
+                "result": None,
+            }
+        ],
+    }
+    return resp
+
+
 def _tasks_ready_response(task_id: str, ready: bool) -> MagicMock:
     resp = MagicMock()
     resp.raise_for_status = MagicMock()
@@ -145,6 +162,26 @@ def test_fetch_raw_jobs_missing_credentials_returns_error():
     assert "DATAFORSEO_PASSWORD" in result.error
     assert result.stats["errors"] == 1
     assert result.raw_jobs == []
+
+
+def test_fetch_raw_jobs_task_submission_surfaces_task_error(connector):
+    mock_client = MagicMock()
+    mock_client.post.return_value = _task_post_invalid_response(
+        "123e4567-e89b-12d3-a456-426614174099"
+    )
+
+    with patch("core.connectors.serp.httpx.Client") as mock_client_class:
+        mock_client_class.return_value.__enter__ = MagicMock(return_value=mock_client)
+        mock_client_class.return_value.__exit__ = MagicMock(return_value=False)
+        result = connector.fetch_raw_jobs(
+            query="backend engineer",
+            location="New York, NY",
+        )
+
+    assert result.error == "DataForSEO task_post failed: Invalid Field: 'location_name'."
+    assert result.stats["errors"] == 1
+    assert result.raw_jobs == []
+    mock_client.get.assert_not_called()
 
 
 def test_fetch_raw_jobs_readiness_timeout_returns_error(connector):

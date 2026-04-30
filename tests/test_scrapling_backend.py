@@ -31,6 +31,10 @@ class _FakeRequestError(Exception):
     pass
 
 
+class _EmptyTextHandler(str):
+    """Stand-in for Scrapling's empty text handler, which is a str subclass."""
+
+
 class _FakeSession:
     def __init__(self, module: "_FakeFetchersModule", *, mode: str, kwargs: dict[str, Any]) -> None:
         self._module = module
@@ -172,6 +176,33 @@ def test_scrapling_backend_fetches_simple_fixture_html():
             },
         }
     ]
+
+
+def test_scrapling_backend_uses_html_content_when_text_handler_is_empty():
+    fetchers_module = _FakeFetchersModule()
+    url = "https://example.com/jobs"
+    html = _fixture_text("simple_job_board.html")
+    fetchers_module.enqueue(
+        mode="simple",
+        url=url,
+        result=_FakeResponse(
+            text=_EmptyTextHandler(""),
+            status=200,
+            headers={"content-type": "text/html; charset=utf-8"},
+            url=url,
+        ),
+    )
+    fetchers_module._plans[("simple", url)][0].html_content = html
+
+    backend = ScraplingFetchBackend(fetchers_module=fetchers_module)
+    batch = backend.acquire(
+        "demo_board",
+        request=AcquisitionRequest(url=url, fetch_mode=FetchMode.SIMPLE),
+    )
+
+    assert batch.error is None
+    assert batch.records[0].raw_payload == html
+    assert batch.records[0].artifact.content == html
 
 
 def test_scrapling_backend_escalates_from_simple_to_dynamic():

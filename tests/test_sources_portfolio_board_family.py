@@ -66,9 +66,83 @@ def test_getro_portfolio_boards_share_adapter_family(adapter_cls, fixture_dir, l
     assert batch.records[0].raw_payload["capture_context"]["detail_url"] == detail_url
 
 
+def test_getro_adapter_falls_back_to_listing_links_without_next_data():
+    listing_url = "https://jobs.technyc.org/jobs"
+    detail_url = (
+        "https://jobs.technyc.org/companies/salesforce-2/jobs/"
+        "76306424-program-executive-health-life-sciences"
+    )
+    listing_html = f"""
+    <html>
+      <body>
+        <a href="/companies/salesforce-2/jobs/76306424-program-executive-health-life-sciences">
+          Program Executive - Health & Life Sciences
+        </a>
+      </body>
+    </html>
+    """
+    detail_html = f"""
+    <html>
+      <head>
+        <script id="__NEXT_DATA__" type="application/json">
+          {{
+            "props": {{
+              "pageProps": {{
+                "initialState": {{
+                  "jobs": {{
+                    "currentJob": {{
+                      "id": 76306424,
+                      "slug": "76306424-program-executive-health-life-sciences",
+                      "title": "Program Executive - Health & Life Sciences",
+                      "url": "https://example.com/apply",
+                      "description": "<p>Own enterprise healthcare programs.</p>",
+                      "locations": ["New York, NY, USA"],
+                      "employmentTypes": ["Full-time"],
+                      "organization": {{"name": "Salesforce", "slug": "salesforce-2"}}
+                    }}
+                  }}
+                }}
+              }}
+            }}
+          }}
+        </script>
+      </head>
+      <body></body>
+    </html>
+    """
+    fetchers = FakeFetchersModule()
+    fetchers.enqueue(
+        mode="simple",
+        url=listing_url,
+        result=FakeResponse(
+            text=listing_html,
+            headers={"content-type": "text/html"},
+            url=listing_url,
+        ),
+    )
+    fetchers.enqueue(
+        mode="simple",
+        url=detail_url,
+        result=FakeResponse(
+            text=detail_html,
+            headers={"content-type": "text/html"},
+            url=detail_url,
+        ),
+    )
+
+    adapter = TechNYCSourceAdapter(backend=ScraplingFetchBackend(fetchers_module=fetchers))
+
+    batch = adapter.acquire(max_results=1)
+
+    assert len(batch.records) == 1
+    payload = batch.records[0].raw_payload
+    assert payload["detail_url"] == detail_url
+    assert payload["title"] == "Program Executive - Health & Life Sciences"
+    assert payload["company"] == "Salesforce"
+
+
 def test_usv_uses_custom_adapter_outside_getro_family():
     adapter = USVSourceAdapter()
 
     assert isinstance(adapter, USVSourceAdapter)
     assert not isinstance(adapter, GetroLikePortfolioBoardSourceAdapter)
-

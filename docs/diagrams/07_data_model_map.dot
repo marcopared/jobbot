@@ -1,0 +1,22 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.35", nodesep="0.5", ranksep="0.65", splines=ortho, fontname="Helvetica"];
+  node [shape=record, style="rounded,filled", fontname="Helvetica", fontsize=10, color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  Job [label="{Job|id|source / source_role / source_confidence|title / company / location|url / apply_url|description|pipeline_status / user_status|score_total / score_breakdown_json|ats_match_score / ats_match_breakdown_json|dedup_hash|artifact_ready_at / auto_generated_at}", fillcolor="#FFF4CC"];
+  ScrapeRun [label="{ScrapeRun|id|source|status|params_json|stats_json|items_json|error_text|started_at / finished_at}", fillcolor="#F1F5FF"];
+  JobSourceRecord [label="{JobSourceRecord|id|job_id|source_name|external_id|raw_data|provenance_metadata}", fillcolor="#F1F5FF"];
+  JobAnalysis [label="{JobAnalysis|id|job_id|total_score|matched_persona|persona_confidence|persona_rationale|persona_specific_scores|ats_compatibility_score|found_keywords|missing_keywords|ats_categories}", fillcolor="#F1F5FF"];
+  GenerationRun [label="{GenerationRun|id|job_id|status|triggered_by|artifact_id|failure_reason|created_at / finished_at}", fillcolor="#F1F5FF"];
+  Artifact [label="{Artifact|id|job_id|kind|filename|format|path / file_url|generation_status|meta_json|created_at}", fillcolor="#F1F5FF"];
+  RunItem [label="{Run item dict|index|outcome|job_id|dedup_hash|source|title/company/location|url/apply_url|raw_payload_json}", fillcolor="#F1F5FF"];
+
+  ScrapeRun -> RunItem [label="contains many in items_json"];
+  RunItem -> Job [label="may reference"];
+  Job -> JobSourceRecord [label="1 to many"];
+  Job -> JobAnalysis [label="1 to 0..1"];
+  Job -> GenerationRun [label="1 to many"];
+  Job -> Artifact [label="1 to many"];
+  GenerationRun -> Artifact [label="0..1 artifact_id"];
+}

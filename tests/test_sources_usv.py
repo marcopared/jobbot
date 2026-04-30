@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.ingestion.backends.scrapling_backend import ScraplingFetchBackend
+from core.ingestion.sources.portfolio_boards.common import load_json_object
 from core.ingestion.sources.portfolio_boards.usv import USVSourceAdapter
 
 from tests.public_board_test_support import FakeFetchersModule, FakeResponse, fixture_text
@@ -39,3 +40,9 @@ def test_usv_adapter_fetches_consider_api_results():
     )
     assert batch.records[0].raw_payload["capture_context"]["search_api_url"] == search_url
 
+
+def test_usv_json_loader_accepts_scrapling_html_wrapped_json():
+    payload = load_json_object('<html><body>{"jobs":[{"title":"Engineer"}],"total":1}</body></html>')
+
+    assert payload["total"] == 1
+    assert payload["jobs"][0]["title"] == "Engineer"

@@ -1,0 +1,142 @@
+
+digraph G {
+  graph [rankdir=TB, bgcolor="white", pad="0.35", nodesep="0.45", ranksep="0.6", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.08,0.05", color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  User [label="Operator / User", shape=oval, fillcolor="#FFF4CC"];
+
+  subgraph cluster_ui {
+    label="React + Vite UI: ui/src";
+    color="#999999";
+    style="rounded";
+    Layout [label="Layout.tsx"];
+    Ready [label="ReadyToApplyPage.tsx\nDefault /ready"];
+    Jobs [label="JobsPage.tsx\nAll jobs"];
+    JobDetail [label="JobDetailPage.tsx\nJob detail + artifacts"];
+    Manual [label="ManualJobIntakePage.tsx\nManual job intake"];
+    Runs [label="RunsPage.tsx\nRun launcher + run list"];
+    RunDetail [label="RunDetailPage.tsx\nRun item inspection"];
+    ArtifactViewer [label="ArtifactViewer.tsx\nPDF / sidecars"];
+    ApiClient [label="api.ts\nHTTP client"];
+  }
+
+  subgraph cluster_api {
+    label="FastAPI: apps/api";
+    color="#999999";
+    style="rounded";
+    Main [label="main.py\nApp + routers"];
+    JobsRouter [label="routes/jobs.py\nJobs, run launchers,\nstatus, generation"];
+    RunsRouter [label="routes/runs.py\nRun list/detail/items"];
+    ArtifactsRouter [label="routes/artifacts.py\nPreview/download"];
+    DebugRouter [label="routes/debug.py\nRecent failures"];
+    WsRouter [label="routes/ws.py\n/ws/logs"];
+    Schemas [label="schemas.py\nPydantic contracts"];
+    Settings [label="settings.py\n.env flags/config"];
+  }
+
+  subgraph cluster_runtime {
+    label="Runtime Infrastructure";
+    color="#999999";
+    style="rounded";
+    Redis [label="Redis\nCelery broker/result backend\nlogs/failures", shape=cylinder, fillcolor="#F1F5FF"];
+    Postgres [label="PostgreSQL\nSQLAlchemy models", shape=cylinder, fillcolor="#F1F5FF"];
+    Storage [label="Artifact storage\nlocal storage/artifacts or GCS", shape=cylinder, fillcolor="#F1F5FF"];
+  }
+
+  subgraph cluster_worker {
+    label="Celery Worker: apps/worker";
+    color="#999999";
+    style="rounded";
+    CeleryApp [label="celery_app.py\nQueues: scrape, ingestion, default"];
+    ScrapeTask [label="tasks/scrape.py\nJobSpy scrape"];
+    IngestTask [label="tasks/ingest.py\nGreenhouse/Lever/Ashby\nURL/manual pipeline"];
+    DiscoveryTask [label="tasks/discovery.py\nAGG-1/SERP1/source adapters"];
+    ResolutionTask [label="tasks/resolution.py\nDiscovery -> canonical"];
+    ScoreTask [label="tasks/score.py\nscore_jobs"];
+    ClassifyTask [label="tasks/classify.py\nclassify_jobs"];
+    ATSMatchTask [label="tasks/ats_match.py\nats_match_resume"];
+    GenerationGate [label="tasks/generation.py\nevaluate_generation_gate"];
+    ResumeTask [label="tasks/resume.py\ngenerate_grounded_resume_task"];
+  }
+
+  subgraph cluster_core {
+    label="Core Domain: core/";
+    color="#999999";
+    style="rounded";
+    Connectors [label="connectors/\nGreenhouse, Lever, Ashby,\nAGG-1, SERP1, URL parser"];
+    IngestionCore [label="ingestion/\nregistry, policies,\nadapters, backends"];
+    ScrapingCore [label="scraping/\nJobSpy wrapper"];
+    Dedup [label="dedup/\nnormalization, hash,\nsimilarity diagnostics"];
+    Scoring [label="scoring/\nrules + scorer"];
+    Classification [label="classification/\nrules-based persona classifier"];
+    ATS [label="ats/\nkeyword extraction"];
+    Automation [label="automation/generation_gate.py\neligibility"];
+    Resumes [label="resumes/\nevidence, payload, fit,\ngeneration, PDF"];
+    StorageCore [label="storage/\nlocal/GCS adapters"];
+    Observability [label="observability/\nmetrics, context, failures"];
+  }
+
+  ExternalSources [label="External job sources\nGreenhouse / Lever / Ashby\nAdzuna / DataForSEO\nJobSpy boards\nPublic / portfolio / auth boards", fillcolor="#FFF4CC"];
+
+  User -> Layout;
+  Layout -> Ready;
+  Layout -> Jobs;
+  Layout -> Runs;
+  Layout -> Manual;
+  Jobs -> JobDetail;
+  Ready -> JobDetail;
+  Runs -> RunDetail;
+  JobDetail -> ArtifactViewer;
+  Layout -> ApiClient;
+
+  ApiClient -> Main;
+  Main -> JobsRouter;
+  Main -> RunsRouter;
+  Main -> ArtifactsRouter;
+  Main -> DebugRouter;
+  Main -> WsRouter;
+  JobsRouter -> Schemas;
+  JobsRouter -> Settings;
+
+  JobsRouter -> Redis [label="enqueue"];
+  Redis -> CeleryApp;
+  CeleryApp -> ScrapeTask;
+  CeleryApp -> IngestTask;
+  CeleryApp -> DiscoveryTask;
+  CeleryApp -> ResolutionTask;
+  CeleryApp -> ScoreTask;
+  CeleryApp -> ClassifyTask;
+  CeleryApp -> ATSMatchTask;
+  CeleryApp -> GenerationGate;
+  CeleryApp -> ResumeTask;
+
+  ScrapeTask -> ScrapingCore;
+  IngestTask -> Connectors;
+  IngestTask -> IngestionCore;
+  IngestTask -> Dedup;
+  DiscoveryTask -> Connectors;
+  DiscoveryTask -> IngestionCore;
+  DiscoveryTask -> Dedup;
+  ResolutionTask -> Connectors;
+  ScoreTask -> Scoring;
+  ClassifyTask -> Classification;
+  ATSMatchTask -> ATS;
+  GenerationGate -> Automation;
+  ResumeTask -> Resumes;
+  ResumeTask -> StorageCore;
+  CeleryApp -> Observability;
+
+  Connectors -> ExternalSources;
+  IngestionCore -> ExternalSources;
+  ScrapingCore -> ExternalSources;
+
+  JobsRouter -> Postgres [dir=both];
+  RunsRouter -> Postgres [dir=both];
+  ArtifactsRouter -> Postgres [dir=both];
+  CeleryApp -> Postgres [dir=both];
+  ResumeTask -> Storage;
+  ArtifactsRouter -> Storage;
+  WsRouter -> Redis [dir=both];
+  DebugRouter -> Redis [dir=both];
+}

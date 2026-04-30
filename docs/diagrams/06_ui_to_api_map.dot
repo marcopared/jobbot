@@ -1,0 +1,63 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.35", nodesep="0.45", ranksep="0.6", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.08,0.05", color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  subgraph cluster_ui {
+    label="UI Pages";
+    color="#999999"; style="rounded";
+    ReadyPage [label="ReadyToApplyPage.tsx"];
+    JobsPage [label="JobsPage.tsx"];
+    JobDetailPage [label="JobDetailPage.tsx"];
+    ManualPage [label="ManualJobIntakePage.tsx"];
+    RunsPage [label="RunsPage.tsx"];
+    RunDetailPage [label="RunDetailPage.tsx"];
+    ArtifactViewer [label="ArtifactViewer.tsx"];
+    ApiTs [label="api.ts\nfetch helpers", fillcolor="#FFF4CC"];
+  }
+
+  subgraph cluster_api {
+    label="FastAPI Endpoints";
+    color="#999999"; style="rounded";
+    ReadyEndpoint [label="GET /api/jobs/ready-to-apply"];
+    JobsEndpoint [label="GET /api/jobs"];
+    JobDetailEndpoint [label="GET /api/jobs/{id}"];
+    StatusEndpoint [label="PUT /api/jobs/{id}/status"];
+    GenerateEndpoint [label="POST /api/jobs/{id}/generate-resume"];
+    ArtifactsEndpoint [label="GET /api/jobs/{id}/artifacts"];
+    PreviewDownload [label="GET /api/artifacts/{id}/preview\nGET /api/artifacts/{id}/download"];
+    ManualEndpoint [label="POST /api/jobs/manual-ingest"];
+    RunsEndpoint [label="GET /api/runs\nGET /api/runs/{id}\nGET /api/runs/{id}/items"];
+    RunScrape [label="POST /api/jobs/run-scrape"];
+    RunIngestion [label="POST /api/jobs/run-ingestion"];
+    RunDiscovery [label="POST /api/jobs/run-discovery"];
+    RunSourceAdapter [label="GET/POST /api/jobs/run-source-adapter"];
+    IngestUrl [label="POST /api/jobs/ingest-url"];
+    ResolveEndpoint [label="POST /api/jobs/{id}/resolve"];
+  }
+
+  ReadyPage -> ApiTs;
+  JobsPage -> ApiTs;
+  JobDetailPage -> ApiTs;
+  ManualPage -> ApiTs;
+  RunsPage -> ApiTs;
+  RunDetailPage -> ApiTs;
+  ArtifactViewer -> ApiTs;
+
+  ApiTs -> ReadyEndpoint;
+  ApiTs -> JobsEndpoint;
+  ApiTs -> JobDetailEndpoint;
+  ApiTs -> StatusEndpoint;
+  ApiTs -> GenerateEndpoint;
+  ApiTs -> ArtifactsEndpoint;
+  ApiTs -> PreviewDownload;
+  ApiTs -> ManualEndpoint;
+  ApiTs -> RunsEndpoint;
+  ApiTs -> RunScrape;
+  ApiTs -> RunIngestion;
+  ApiTs -> RunDiscovery;
+  ApiTs -> RunSourceAdapter;
+  ApiTs -> IngestUrl;
+  ApiTs -> ResolveEndpoint;
+}

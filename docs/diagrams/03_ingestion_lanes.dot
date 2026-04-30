@@ -1,0 +1,59 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.35", nodesep="0.45", ranksep="0.6", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.08,0.05", color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  subgraph cluster_api {
+    label="API Entrypoints";
+    color="#999999"; style="rounded";
+    RunScrape [label="POST /api/jobs/run-scrape"];
+    RunIngestion [label="POST /api/jobs/run-ingestion"];
+    RunDiscovery [label="POST /api/jobs/run-discovery"];
+    RunSourceAdapter [label="POST /api/jobs/run-source-adapter"];
+    IngestURL [label="POST /api/jobs/ingest-url"];
+    ManualIngest [label="POST /api/jobs/manual-ingest"];
+  }
+
+  subgraph cluster_tasks {
+    label="Worker Tasks";
+    color="#999999"; style="rounded";
+    ScrapeJobSpy [label="scrape_jobspy"];
+    IngestCanonical [label="ingest_greenhouse\ningest_lever\ningest_ashby"];
+    RunDiscoveryTask [label="run_discovery"];
+    SourceAdapterTask [label="run_public_board_source\nrun_auth_board_source"];
+    IngestUrlTask [label="ingest_url"];
+    ManualPipeline [label="manual_ingest_pipeline"];
+  }
+
+  subgraph cluster_sources {
+    label="Source Families";
+    color="#999999"; style="rounded";
+    JobSpy [label="JobSpy boards\nLinkedIn / Indeed / Glassdoor / etc."];
+    CanonicalATS [label="Canonical ATS\nGreenhouse / Lever / Ashby"];
+    BroadDiscovery [label="Broad discovery\nAGG-1 Adzuna / SERP1 DataForSEO"];
+    PublicBoards [label="Public boards\nBuilt In NYC / StartupJobs NYC / WTTJ"];
+    PortfolioBoards [label="Portfolio boards\nTech:NYC / Primary / Greycroft / USV"];
+    AuthBoards [label="Auth boards\nLinkedIn Jobs / Wellfound / YC\nflags + BB_BROWSER_ENABLED"];
+    DirectATSURL [label="Direct ATS URL\nGreenhouse / Lever / Ashby parser"];
+    ManualJob [label="Manual operator-entered job"];
+  }
+
+  subgraph cluster_db {
+    label="Persistence";
+    color="#999999"; style="rounded";
+    ScrapeRun [label="ScrapeRun\nsource/status/params/stats/items", shape=cylinder, fillcolor="#F1F5FF"];
+    Jobs [label="Job\ncanonical job row", shape=cylinder, fillcolor="#F1F5FF"];
+    SourceRecords [label="JobSourceRecord\nsource provenance", shape=cylinder, fillcolor="#F1F5FF"];
+  }
+
+  RunScrape -> ScrapeRun -> ScrapeJobSpy -> JobSpy -> Jobs;
+  RunIngestion -> ScrapeRun -> IngestCanonical -> CanonicalATS -> Jobs;
+  RunDiscovery -> ScrapeRun -> RunDiscoveryTask -> BroadDiscovery -> Jobs;
+  RunSourceAdapter -> ScrapeRun -> SourceAdapterTask -> PublicBoards -> Jobs;
+  SourceAdapterTask -> PortfolioBoards -> Jobs;
+  SourceAdapterTask -> AuthBoards -> Jobs;
+  IngestURL -> ScrapeRun -> IngestUrlTask -> DirectATSURL -> Jobs;
+  ManualIngest -> ScrapeRun -> ManualPipeline -> ManualJob -> Jobs;
+  Jobs -> SourceRecords;
+}

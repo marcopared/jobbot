@@ -168,12 +168,14 @@ class Serp1Connector:
             with httpx.Client(
                 auth=(self.config.login, self.config.password), timeout=30.0
             ) as client:
-                task_id = self._submit_task(client, task_post_url, task_payload)
+                task_id, task_error = self._submit_task(
+                    client, task_post_url, task_payload
+                )
                 if not task_id:
                     return FetchResult(
                         raw_jobs=[],
                         stats={"fetched": 0, "errors": 1},
-                        error="DataForSEO task_post failed: missing task id",
+                        error=f"DataForSEO task_post failed: {task_error or 'missing task id'}",
                     )
 
                 ready = self._poll_until_ready(
@@ -395,21 +397,23 @@ class Serp1Connector:
         client: httpx.Client,
         task_post_url: str,
         task_payload: dict[str, Any],
-    ) -> str | None:
+    ) -> tuple[str | None, str | None]:
         response = client.post(task_post_url, json=[task_payload])
         response.raise_for_status()
         payload = response.json()
 
         if not self._is_success_status((payload or {}).get("status_code")):
-            return None
+            return None, self._coerce_str((payload or {}).get("status_message"))
 
+        task_error = None
         for task in self._response_tasks(payload):
             if not self._is_success_status(task.get("status_code")):
+                task_error = self._coerce_str(task.get("status_message")) or task_error
                 continue
             task_id = self._coerce_str(task.get("id"))
             if task_id:
-                return task_id
-        return None
+                return task_id, None
+        return None, task_error
 
     def _poll_until_ready(
         self,

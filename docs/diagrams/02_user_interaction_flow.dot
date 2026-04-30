@@ -1,0 +1,24 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.35", nodesep="0.45", ranksep="0.7", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.08,0.05", color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  User [label="1. User opens UI", shape=oval, fillcolor="#FFF4CC"];
+  Ready [label="2. UI loads\nGET /api/jobs/ready-to-apply"];
+  ReadyQuery [label="3. API queries\nRESUME_READY + artifact_ready_at\n+ user_status=NEW", shape=cylinder, fillcolor="#F1F5FF"];
+  RunLaunch [label="4. User launches run\nscrape / discovery / canonical / source adapter / manual"];
+  CreateRun [label="5. API creates ScrapeRun\nstatus=RUNNING", shape=cylinder, fillcolor="#F1F5FF"];
+  Enqueue [label="6. API enqueues Celery task", shape=cylinder, fillcolor="#F1F5FF"];
+  Fetch [label="7. Worker fetches raw jobs\nfrom external source"];
+  Normalize [label="8. Normalize + dedup"];
+  Persist [label="9. Insert Job + JobSourceRecord\nwrite ScrapeRun.items_json", shape=cylinder, fillcolor="#F1F5FF"];
+  Chain [label="10. Queue pipeline chain\nscore -> classify -> ats_match -> generation_gate"];
+  Generate [label="11. Auto or manual generation\nGenerationRun + resume task"];
+  Artifacts [label="12. Store PDF + payload + diagnostics", shape=cylinder, fillcolor="#F1F5FF"];
+  Review [label="13. User reviews job detail,\npreview/downloads resume"];
+  Apply [label="14. User manually applies\nvia external apply_url", shape=oval, fillcolor="#FFF4CC"];
+  Status [label="15. User marks\nSAVED / APPLIED / ARCHIVED"];
+
+  User -> Ready -> ReadyQuery -> RunLaunch -> CreateRun -> Enqueue -> Fetch -> Normalize -> Persist -> Chain -> Generate -> Artifacts -> Review -> Apply -> Status;
+}

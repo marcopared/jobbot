@@ -1,0 +1,56 @@
+
+digraph G {
+  graph [rankdir=TB, bgcolor="white", pad="0.35", nodesep="0.45", ranksep="0.55", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.08,0.05", color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  Trigger [label="Manual or auto generation trigger", shape=oval, fillcolor="#FFF4CC"];
+  GenRun [label="GenerationRun\nQUEUED/RUNNING/SUCCESS/FAILED", shape=cylinder, fillcolor="#F1F5FF"];
+  ResumeTask [label="apps/worker/tasks/resume.py\ngenerate_grounded_resume_task"];
+
+  subgraph cluster_inputs {
+    label="Inputs";
+    color="#999999"; style="rounded";
+    JobData [label="Job\nJD, title, company, URL, score", shape=cylinder, fillcolor="#F1F5FF"];
+    Analysis [label="JobAnalysis\npersona, ATS gaps, keywords", shape=cylinder, fillcolor="#F1F5FF"];
+    Inventory [label="data/experience_inventory.yaml\nrequired evidence"];
+    Optional [label="data/resume_inputs/*\ncurrent_resume, current_role,\nachievements, projects"];
+  }
+
+  subgraph cluster_core {
+    label="core/resumes";
+    color="#999999"; style="rounded";
+    Evidence [label="evidence_builder.py\nBuild grounded evidence"];
+    Payload [label="payload_builder.py\nStructured payload"];
+    Fit [label="fit_planner.py\nFit/compact/page policy"];
+    Generator [label="grounded_generator.py\nGenerate output"];
+    HTML [label="html_template.py\nRender HTML"];
+    PDF [label="pdf_renderer.py\nPlaywright HTML -> PDF"];
+    Verify [label="verification_harness.py\nValidate constraints"];
+    Meta [label="artifact_metadata.py\nresume_v2 envelope"];
+  }
+
+  subgraph cluster_outputs {
+    label="Outputs";
+    color="#999999"; style="rounded";
+    PrimaryPDF [label="resume_pdf_primary"];
+    PayloadSidecar [label="resume_payload JSON"];
+    Diagnostics [label="resume_diagnostics JSON"];
+    Storage [label="local/GCS artifact storage", shape=cylinder, fillcolor="#F1F5FF"];
+    ArtifactRows [label="Artifact table rows", shape=cylinder, fillcolor="#F1F5FF"];
+  }
+
+  Trigger -> GenRun -> ResumeTask;
+  ResumeTask -> JobData;
+  ResumeTask -> Analysis;
+  ResumeTask -> Inventory;
+  ResumeTask -> Optional;
+  ResumeTask -> Evidence -> Payload -> Fit -> Generator -> HTML -> PDF -> Verify -> Meta;
+  Meta -> PrimaryPDF;
+  Meta -> PayloadSidecar;
+  Meta -> Diagnostics;
+  PrimaryPDF -> Storage;
+  PayloadSidecar -> Storage;
+  Diagnostics -> Storage;
+  Storage -> ArtifactRows;
+}

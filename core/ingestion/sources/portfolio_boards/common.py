@@ -82,6 +82,11 @@ def load_json_object(text: str | None) -> Mapping[str, Any]:
     payload = clean_text(text)
     if not payload:
         return {}
+    if payload.startswith("<"):
+        extracted = BeautifulSoup(payload, "html.parser").get_text("", strip=True)
+        payload = clean_text(extracted)
+        if not payload:
+            return {}
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:

@@ -378,19 +378,16 @@ class ScraplingFetchBackend(AcquisitionBackend):
         return str(final_url)
 
     def _extract_content(self, response: Any) -> str | bytes | None:
-        text = getattr(response, "text", None)
-        if isinstance(text, str):
-            return text
-
-        body = getattr(response, "body", None)
-        if isinstance(body, str):
-            return body
-        if isinstance(body, bytes):
-            encoding = getattr(response, "encoding", None) or "utf-8"
-            try:
-                return body.decode(encoding, errors="replace")
-            except LookupError:
-                return body.decode("utf-8", errors="replace")
+        for attr_name in ("text", "html_content", "content", "body"):
+            value = getattr(response, attr_name, None)
+            if isinstance(value, str) and value:
+                return value
+            if isinstance(value, bytes) and value:
+                encoding = getattr(response, "encoding", None) or "utf-8"
+                try:
+                    return value.decode(encoding, errors="replace")
+                except LookupError:
+                    return value.decode("utf-8", errors="replace")
         return None
 
     def _mapping_or_none(self, value: Any) -> dict[str, Any] | None:

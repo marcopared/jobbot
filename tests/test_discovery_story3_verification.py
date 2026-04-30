@@ -75,12 +75,14 @@ class _FakeDiscoveryConnector:
         self._source_name = source_name
         self._raw_jobs = raw_jobs
         self._error = error
+        self.fetch_params: dict[str, Any] | None = None
 
     @property
     def source_name(self) -> str:
         return self._source_name
 
     def fetch_raw_jobs(self, **params: Any) -> FetchResult:
+        self.fetch_params = params
         if self._error:
             return FetchResult(
                 raw_jobs=[], stats={"fetched": 0, "errors": 1}, error=self._error
@@ -347,6 +349,34 @@ def test_discovery_safe_timeout_failure_marks_run_failed(monkeypatch):
         assert run.status == ScrapeRunStatus.FAILED.value
         assert run.error_text is not None
         assert "timeout" in run.error_text.lower()
+
+
+def test_serp1_blank_location_uses_connector_default_instead_of_default_search_location(monkeypatch):
+    run_id = _create_running_discovery_run("serp1")
+    connector = _FakeDiscoveryConnector("serp1", raw_jobs=[])
+
+    monkeypatch.setattr(
+        "apps.worker.tasks.discovery.create_serp1_connector", lambda **kwargs: connector
+    )
+    monkeypatch.setattr(
+        "apps.worker.tasks.discovery.settings.enable_serp1_discovery", True
+    )
+    monkeypatch.setattr(
+        "apps.worker.tasks.discovery.settings.default_location", "New York, NY"
+    )
+
+    out = run_discovery.apply(
+        kwargs={
+            "run_id": run_id,
+            "connector": "serp1",
+            "query": "platform engineer",
+            "location": None,
+        }
+    ).get()
+
+    assert out["status"] == "SUCCESS"
+    assert connector.fetch_params is not None
+    assert connector.fetch_params["location"] is None
 
 
 def _fake_generation_delay(job_id: str, generation_run_id: str | None = None):

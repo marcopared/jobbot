@@ -692,7 +692,7 @@ def run_discovery(
                 else:
                     result = conn.fetch_raw_jobs(
                         query=query or settings.default_search_query,
-                        location=location or settings.default_location,
+                        location=location,
                     )
         except Exception as e:
             get_metrics().increment("discovery.failure", tags=[f"source:{connector}"])

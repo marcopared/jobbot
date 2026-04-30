@@ -1,0 +1,30 @@
+
+digraph G {
+  graph [rankdir=LR, bgcolor="white", pad="0.35", nodesep="0.5", ranksep="0.6", splines=ortho, fontname="Helvetica"];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=10, margin="0.08,0.05", color="#333333", fillcolor="#F8F8F8"];
+  edge [fontname="Helvetica", fontsize=9, color="#444444", arrowsize=0.7];
+
+  Inserted [label="Inserted job_ids\nJob.pipeline_status=INGESTED", fillcolor="#FFF4CC"];
+  Score [label="score_jobs\napps/worker/tasks/score.py"];
+  Scored [label="SCORED\nscore_total + score_breakdown_json", shape=cylinder, fillcolor="#F1F5FF"];
+  Rejected [label="REJECTED\nbelow threshold", shape=cylinder, fillcolor="#FFECEC"];
+  Classify [label="classify_jobs\nrules-based persona"];
+  JobAnalysis1 [label="JobAnalysis\nmatched_persona\nconfidence/rationale", shape=cylinder, fillcolor="#F1F5FF"];
+  ATS [label="ats_match_resume\nkeyword extraction"];
+  JobAnalysis2 [label="JobAnalysis + Job ATS fields\nATS score, found/missing keywords", shape=cylinder, fillcolor="#F1F5FF"];
+  Gate [label="evaluate_generation_gate\nauto eligibility"];
+  ManualTrigger [label="Manual trigger\nPOST /api/jobs/{id}/generate-resume"];
+  GenRun [label="GenerationRun\nQUEUED -> RUNNING -> SUCCESS/FAILED", shape=cylinder, fillcolor="#F1F5FF"];
+  Resume [label="generate_grounded_resume_task"];
+  Artifact [label="Artifact rows\nPDF + payload + diagnostics", shape=cylinder, fillcolor="#F1F5FF"];
+  Ready [label="RESUME_READY\nartifact_ready_at set", shape=cylinder, fillcolor="#EFFFF1"];
+
+  Inserted -> Score;
+  Score -> Scored [label="pass"];
+  Score -> Rejected [label="fail"];
+  Scored -> Classify -> JobAnalysis1 -> ATS -> JobAnalysis2 -> Gate;
+  Gate -> GenRun [label="auto enabled + eligible"];
+  JobAnalysis2 -> ManualTrigger [label="user clicks generate"];
+  ManualTrigger -> GenRun;
+  GenRun -> Resume -> Artifact -> Ready;
+}
