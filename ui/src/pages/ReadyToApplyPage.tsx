@@ -134,13 +134,13 @@ export default function ReadyToApplyPage() {
       <div className="rounded-xl border-2 border-indigo-100 bg-indigo-50/50 px-5 py-6">
         <h1 className="text-2xl font-bold text-gray-900">Ready to Apply</h1>
         <p className="mt-1 text-sm text-gray-700">
-          Your operational home — jobs with tailored resumes ready. Download the
-          resume, open the application link, and apply <strong>manually</strong>
-          . JobBot never auto-submits.
+          Your operational home — jobs with existing-resume recommendations ready.
+          Pick the suggested resume, open the application link, and apply <strong>manually</strong>.
+          JobBot never auto-submits.
         </p>
         <div className="mt-3 rounded border border-indigo-200 bg-white px-3 py-2 text-xs text-indigo-900">
           Operator flow: <strong>1)</strong> click <strong>Apply</strong> in the
-          table to open Job Detail, <strong>2)</strong> download artifact,{" "}
+          table to open Job Detail, <strong>2)</strong> confirm the suggested existing resume,{" "}
           <strong>3)</strong> open external apply link, <strong>4)</strong> mark
           applied.
         </div>
@@ -214,7 +214,7 @@ export default function ReadyToApplyPage() {
       ) : jobs.length === 0 ? (
         <EmptyState
           title="No jobs ready yet"
-          description="Run discovery (AGG-1/SERP1) or canonical ingestion from Runs, or paste a supported ATS URL above. Once jobs pass ATS and generation gate, resumes appear here."
+          description="Run discovery or canonical ingestion from Runs, or paste a supported ATS URL above. Once jobs pass analysis, existing-resume suggestions appear here."
           action={
             <div className="flex flex-wrap gap-3 justify-center">
               <Link
@@ -235,7 +235,7 @@ export default function ReadyToApplyPage() {
       ) : (
         <>
           <div className="rounded border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
-            Apply column opens Job Detail where <strong>Download Resume</strong>{" "}
+            Apply column opens Job Detail where <strong>Suggested Resume</strong>{" "}
             and <strong>Open Application</strong> are shown together for manual
             submission.
           </div>

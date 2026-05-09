@@ -11,7 +11,21 @@ export interface Job {
   pipeline_status: string;
   user_status: string;
   artifact_availability: boolean;
+  resume_suggestion: ResumeSuggestion | null;
   source: string | null;
+}
+
+export interface ResumeSuggestion {
+  resume_id: string;
+  label: string;
+  path: string | null;
+  score: number;
+  rationale: string;
+  years_required: number | null;
+  resume_years: number | null;
+  matched_skills: string[];
+  missing_skills: string[];
+  persona_match: boolean;
 }
 
 export interface JobsResponse {
@@ -278,22 +292,6 @@ export async function fetchJobArtifacts(
   return res.json();
 }
 
-export async function triggerGenerateResume(jobId: string): Promise<{
-  job_id: string;
-  status: string;
-  task_id?: string;
-  generation_run_id: string;
-}> {
-  const res = await fetch(`${BASE}/jobs/${jobId}/generate-resume`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `Resume generation failed: ${res.status}`);
-  }
-  return res.json();
-}
-
 export async function runScrapeNow(body?: {
   query?: string;
   location?: string;
@@ -312,7 +310,7 @@ export async function runScrapeNow(body?: {
   return res.json();
 }
 
-/** Ready-to-apply feed: jobs with artifact ready, user_status=NEW */
+/** Ready-to-apply feed: jobs with existing-resume recommendations, user_status=NEW */
 export async function fetchReadyToApply(params?: {
   page?: number;
   per_page?: number;

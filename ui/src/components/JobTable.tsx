@@ -95,10 +95,17 @@ export default function JobTable({
                 <StatusBadge status={job.user_status} />
               </td>
               <td className="px-3 py-2 text-center">
-                {job.artifact_availability ? (
-                  <span className="text-green-600" title="Resume ready">✓</span>
+                {job.resume_suggestion ? (
+                  <span
+                    className="inline-flex rounded bg-green-50 px-2 py-1 text-xs font-medium text-green-700"
+                    title={job.resume_suggestion.rationale}
+                  >
+                    {job.resume_suggestion.label}
+                  </span>
+                ) : job.artifact_availability ? (
+                  <span className="text-green-600" title="Resume suggestion ready">✓</span>
                 ) : (
-                  <span className="text-gray-300" title="No resume yet">—</span>
+                  <span className="text-gray-300" title="No resume suggestion yet">—</span>
                 )}
               </td>
               <td className="px-3 py-2 hidden lg:table-cell">

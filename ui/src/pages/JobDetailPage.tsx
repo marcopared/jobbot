@@ -3,10 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import {
   updateJobStatus,
   fetchJob,
-  triggerGenerateResume,
   type JobDetail,
 } from "../api";
-import ArtifactViewer from "../components/ArtifactViewer";
 import ScoreBreakdown from "../components/ScoreBreakdown";
 import StatusBadge from "../components/StatusBadge";
 import SourceRoleBadge from "../components/SourceRoleBadge";
@@ -16,7 +14,6 @@ export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [job, setJob] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (options?: { background?: boolean; suppressError?: boolean }) => {
@@ -47,33 +44,6 @@ export default function JobDetailPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    const status = (job?.latest_generation_run?.status || "").toLowerCase();
-    if (status !== "queued" && status !== "running" && status !== "pending") {
-      return undefined;
-    }
-    const timeoutId = window.setTimeout(() => {
-      void load({ background: true, suppressError: true });
-    }, 1500);
-    return () => window.clearTimeout(timeoutId);
-  }, [job?.latest_generation_run?.id, job?.latest_generation_run?.status, load]);
-
-  const handleGenerateResume = useCallback(async () => {
-    if (!id) return;
-    setGenerating(true);
-    setError(null);
-    try {
-      await triggerGenerateResume(id);
-      await load({ background: true, suppressError: true });
-    } catch (e) {
-      const message = e instanceof Error ? e.message : "Resume generation failed";
-      setError(message);
-      notifyError(message);
-    } finally {
-      setGenerating(false);
-    }
-  }, [id, load]);
-
   const handleAction = async (status: string) => {
     if (!job) return;
     try {
@@ -100,13 +70,7 @@ export default function JobDetailPage() {
   const canSave = job.user_status === "NEW" || job.user_status === "ARCHIVED";
   const canArchive = job.user_status === "NEW" || job.user_status === "SAVED";
   const canApply = job.user_status === "NEW" || job.user_status === "SAVED";
-  const canGenerateResume =
-    job.pipeline_status === "ATS_ANALYZED" || job.pipeline_status === "RESUME_READY";
-
-  const readyToApply = job.artifact_availability && job.apply_url;
-  const readyArtifact = job.artifacts?.find(
-    (a) => a.is_primary && (a.generation_status || "").toLowerCase() === "success"
-  );
+  const readyToApply = Boolean(job.resume_suggestion && job.apply_url);
 
   return (
     <div className="space-y-4">
@@ -129,28 +93,14 @@ export default function JobDetailPage() {
             </span>
           </div>
           <p className="mb-3 text-sm text-indigo-800">
-            Download the tailored resume, open the application link below, and submit manually. JobBot never auto-submits.
+            Use the suggested existing resume, open the application link below, and submit manually. JobBot never auto-submits.
           </p>
+          <div className="mb-3 rounded border border-indigo-200 bg-white px-3 py-2 text-sm text-indigo-900">
+            <div className="font-semibold">Suggested Resume: {job.resume_suggestion?.label}</div>
+            {job.resume_suggestion?.path && <div className="text-xs">Path: {job.resume_suggestion.path}</div>}
+            {job.resume_suggestion?.rationale && <div className="mt-1 text-xs">{job.resume_suggestion.rationale}</div>}
+          </div>
           <div className="flex flex-wrap gap-3">
-            {readyArtifact && (
-              <>
-                <a
-                  href={readyArtifact.download_url}
-                  download
-                  className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 no-underline"
-                >
-                  Download Resume
-                </a>
-                <a
-                  href={readyArtifact.preview_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded border border-indigo-600 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100 no-underline"
-                >
-                  Preview Resume
-                </a>
-              </>
-            )}
             <a
               href={job.apply_url!}
               target="_blank"
@@ -301,13 +251,6 @@ export default function JobDetailPage() {
         </section>
       )}
 
-      <ArtifactViewer
-        artifacts={job.artifacts ?? []}
-        latestGenerationRun={job.latest_generation_run}
-        onGenerateResume={handleGenerateResume}
-        generating={generating}
-        canGenerateResume={canGenerateResume}
-      />
     </div>
   );
 }

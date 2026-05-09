@@ -355,7 +355,7 @@ export default function RunsPage() {
             <p className="text-xs text-gray-500">
               {discoveryConnector === "agg1"
                 ? "AGG-1 is medium-confidence discovery. Use focused query/location for cleaner candidates."
-                : "SERP1 is lower-confidence discovery. Expect stricter generation gate and occasional provider timeouts."}
+                : "SERP1 is lower-confidence discovery. Review candidates before trusting the recommendation."}
             </p>
             <button
               onClick={() => void onRunDiscovery()}

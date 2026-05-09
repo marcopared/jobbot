@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     default_search_query: str = "backend engineer fintech"
     default_location: str = "New York, NY"
     scrape_hours_old: int = 48
-    scrape_results_wanted: int = 50
+    scrape_results_wanted: int = 100
     jobspy_enabled: bool = True
     greenhouse_enabled: bool = True
     lever_enabled: bool = True
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     adzuna_country: str = "us"
     wellfound_enabled: bool = False
     yc_enabled: bool = False
-    bb_browser_enabled: bool = False
+    bb_browser_enabled: bool = True
     bb_browser_base_url: str = "http://127.0.0.1:9223"
     bb_browser_capture_path: str = "/session/acquire"
     bb_browser_api_key: str = ""
