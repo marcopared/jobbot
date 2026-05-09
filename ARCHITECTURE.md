@@ -1,246 +1,122 @@
 # JobBot Architecture
 
-This document is the architecture entry point for JobBot. It describes the implemented system, not
-an aspirational future state.
+JobBot is now a local-first job description triage and existing-resume recommendation tool. It does **not** generate custom resumes and does **not** auto-apply.
 
-## 1. System Shape
+## MVP flow
 
-JobBot has one operator-facing loop:
+1. Get job descriptions from local/manual intake, supported ATS URLs, canonical ATS connectors, or simple discovery sources.
+2. Normalize and deduplicate jobs into the local database.
+3. Score jobs and classify the role/persona.
+4. Extract ATS-style keywords and years-of-experience signals from the job description.
+5. Match the job against the user's existing resume catalog in [`data/resumes.yaml`](data/resumes.yaml), emphasizing years of experience, persona fit, and skill overlap.
+6. Mark jobs with a recommendation as ready for review.
+7. Show the user the direct job/apply link and the recommended existing resume.
+8. The user goes to the external job site and applies manually with their own resume.
 
-1. Ingest jobs from canonical ATS, discovery lanes, direct ATS URLs, or manual intake.
-2. Normalize and deduplicate into a single `jobs` table.
-3. Run deterministic score, persona classification, and ATS extraction.
-4. Evaluate the generation gate.
-5. Generate a grounded resume artifact for eligible jobs.
-6. Surface artifact-ready jobs in the ready-to-apply queue.
-7. Stop at manual apply via the external job URL.
-
-## 2. Runtime Topology
+## Runtime topology
 
 ### API
 
 - Framework: FastAPI
-- Entry point: [apps/api/main.py](apps/api/main.py)
-- Major routers:
-  - [apps/api/routes/jobs.py](apps/api/routes/jobs.py)
-  - [apps/api/routes/runs.py](apps/api/routes/runs.py)
-  - [apps/api/routes/artifacts.py](apps/api/routes/artifacts.py)
-  - [apps/api/routes/debug.py](apps/api/routes/debug.py)
-  - [apps/api/routes/ws.py](apps/api/routes/ws.py)
+- Entry point: [`apps/api/main.py`](apps/api/main.py)
+- Active job routes: [`apps/api/routes/jobs.py`](apps/api/routes/jobs.py)
+- Run routes: [`apps/api/routes/runs.py`](apps/api/routes/runs.py)
+- Debug/WebSocket routes remain local-dev helpers only.
 
 ### Worker
 
 - Framework: Celery with Redis broker/result backend
-- Entry point: [apps/worker/celery_app.py](apps/worker/celery_app.py)
-- Current queues:
+- Entry point: [`apps/worker/celery_app.py`](apps/worker/celery_app.py)
+- Active queues:
   - `scrape`
   - `ingestion`
   - `default`
-- Task families:
-  - scrape: [apps/worker/tasks/scrape.py](apps/worker/tasks/scrape.py)
-  - ingest: [apps/worker/tasks/ingest.py](apps/worker/tasks/ingest.py)
-  - discovery: [apps/worker/tasks/discovery.py](apps/worker/tasks/discovery.py)
-  - resolution: [apps/worker/tasks/resolution.py](apps/worker/tasks/resolution.py)
-  - generation gate: [apps/worker/tasks/generation.py](apps/worker/tasks/generation.py)
-  - analysis chain: `score -> classify -> ats_match -> generation_gate`
-  - resume generation: [apps/worker/tasks/resume.py](apps/worker/tasks/resume.py)
+- Active pipeline tasks:
+  - scrape/discovery/ingest/manual intake
+  - [`score_jobs`](apps/worker/tasks/score.py)
+  - [`classify_jobs`](apps/worker/tasks/classify.py)
+  - [`ats_match_resume`](apps/worker/tasks/ats_match.py)
+  - [`evaluate_generation_gate`](apps/worker/tasks/generation.py) — compatibility name; now performs existing-resume recommendation, not generation.
 
 ### UI
 
 - Framework: React + Vite + Tailwind
-- Entry point: [ui/src/App.tsx](ui/src/App.tsx)
-- Default route: `/ready`
-- Primary pages:
-  - ready to apply
+- Entry point: [`ui/src/App.tsx`](ui/src/App.tsx)
+- Primary operator views:
+  - ready-to-apply/recommendation queue
   - all jobs
-  - runs
-  - run detail
   - job detail
+  - runs/run detail
   - manual job intake
 
 ### Persistence
 
 - PostgreSQL via SQLAlchemy
-- Redis for Celery + debug log/failure visibility
-- Local filesystem or GCS for artifacts
+- Redis for Celery and local debug visibility
+- Existing artifact/generation tables remain for compatibility and future reuse, but the active MVP should not rely on custom resume generation.
 
-## 3. Subsystem Map
+## Active domain model
 
-### API layer
+### Source roles
 
-Responsibility:
-- validate request contracts
-- create `ScrapeRun` or `GenerationRun` records before queueing
-- expose read models for jobs, runs, artifacts, and debug data
+Keep source roles distinct because confidence differs:
 
-Rules:
-- routes should not implement scoring, classification, ATS extraction, or generation logic
-- routes may enqueue tasks and translate persistence state into response models
+- `canonical`: Greenhouse, Lever, Ashby connector ingest.
+- `url_ingest`: supported direct ATS job URLs.
+- `discovery`: lower-confidence discovery sources.
 
-### Worker task layer
+Discovery is coverage, not truth. Canonical ATS and direct URL ingest are higher confidence for job content and apply URLs.
 
-Responsibility:
-- perform fetch, persistence, enrichment, and pipeline progression
-- maintain `ScrapeRun` and `GenerationRun` durability
-- publish log/failure signals for debugging
+### Pipeline statuses
 
-Rules:
-- tasks own orchestration
-- tasks call into `core/` for domain logic
-- chain shape is part of the contract and must remain observable
+Active pipeline progression:
 
-### Core domain layer
+```text
+INGESTED -> SCORED or REJECTED -> CLASSIFIED -> ATS_ANALYZED -> RESUME_READY
+```
 
-Responsibility:
-- connectors
-- dedup and normalization
-- scoring
-- persona classification
-- ATS extraction
-- generation gate
-- grounded resume generation
-- storage backends
-- observability helpers
+In the current MVP, `RESUME_READY` means **an existing-resume recommendation is ready**, not that JobBot generated a new resume artifact. `artifact_ready_at` is currently reused as a recommendation-ready timestamp for database compatibility.
 
-Rules:
-- domain logic should be deterministic unless a provider API is inherently remote
-- generated resumes are grounded in user-side evidence:
-  required inventory, optional local supplemental files, and a targeting-only job description
+## Resume recommendation
 
-### Data/model layer
+- Catalog: [`data/resumes.yaml`](data/resumes.yaml)
+- Matching code: [`core/resume_matching.py`](core/resume_matching.py)
+- Inputs:
+  - job title
+  - job description
+  - classified persona
+  - existing resume metadata: resume id, label, path, persona, years of experience, skills
+- Output stored on `JobAnalysis.persona_specific_scores["resume_suggestion"]` and surfaced by job list/detail API responses.
 
-- canonical models live in [core/db/models.py](core/db/models.py)
-- migrations live in [alembic/versions](alembic/versions)
-- schema summary lives in [docs/generated/db-schema.md](docs/generated/db-schema.md)
+Recommendation factors:
 
-## 4. Source Role Model
+1. Skill overlap with the job description.
+2. Persona match between job classification and resume metadata.
+3. Years-of-experience fit, with explicit job-description requirements weighted strongly.
 
-JobBot uses a fixed source-role model:
+## Archived/future scope
 
-- Canonical ATS:
-  - Greenhouse
-  - Lever
-  - Ashby
-- Discovery:
-  - JobSpy
-  - AGG-1 (Adzuna)
-  - SERP1 (DataForSEO Google Jobs)
-  - startupjobs.nyc
-  - Tech:NYC Jobs
-  - Primary Venture Partners Jobs Board
-  - Greycroft Jobs Board
-  - Union Square Ventures Jobs Board
-  - Built In NYC
-  - Welcome to the Jungle
+Archived under [`archive/code/2026-05-07-custom-resume-generation`](archive/code/2026-05-07-custom-resume-generation) and [`docs/archive/2026-05-07-architecture-cleanup`](docs/archive/2026-05-07-architecture-cleanup):
 
-Registered but currently gated/unsupported public-board adapters:
+- custom grounded resume generation
+- generation runs as an active operator loop
+- resume PDF/payload/diagnostics artifact bundle docs
+- old reliability/security/plan documents
+- old ingestion-v2/browser-heavy planning notes
 
-- TrueUp
-- Underdog.io
-- VentureLoop
-- Direct URL ingest:
-  - supported Greenhouse/Lever/Ashby URLs
+These may be useful later, but they are not part of the current MVP architecture.
 
-Rules:
-- discovery is coverage, not truth
-- canonical ATS has the highest trust for content and apply flow
-- SERP1 remains lower-confidence and feature-flagged
-- manual apply remains the final human step regardless of source
+## Hard boundaries
 
-## 5. Current Pipeline Contract
+1. No auto-apply.
+2. No browser automation for application flows.
+3. No custom resume creation in the active MVP.
+4. Local-first operation is assumed; future Raspberry Pi/browser-session work is infrastructure only.
+5. bb-browser/authenticated browser work is not an active product requirement right now.
+6. Documentation must describe the current MVP, not old plans.
 
-Implemented `pipeline_status` values:
+## Verification minimum
 
-- `INGESTED`
-- `SCORED`
-- `REJECTED`
-- `CLASSIFIED`
-- `ATS_ANALYZED`
-- `RESUME_READY`
-- `FAILED`
-
-Actual write points:
-
-- ingest/scrape/discovery/manual intake create `INGESTED`
-- [apps/worker/tasks/score.py](apps/worker/tasks/score.py) writes `SCORED` or `REJECTED`
-- [apps/worker/tasks/classify.py](apps/worker/tasks/classify.py) writes `CLASSIFIED`
-- [apps/worker/tasks/ats_match.py](apps/worker/tasks/ats_match.py) writes `ATS_ANALYZED`
-- [core/resumes/grounded_generator.py](core/resumes/grounded_generator.py) writes `RESUME_READY`
-
-## 6. Generation Model
-
-Two generation entry points exist:
-
-- Manual:
-  - `POST /api/jobs/{id}/generate-resume`
-  - requires `ATS_ANALYZED` or `RESUME_READY`
-  - persists `GenerationRun(triggered_by="manual")` before queueing
-- Automatic:
-  - `evaluate_generation_gate`
-  - requires `ENABLE_AUTO_RESUME_GENERATION=true`
-  - uses stricter rules for discovery than canonical ATS
-
-Grounding model:
-
-- required inventory file: [data/experience_inventory.yaml](data/experience_inventory.yaml)
-- optional local-first supplemental inputs directory: `data/resume_inputs`
-- exact optional sources:
-  - `current_resume`
-  - `current_role`
-  - `achievements`
-  - `project_writeups` from `data/resume_inputs/projects/` or a single `projects.*` file
-- selection logic: [core/resumes/selection.py](core/resumes/selection.py)
-- evidence assembly:
-  [core/resumes/evidence_builder.py](core/resumes/evidence_builder.py)
-- rendering:
-  - centralized Letter + 0.5in default page geometry
-  - deterministic fit planning with bounded compaction
-  - Playwright PDF render plus rendered page-count validation
-  - artifact storage backend
-- exact evidence source-kind values:
-  - `inventory-only`
-  - `inventory-plus-local-files`
-
-Persisted artifact bundle on successful generation:
-
-- primary PDF artifact with role `resume_pdf_primary`
-- payload sidecar with role `resume_payload`
-- diagnostics sidecar with role `resume_diagnostics`
-- shared `resume_v2` metadata envelope with `payload_schema_version`, `inputs_hash`,
-  `fit_outcome`, `fit_diagnostics`, and `evidence_completeness`
-- fit outcomes:
-  - `fit_success_one_page`
-  - `fit_success_multi_page_fallback`
-  - `fit_failed_overflow`
-
-## 7. Resolution Model
-
-Discovery-to-canonical resolution is an in-place enrichment path:
-
-- route: `POST /api/jobs/{id}/resolve`
-- worker: [apps/worker/tasks/resolution.py](apps/worker/tasks/resolution.py)
-- attempts table: `job_resolution_attempts`
-- canonical provenance table: `job_sources`
-
-Resolution does not create a new job row. It enriches the existing discovery row, rewinds it to
-`INGESTED`, and reruns the downstream chain.
-
-## 8. Dependency Rules
-
-1. `ui/` talks to the REST API only.
-2. `apps/api/` may depend on `core/` and enqueue worker tasks.
-3. `apps/worker/` may depend on `core/` and persistence, but not on UI code.
-4. `core/` should remain framework-light and reusable across API and worker paths.
-5. Documentation should describe current runtime behavior, not stale phase plans.
-
-## 9. Files To Read For Specific Work
-
-| Work area | Primary files |
-| --- | --- |
-| Job routes and contracts | [apps/api/routes/jobs.py](apps/api/routes/jobs.py), [apps/api/schemas.py](apps/api/schemas.py) |
-| Worker orchestration | [apps/worker/celery_app.py](apps/worker/celery_app.py), [apps/worker/tasks](apps/worker/tasks) |
-| Providers/connectors | [core/connectors](core/connectors) |
-| Scoring/classification/ATS | [core/scoring](core/scoring), [core/classification](core/classification), [core/ats](core/ats) |
-| Resume generation | [core/resumes](core/resumes), [data/experience_inventory.yaml](data/experience_inventory.yaml) |
-| Resume-generation v2 note | [docs/design-docs/resume-generation-v2.md](docs/design-docs/resume-generation-v2.md) |
-| Tests and invariants | [tests/README.md](tests/README.md), [docs/RELIABILITY.md](docs/RELIABILITY.md) |
+- Backend/API/worker changes: run `pytest` or focused tests around the changed pipeline.
+- UI changes: run `cd ui && npm run build`.
+- Smoke check: import the FastAPI app and run at least one resume-matching test path.

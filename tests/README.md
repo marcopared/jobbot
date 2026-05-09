@@ -1,38 +1,16 @@
-# Test Suite Guide
+# Tests
 
-This directory contains both broad feature tests and focused regression suites for known
-correctness hazards.
+The test suite still contains historical coverage for archived custom-resume generation behavior. During the MVP cleanup, prioritize focused smoke tests for the active flow:
 
-## Mandatory regression suites
-
-When touching pipeline, contracts, or worker lifecycle code, rerun these suites:
-
-- `tests/test_score_batch.py`
-  - invariant: every scored job in a batch gets its own `JobAnalysis`
-- `tests/test_run_items_contract.py`
-  - invariant: run-item responses stay compatible with the UI contract
-- `tests/test_run_item_schema_regressions.py`
-  - invariant: stored `items_json` payloads are already canonical across writers
-- `tests/test_resolution.py -k resolved_job_past_ingested_gets_reprocessed`
-  - invariant: discovery resolution re-runs downstream processing
-- `tests/test_skipped_runs.py`
-  - invariant: disabled-feature runs do not stay `RUNNING`
-- `tests/test_api_jobs.py -k manual_generate_resume`
-  - invariant: manual resume generation creates `GenerationRun(triggered_by="manual")`, persists it before queueing, returns `generation_run_id`, and passes the same id to the worker
-- `tests/test_generation_run_tracking.py`
-  - invariant: manual and auto generation update `GenerationRun` on success and failure
-
-You can run the whole focused set with:
-
-```bash
-bash scripts/run_regression_invariants.sh
+```text
+ingest/manual job -> score -> classify -> ATS analysis -> existing-resume recommendation
 ```
 
-## Verification reality
+Recommended active smoke checks:
 
-- Many of these tests require local Postgres with migrations applied.
-- Some route tests also expect Redis/Celery broker availability for enqueue paths.
-- Focused suites catch specific regressions; they are not proof that the full product is reliable end to end.
+```bash
+pytest tests/test_matching.py tests/test_ats_extraction.py tests/test_scoring.py tests/test_classification.py
+pytest tests/test_api_jobs.py -k "manual or ready"
+```
 
-Developer note:
-Treat the manual-generation invariant above as canonical when changing the route, response schema, or worker task signature.
+Full-suite failures may point at archived generation/artifact assumptions and should be triaged before being treated as active MVP regressions.

@@ -13,13 +13,13 @@ from apps.api.schemas import (
     ArtifactItem,
     ArtifactsResponse,
     ATSGaps,
-    GenerateResumeResponse,
     JobDetailResponse,
     JobListItem,
     JobListResponse,
     ManualIngestBody,
     ManualIngestResponse,
     PersonaInfo,
+    ResumeSuggestion,
     ResolveJobResponse,
     ScoreBreakdown,
     SourceAdapterCapabilitiesResponse,
@@ -35,7 +35,6 @@ from apps.worker.tasks.discovery import (
     run_discovery,
     run_public_board_source,
 )
-from apps.worker.tasks.generation_runs import build_generation_run
 from apps.worker.tasks.ingest import (
     ingest_ashby,
     ingest_greenhouse,
@@ -44,7 +43,6 @@ from apps.worker.tasks.ingest import (
     manual_ingest_pipeline,
 )
 from apps.worker.tasks.resolution import resolve_discovery_job
-from apps.worker.tasks.resume import generate_grounded_resume_task
 from apps.worker.tasks.scrape import scrape_jobspy
 from core.connectors.url_provider import parse_supported_url
 from core.dedup import compute_dedup_hash, normalize_company, normalize_location, normalize_title
@@ -196,8 +194,9 @@ def _list_source_adapter_capabilities() -> list[SourceAdapterCapability]:
 def _job_to_list_item(j: Job) -> JobListItem:
     """Build list item from Job (expects analyses and artifacts loaded)."""
     persona = None
-    if j.analyses:
-        persona = j.analyses[0].matched_persona
+    analysis = j.analyses[0] if j.analyses else None
+    if analysis:
+        persona = analysis.matched_persona
     artifact_availability = any(
         is_primary_resume_artifact(a.kind, a.meta_json)
         and (
@@ -217,6 +216,7 @@ def _job_to_list_item(j: Job) -> JobListItem:
         user_status=j.user_status or "NEW",
         artifact_availability=artifact_availability,
         source=j.source or None,
+        resume_suggestion=_resume_suggestion_from_analysis(analysis),
     )
 
 
@@ -256,6 +256,21 @@ def _build_ats_gaps(j: Job, analysis: JobAnalysis | None) -> ATSGaps | None:
         else None,
         raw=b if isinstance(b, dict) else None,
     )
+
+
+def _resume_suggestion_from_analysis(analysis: JobAnalysis | None) -> ResumeSuggestion | None:
+    if analysis is None:
+        return None
+    scores = analysis.persona_specific_scores or {}
+    if not isinstance(scores, dict):
+        return None
+    payload = scores.get("resume_suggestion")
+    if not isinstance(payload, dict):
+        return None
+    try:
+        return ResumeSuggestion(**payload)
+    except Exception:
+        return None
 
 
 def _job_to_detail_response(
@@ -301,6 +316,7 @@ def _job_to_detail_response(
         persona=persona,
         latest_generation_run=_generation_run_to_summary(latest_generation_run),
         artifacts=artifact_items,
+        resume_suggestion=_resume_suggestion_from_analysis(analysis),
         pipeline_status=j.pipeline_status or "INGESTED",
         user_status=j.user_status or "NEW",
         created_at=j.created_at.isoformat() if j.created_at else None,
@@ -834,13 +850,14 @@ async def list_ready_to_apply(
     per_page: int = Query(25, ge=1, le=100),
     sort_by: str = Query(
         "artifact_ready_at",
-        description="Sort column (artifact_ready_at, score_total, scraped_at)",
+        description="Sort column (artifact_ready_at/recommendation_ready_at, score_total, scraped_at)",
     ),
     sort_dir: str = Query("desc"),
 ):
     """
-    Jobs with artifact ready for manual application (ARCH §11.2).
+    Jobs with an existing-resume recommendation ready for manual application.
     Filters: pipeline_status=RESUME_READY, artifact_ready_at IS NOT NULL, user_status=NEW.
+    In the MVP, artifact_ready_at is reused as recommendation_ready_at for DB compatibility.
     """
     stmt = (
         select(Job)
@@ -1072,43 +1089,6 @@ async def update_job_status(
     await db.commit()
     await db.refresh(job)
     return UpdateStatusResponse(id=str(job.id), user_status=job.user_status)
-
-
-# Resume generation requires the full pipeline: score → classify → ats_match.
-# Only ATS_ANALYZED and RESUME_READY have complete persona + ATS keyword data.
-RESUME_READY_PIPELINE_STATUSES = frozenset(
-    {PipelineStatus.ATS_ANALYZED.value, PipelineStatus.RESUME_READY.value}
-)
-
-
-@router.post("/{job_id}/generate-resume", response_model=GenerateResumeResponse)
-async def trigger_generate_resume(job_id: UUID, db: AsyncSession = Depends(get_db)):
-    """Trigger or regenerate tailored resume for a job. Enqueues Celery task."""
-    result = await db.execute(select(Job).where(Job.id == job_id))
-    job = result.scalar_one_or_none()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    if job.pipeline_status not in RESUME_READY_PIPELINE_STATUSES:
-        raise HTTPException(
-            status_code=409,
-            detail="Resume generation requires score → classify → ATS analysis. "
-            "Job pipeline_status must be ATS_ANALYZED or RESUME_READY. "
-            f"Current: {job.pipeline_status}.",
-        )
-    run = build_generation_run(job_id, "manual")
-    db.add(run)
-    await db.flush()
-    generation_run_id = str(run.id)
-    await db.commit()
-    task = generate_grounded_resume_task.delay(
-        str(job_id), generation_run_id=generation_run_id, triggered_by="manual"
-    )
-    return GenerateResumeResponse(
-        job_id=str(job_id),
-        status="queued",
-        task_id=str(task.id),
-        generation_run_id=generation_run_id,
-    )
 
 
 @router.get("/{job_id}/artifacts", response_model=ArtifactsResponse)

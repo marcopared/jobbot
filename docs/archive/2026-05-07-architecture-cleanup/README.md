@@ -1,0 +1,1 @@
+Archived old custom-resume generation implementation and stale planning/security/reliability docs for potential future reuse. Active MVP recommends existing resumes only; it does not generate custom resumes or auto-apply.

@@ -27,7 +27,6 @@ celery_app.config_from_object(
             "apps.worker.tasks.classify.*": {"queue": "default"},
             "apps.worker.tasks.ats_match.*": {"queue": "default"},
             "apps.worker.tasks.generation.*": {"queue": "default"},
-            "apps.worker.tasks.resume.*": {"queue": "default"},
             "apps.worker.tasks.resolution.*": {"queue": "default"},
             "apps.worker.tasks.notify.*": {"queue": "default"},
         },

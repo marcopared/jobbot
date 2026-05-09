@@ -1,7 +1,9 @@
-"""Generation gate evaluation and auto-generation queue (PR5, ARCH §10).
+"""Recommendation gate for the local MVP.
 
-Evaluates ATS_ANALYZED jobs against generation gate; queues generate_grounded_resume_task
-for eligible jobs. Tracks runs via GenerationRun.
+The current MVP does not generate custom resumes. After a job reaches
+ATS_ANALYZED, this task chooses the best existing resume from data/resumes.yaml,
+stores the suggestion on the job analysis row, and marks the job RESUME_READY
+(meaning "resume recommendation ready" for the manual-apply queue).
 """
 
 from datetime import datetime, timezone
@@ -12,13 +14,11 @@ from sqlalchemy import select
 
 from apps.api.settings import Settings
 from apps.worker.celery_app import celery_app
-from apps.worker.tasks.generation_runs import build_generation_run
-from core.automation.generation_gate import evaluate_generation_eligibility, gate_config_from_settings
-from core.db.models import Job
+from core.db.models import Job, PipelineStatus
 from core.db.session import get_sync_session
-from core.observability import log_context, get_metrics
-
-from apps.worker.tasks.resume import generate_grounded_resume_task
+from core.job_status import legacy_status_from_canonical
+from core.observability import get_metrics, log_context
+from core.resume_matching import suggest_resume_for_job
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -31,11 +31,12 @@ settings = Settings()
     retry_backoff_max=120,
     acks_late=True,
 )
-def evaluate_generation_gate(self, chain_output: dict | None = None):
-    """
-    Evaluate generation gate for ATS_ANALYZED jobs. Queue generation for eligible ones.
+def evaluate_generation_gate(self, chain_output: dict | list[str] | None = None):
+    """Compatibility task name for the old generation gate.
 
-    chain_output: dict from ats_match_resume with {"matched": N, "job_ids": [...]}.
+    It now evaluates existing-resume recommendation readiness. Keeping the task
+    name avoids a broad Celery-chain rename while the architecture is being
+    simplified.
     """
     ids: list[str] = []
     if isinstance(chain_output, dict) and chain_output.get("job_ids"):
@@ -44,56 +45,54 @@ def evaluate_generation_gate(self, chain_output: dict | None = None):
         ids = chain_output
 
     if not ids:
-        logger.debug("evaluate_generation_gate: no job_ids to evaluate")
-        return {"evaluated": 0, "queued": 0}
+        logger.debug("recommendation gate: no job_ids to evaluate")
+        return {"evaluated": 0, "recommended": 0, "queued": 0}
 
-    config = gate_config_from_settings(settings)
     with log_context(task_name="evaluate_generation_gate"):
         metrics = get_metrics()
-        queued = 0
+        recommended = 0
         with get_sync_session() as session:
             uuids = [UUID(jid) for jid in ids]
-            stmt = select(Job).where(Job.id.in_(uuids))
-            result = session.execute(stmt)
-            jobs = result.scalars().all()
+            jobs = session.execute(select(Job).where(Job.id.in_(uuids))).scalars().all()
 
-            runs_to_queue: list[tuple[str, str, str]] = []
             for job in jobs:
-                eligible, reason = evaluate_generation_eligibility(job, config)
-                if not eligible:
-                    logger.debug(
-                        "Job %s not eligible: %s",
-                        job.id,
-                        reason,
-                        extra={"job_id": str(job.id), "reason": reason},
-                    )
+                if job.pipeline_status != PipelineStatus.ATS_ANALYZED.value:
+                    continue
+                analysis = job.analyses[0] if job.analyses else None
+                matched_persona = analysis.matched_persona if analysis else None
+                suggestion = suggest_resume_for_job(
+                    title=job.title or job.normalized_title,
+                    description=job.description,
+                    matched_persona=matched_persona,
+                )
+                if suggestion is None:
+                    job.generation_eligibility = "ineligible"
+                    job.generation_reason = "No existing resume catalog found at data/resumes.yaml."
                     continue
 
-                run = build_generation_run(job.id, "auto")
-                session.add(run)
-                session.flush()
-                runs_to_queue.append((str(job.id), str(run.id), reason))
+                suggestion_payload = suggestion.to_dict()
+                job.generation_eligibility = "eligible"
+                job.generation_reason = suggestion.rationale
+                job.artifact_ready_at = datetime.now(timezone.utc)
+                job.pipeline_status = PipelineStatus.RESUME_READY.value
+                job.status = legacy_status_from_canonical(job.pipeline_status, job.user_status)
 
-        # Queue after commit so GenerationRun rows are visible to workers
-        for job_id, run_id, reason in runs_to_queue:
-            generate_grounded_resume_task.delay(
-                job_id,
-                generation_run_id=run_id,
-            )
-            queued += 1
-            metrics.increment("generation.queued", tags=["trigger:auto"])
-            logger.info(
-                "Queued auto-generation for job %s (reason=%s)",
-                job_id,
-                reason,
-                extra={"job_id": job_id, "reason": reason},
-            )
+                if analysis is not None:
+                    existing = analysis.persona_specific_scores or {}
+                    if not isinstance(existing, dict):
+                        existing = {}
+                    existing["resume_suggestion"] = suggestion_payload
+                    analysis.persona_specific_scores = existing
 
-        metrics.increment("generation.gate.evaluated", value=len(jobs))
+                recommended += 1
+
+            session.commit()
+
+        metrics.increment("recommendation.ready", value=recommended)
         logger.info(
-            "Generation gate evaluated %s jobs, queued %s",
-            len(jobs),
-            queued,
+            "Recommendation gate evaluated %s jobs, marked %s ready",
+            len(ids),
+            recommended,
             extra={"task_name": "evaluate_generation_gate"},
         )
-        return {"evaluated": len(jobs), "queued": queued}
+        return {"evaluated": len(ids), "recommended": recommended, "queued": 0}

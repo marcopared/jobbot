@@ -1,4 +1,6 @@
-"""Pydantic schemas for v1 REST API (EPIC 8)."""
+"""Pydantic schemas for v1 REST API."""
+
+from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Literal
@@ -7,6 +9,21 @@ from pydantic import BaseModel, Field
 
 
 # --- Job list item ---
+
+
+class ResumeSuggestion(BaseModel):
+    """Existing resume recommendation for manual application."""
+
+    resume_id: str
+    label: str
+    path: str | None = None
+    score: float
+    rationale: str
+    years_required: int | None = None
+    resume_years: int | None = None
+    matched_skills: list[str] = Field(default_factory=list)
+    missing_skills: list[str] = Field(default_factory=list)
+    persona_match: bool = False
 
 
 class JobListItem(BaseModel):
@@ -22,6 +39,7 @@ class JobListItem(BaseModel):
     user_status: str
     artifact_availability: bool = False
     source: str | None = None
+    resume_suggestion: ResumeSuggestion | None = None
 
 
 class JobListResponse(BaseModel):
@@ -123,6 +141,7 @@ class JobDetailResponse(BaseModel):
     persona: PersonaInfo | None = None
     latest_generation_run: GenerationRunSummary | None = None
     artifacts: list["ArtifactItem"] = Field(default_factory=list)
+    resume_suggestion: ResumeSuggestion | None = None
 
     pipeline_status: str
     user_status: str
@@ -154,25 +173,6 @@ class UpdateStatusResponse(BaseModel):
     id: str
     user_status: str
 
-
-# --- Generate resume ---
-
-
-class GenerateResumeResponse(BaseModel):
-    """Response for POST /api/jobs/{id}/generate-resume."""
-
-    job_id: str
-    status: str = Field(
-        default="queued",
-        description="Queue acceptance status for the manual resume generation request.",
-    )
-    task_id: str | None = Field(
-        default=None,
-        description="Celery task identifier for the queued resume generation worker.",
-    )
-    generation_run_id: str = Field(
-        description="Persisted GenerationRun id created before queueing the worker.",
-    )
 
 
 class QueuedRunResponse(BaseModel):

@@ -1,199 +1,116 @@
-# DESIGN.md — JobBot System Design
+# DESIGN.md — JobBot MVP System Design
 
-## Design Baseline
+## Design baseline
 
-JobBot is designed around one clear boundary: automate preparation, not application.
+JobBot is a local-first decision-support tool for job applications. The current MVP automates preparation only enough to answer:
 
-The implemented system is intentionally narrow:
+> “Is this job worth looking at, and which of my existing resumes should I use?”
 
-- ingest jobs from a small number of bounded sources
-- normalize and persist them in JobBot-owned storage
-- score them deterministically
-- classify them into a small persona model
-- extract ATS-oriented signals
-- generate grounded artifacts only for eligible jobs
-- stop at manual apply today
+It does not generate custom resumes and it does not apply to jobs.
 
-## Design Principles
+## Current MVP flow
 
-1. Broad discovery, narrow generation.
-2. Discovery is coverage; canonical ATS is truth.
-3. Resume generation must be grounded in user-side evidence, not freeform LLM output.
-4. Manual apply is the current implemented product boundary.
-5. Current code beats stale phase narratives.
-6. Tests and persisted run records are part of the product contract.
-7. Acquisition infrastructure should remain separate from downstream product logic.
+```text
+get job descriptions
+  -> normalize + deduplicate
+  -> score/classify/analyze job description
+  -> match against existing resumes, especially years of experience
+  -> recommend the best existing resume
+  -> show direct job/apply link
+  -> user applies manually on the external site
+```
 
-## Current Implemented Design
+## Design principles
 
-### Source model
+1. Local-first by default.
+2. Recommend existing user-maintained resumes; do not create custom resumes in the MVP.
+3. Years-of-experience fit is a first-class matching signal.
+4. The direct apply URL is part of the output, but the apply action is manual.
+5. Discovery sources are useful for coverage but are lower confidence than canonical ATS/direct URLs.
+6. Browser/session infrastructure is future infrastructure only, not current product logic.
+7. Current code and active docs beat old phase plans.
 
-#### Canonical ATS
+## Active source model
+
+### Canonical ATS
 
 - Greenhouse
 - Lever
 - Ashby
 
-These are the high-confidence providers for job content and apply URLs.
+These are high-confidence sources for job descriptions and apply URLs.
 
-#### Discovery
+### Direct URL ingest
 
-- JobSpy
-- AGG-1 = Adzuna
-- SERP1 = DataForSEO Google Jobs
-- startupjobs.nyc
-- Tech:NYC Jobs
-- Primary Venture Partners Jobs Board
-- Greycroft Jobs Board
-- Union Square Ventures Jobs Board
-- Built In NYC
-- Welcome to the Jungle
+Supported Greenhouse/Lever/Ashby URLs let the user ingest a specific posting deterministically.
 
-These maximize coverage and should not be treated as canonical by default.
+### Manual intake
 
-Registered but currently gated or explicitly unsupported public-board adapters:
+Manual intake is the fallback when the user already has a posting and wants JobBot to analyze it.
 
-- TrueUp
-- Underdog.io
-- VentureLoop
+### Discovery
 
-#### Direct URL ingest
+Discovery sources may still exist, but the MVP treats them as coverage lanes. They should feed the same downstream recommendation pipeline and must not own product logic.
 
-Supported ATS URLs let the user force deterministic ingestion from a known provider.
+Authenticated browser discovery and bb-browser work are not active MVP requirements. They can be revisited later for a Raspberry Pi/local-browser setup.
 
-#### Manual intake
+## Active downstream chain
 
-Manual intake is the fallback when the user has a posting but not a supported direct ingest path.
+```text
+score -> classify -> ats_match -> recommendation_gate
+```
 
-Current trust rules:
+The code currently keeps the compatibility task name `evaluate_generation_gate`, but its active responsibility is existing-resume recommendation. It no longer queues custom resume generation.
 
-- canonical ATS remains the highest-trust source for content and apply URLs
-- discovery remains distinct from canonical ATS
-- SERP1 remains lower-confidence and feature-flagged
-- direct URL ingest and manual intake still feed the same persisted job model
+## Resume recommendation model
 
-### Intake paths
+Resume metadata lives in [`data/resumes.yaml`](../data/resumes.yaml). Each resume entry should include:
 
-- canonical ingestion
-- discovery run
-- source-adapter launch:
-  - public boards
-  - portfolio boards
-  - auth boards
-- URL ingest
-- JobSpy scrape
-- manual intake
+- `id`
+- `label`
+- `path`
+- `persona`
+- `years_experience`
+- `skills`
+- optional notes
 
-### Shared downstream chain
+The matcher in [`core/resume_matching.py`](../core/resume_matching.py):
 
-`score -> classify -> ats_match -> generation_gate`
+1. extracts explicit years-of-experience requirements from the job description;
+2. compares job text against resume skills;
+3. boosts resumes whose persona matches the classified job persona;
+4. returns a deterministic `resume_suggestion` payload.
 
-That chain is the main architectural spine of the application. All intake lanes eventually flow
-through it, and discovery resolution rewinds enriched jobs back into it.
+The recommendation is stored on `JobAnalysis.persona_specific_scores["resume_suggestion"]` and surfaced in job list/detail responses.
 
-### Artifact generation
+## Operator output
 
-Artifact generation is deliberately conservative:
+The primary queue is the ready-to-apply/recommendation queue:
 
-- requires completed ATS analysis
-- keeps the experience inventory YAML as the default required content source
-- always includes `target_job_description` as a targeting-only required source
-- may assemble additional grounded local file-backed evidence from:
-  - `current_resume`
-  - `current_role`
-  - `achievements`
-  - `project_writeups`
-- selects and lightly rewrites grounded bullets
-- preserves the current Letter + 0.5in default geometry through shared layout constants
-- applies deterministic fit planning and bounded compaction before render
-- validates rendered PDFs for one-page fit before artifact success is recorded by default
-- records exact fit outcomes as `fit_success_one_page`, `fit_success_multi_page_fallback`, or
-  `fit_failed_overflow`
-- persists a three-file artifact bundle on success:
-  - primary PDF with `artifact_role=resume_pdf_primary`
-  - payload JSON with `artifact_role=resume_payload`
-  - diagnostics JSON with `artifact_role=resume_diagnostics`
-- attaches a shared `resume_v2` metadata envelope carrying `payload_schema_version`, `inputs_hash`,
-  `fit_outcome`, `fit_diagnostics`, and `evidence_completeness`
-- ends in a ready-to-apply queue and external manual apply URL
+- job title/company/location
+- score and persona
+- recommended existing resume
+- rationale including years/skill/persona fit
+- direct job/apply URL
+- user status controls: saved, applied, archived
 
-### Current operator surfaces
+`RESUME_READY` currently means “resume recommendation ready.” It does not mean a custom resume artifact exists.
 
-- Ready to Apply
-- All Jobs
-- Runs:
-  - legacy launchers for JobSpy, canonical ATS, and broad discovery
-  - capability-backed source-adapter launcher for public-board, portfolio-board, and auth-board
-    sources
-- Job detail
-- Run detail
-- Manual job intake
+## Explicit non-goals for current MVP
 
-Resume-v2 operator behavior is intentionally narrow:
+- auto-apply
+- browser automation for application forms
+- custom resume generation
+- PDF rendering, fit planning, payload sidecars, diagnostics bundles
+- GCS artifact storage as a product requirement
+- broad authenticated browser ingestion
+- plans-driven architecture docs (`docs/PLANS.md` is archived)
 
-- the queue leads the user into Job Detail for artifact review and manual apply
-- Job Detail keeps the PDF primary and exposes the JSON sidecars as supporting files
-- artifact summaries surfaced to the UI come from backend metadata, not UI recomputation
+## Future archive
 
-The UI is an operator console, not a consumer product and not an autonomous agent controller.
+Old custom-resume generation code and old docs were archived for possible later reuse:
 
-### Preserved contracts
+- [`archive/code/2026-05-07-custom-resume-generation`](../archive/code/2026-05-07-custom-resume-generation)
+- [`docs/archive/2026-05-07-architecture-cleanup`](archive/2026-05-07-architecture-cleanup)
 
-1. `GenerationRun` is durable and created before queueing generation work.
-2. `ScrapeRun.items_json` has a canonical reader/writer normalization layer.
-3. Resolution enriches the existing discovery job instead of creating a second canonical job row.
-4. Discovery confidence is explicit and feeds generation gating.
-5. Signed artifact URLs are generated on demand for GCS-backed storage.
-6. Successful resume generation persists the primary PDF plus payload/diagnostics sidecars as one
-   logical artifact bundle.
-
-## Approved Ingestion-V2 Direction
-
-This section describes approved near-term architecture direction and the currently implemented
-backend/source seams. It does not claim that every planned ingestion-v2 source family is already
-implemented.
-
-### Current vs approved direction
-
-Current implementation mixes source-specific acquisition mechanics more tightly into provider and
-worker paths than the target design intends.
-
-Approved ingestion-v2 direction:
-
-`source adapters -> acquisition backends -> JobBot-owned normalization/persistence -> score -> classify -> ats_match -> generation_gate`
-
-Intended responsibilities:
-
-- source adapters own source-specific extraction, field mapping, and provenance rules
-- acquisition backends own transport, browser, and session mechanics only
-- JobBot-owned normalization and persistence remain responsible for dedupe, schema mapping, run
-  records, and durable job state
-- the downstream analysis chain remains the same application spine after persistence
-
-### Acquisition backend direction
-
-- Scrapling is the approved default acquisition backend direction for most non-API and
-  non-auth-heavy sources.
-- bb-browser is the approved selective authenticated-session backend direction for a small subset
-  of browser-native or auth-bound sources.
-- The bb-browser session backend is now implemented for ingestion-only acquisition, with initial
-  LinkedIn Jobs, Wellfound, and YC adapters behind explicit feature flags and backend config.
-- bb-browser is a capabilities layer only. It does not own JobBot product logic, business rules,
-  scoring, classification, ATS analysis, generation gating, or persistence contracts.
-- The architecture is being shaped so that a browser-capability backend can be reused later where
-  appropriate, but this document is only updating ingestion scope.
-
-## What Ingestion-V2 Does Not Change
-
-- the database remains the center of gravity
-- downstream analysis remains the same spine: `score -> classify -> ats_match -> generation_gate`
-- current product output still ends in manual apply
-- the design is not becoming a mass-crawl platform
-- the design is not making every source browser-first by default
-
-## What This Design Does Not Promise
-
-- no full state-machine redesign
-- no auto-apply flow
-- no arbitrary crawling platform
-- no claim that every provider path is fully end-to-end verified at all times
+Treat archived content as historical reference, not active runtime design.

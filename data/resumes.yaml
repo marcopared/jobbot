@@ -1,0 +1,49 @@
+# Existing resume catalog for the MVP recommendation flow.
+# JobBot does not generate custom resumes in the current MVP; it recommends one
+# of these user-maintained resumes for manual application.
+
+resumes:
+  - id: backend
+    label: Backend Resume
+    path: resumes/backend.pdf
+    persona: BACKEND
+    years_experience: 8
+    skills:
+      - Python
+      - Go
+      - PostgreSQL
+      - Redis
+      - FastAPI
+      - Celery
+      - Kafka
+    notes: Best for backend API, distributed systems, data pipeline, and service roles.
+
+  - id: platform_infra
+    label: Platform / Infrastructure Resume
+    path: resumes/platform-infra.pdf
+    persona: PLATFORM_INFRA
+    years_experience: 8
+    skills:
+      - Kubernetes
+      - AWS
+      - Docker
+      - Terraform
+      - CI/CD
+      - Redis
+      - Kafka
+    notes: Best for platform, infrastructure, SRE-adjacent, DevOps, and cloud roles.
+
+  - id: hybrid
+    label: Hybrid Full-Stack Resume
+    path: resumes/hybrid.pdf
+    persona: HYBRID
+    years_experience: 8
+    skills:
+      - Python
+      - Go
+      - PostgreSQL
+      - Kubernetes
+      - AWS
+      - Docker
+      - FastAPI
+    notes: Best for full-stack or generalist roles that blend backend and infrastructure.

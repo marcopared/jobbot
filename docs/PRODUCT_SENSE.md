@@ -1,81 +1,45 @@
-# PRODUCT_SENSE.md — JobBot Product Direction
+# PRODUCT_SENSE.md — JobBot MVP Product Intent
 
-## Product Identity
+## One-line product
 
-JobBot is a personal job preparation system, not an autonomous job application bot.
+JobBot helps a local user decide which jobs are worth attention and which existing resume to use, then hands the user the direct job link for manual application.
 
-Its value is:
+## Current user promise
 
-- better coverage across job sources
-- stronger confidence in which roles are worth attention
-- faster preparation for the jobs that pass the bar
-- a clean manual queue for final application
+The user should not have to open every job site just to answer:
 
-## Core Promise
+- What is this job asking for?
+- Do I meet the years-of-experience requirement?
+- Which of my existing resumes is the best fit?
+- Where do I apply if I choose to proceed?
 
-Discover broadly. Decide carefully. Generate only when justified. Apply manually.
+## Current product loop
 
-## User Model
+1. JobBot ingests or accepts a job description.
+2. JobBot scores and classifies it.
+3. JobBot extracts ATS-like signals and years requirements.
+4. JobBot recommends one existing resume from `data/resumes.yaml`.
+5. JobBot shows the direct job/apply URL.
+6. The user manually applies on the job site.
 
-The primary user is an operator running their own job search pipeline:
+## What matters most now
 
-- they want better discovery coverage than one ATS or one board
-- they want deterministic ranking and explainability
-- they want fast resume preparation for the best jobs
-- they do not want the system to auto-submit applications on their behalf
+- clean local architecture
+- accurate documentation
+- deterministic existing-resume recommendation
+- clear years-of-experience fit
+- direct job links
+- simple ready-to-apply queue
 
-## What the Product Is Not
+## What is intentionally deferred
 
-- not an auto-apply bot
-- not a browser automation framework for applications
-- not a generic crawler platform
-- not a CRM for recruiter follow-up
+- custom resume creation
+- generated PDFs
+- automatic application submission
+- authenticated browser application flows
+- cloud-first deployment concerns
+- advanced browser/session ingestion
 
-## Current Product Loop
+## Product boundary
 
-1. Trigger intake from JobSpy scrape, broad discovery, canonical ingest, source-adapter launch, URL ingest, or manual intake.
-2. Let the backend score, classify, and analyze jobs.
-3. Review artifact-ready jobs in the ready-to-apply queue.
-4. Download a generated artifact if needed.
-5. Open the external apply URL and apply manually.
-6. Mark status in JobBot after the human action.
-
-## Coverage Direction
-
-JobBot's ingestion architecture is being widened so the product can support broader source coverage
-over time without changing what the product is for.
-
-That widening is a behind-the-scenes infrastructure choice, not a new user-facing promise:
-
-- the product still centers on better discovery, better filtering, and faster preparation
-- manual apply remains the implemented product boundary today
-- Scrapling is the default acquisition backend direction for most standard source capture
-- bb-browser is the selective authenticated-session backend direction for a small subset of
-  browser-native or auth-bound sources
-- the current bb-browser implementation only widens ingestion coverage for selected auth-bound
-  sources; it does not add apply automation
-- those backend choices do not turn JobBot into an auto-apply product or imply that every future
-  source is already supported now
-
-## Product Rules That Agents Must Not Erode
-
-1. Canonical ATS and discovery have different trust levels.
-2. SERP1 is always lower-confidence than AGG-1 and canonical ATS.
-3. Resume generation is selective, not default-for-everything.
-4. Human status tracking (`NEW`, `SAVED`, `APPLIED`, `ARCHIVED`) is user workflow, not pipeline state.
-5. Historical phase language should not be treated as current product truth.
-
-## Current Strengths
-
-- multiple intake lanes
-- room to widen source coverage without changing the product boundary
-- deterministic scoring/classification/ATS analysis
-- durable run tracking
-- grounded resume generation path
-- ready-to-apply operational screen
-
-## Current Limits
-
-- provider-backed end-to-end verification still depends on local setup and credentials
-- discovery confidence remains heuristic
-- frontend polish is secondary to backend correctness and operator clarity
+Manual apply is not a temporary gap; it is the current product boundary. Anything that exists solely to automate application forms or generate custom artifacts belongs in archive/future scope unless explicitly reactivated.
